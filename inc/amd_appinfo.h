@@ -41,6 +41,7 @@ enum appinfo_type {
 	AIT_LAUNCH_MODE,
 	AIT_GLOBAL,
 	AIT_EFFECTIVE_APPID,
+	AIT_TASKMANAGE,
 	AIT_MAX
 };
 
