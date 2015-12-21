@@ -22,13 +22,15 @@
 #include <aul.h>
 #include <string.h>
 #include <linux/limits.h>
-
 #include <gio/gio.h>
+#include <vconf.h>
+#include <time.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
 #include "amd_appinfo.h"
 #include "amd_request.h"
+#include "amd_launch.h"
 #include "simple_util.h"
 #include "app_sock.h"
 #include "menu_db_util.h"
@@ -51,10 +53,17 @@ typedef struct _app_status_info_t {
 	bool is_subapp;
 	pkg_status_info_t *pkginfo;
 	uid_t uid;
+	bool taskmanage;
+	int lpid;
+	int timestamp;
 } app_status_info_t;
 
 static GSList *app_status_info_list = NULL;
 static GHashTable *pkg_status_info_table = NULL;
+static int limit_bg_apps = 0;
+static int taskmanage_apps = 0;
+
+static void __kill_bg_apps(void);
 
 static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 {
@@ -211,8 +220,26 @@ static void __destroy_app_status_info(app_status_info_t *info_t)
 	free(info_t);
 }
 
+static void __update_leader_app_info(int lpid)
+{
+	GSList *iter;
+	GSList *iter_next;
+	app_status_info_t *info_t;
+
+	if (lpid < 0)
+		return;
+
+	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t && info_t->pid == lpid) {
+			info_t->timestamp = time(NULL);
+			break;
+		}
+	}
+}
+
 int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
-				int pad_pid, bool is_subapp, uid_t uid)
+				int pad_pid, bool is_subapp, int lpid, uid_t uid)
 {
 	GSList *iter;
 	GSList *iter_next;
@@ -220,6 +247,7 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	const struct appinfo *ai;
 	const char *component_type = NULL;
 	const char *pkgid = NULL;
+	const char *taskmanage = NULL;
 
 	if (!appid || !app_path)
 		return -1;
@@ -227,9 +255,11 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
 		info_t = (app_status_info_t *)iter->data;
 		if (pid == info_t->pid) {
-			if (uid == info_t->uid)
+			if (uid == info_t->uid) {
+				if (info_t->status != STATUS_SERVICE)
+					__update_leader_app_info(info_t->lpid);
 				return 0;
-			else {
+			} else {
 				/* PID is unique so if it is exist but user value is not correct remove it. */
 				app_status_info_list = g_slist_remove(app_status_info_list, info_t);
 				__remove_pkg_info(info_t->pkgid, info_t, uid);
@@ -263,10 +293,22 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	else
 		info_t->status = STATUS_LAUNCHING;
 
+	taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
+	if (taskmanage && strcmp(taskmanage, "true") == 0)
+		info_t->taskmanage = true;
+	else
+		info_t->taskmanage = false;
+
 	pkgid = appinfo_get_value(ai, AIT_PKGID);
 	if (pkgid == NULL)
 		goto error;
 
+	if (lpid < 0)
+		info_t->lpid = pid;
+	else
+		info_t->lpid = lpid;
+
+	info_t->timestamp = time(NULL);
 	info_t->pid = pid;
 	info_t->pad_pid = pad_pid;
 	info_t->is_subapp = is_subapp;
@@ -277,6 +319,16 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 
 	app_status_info_list = g_slist_append(app_status_info_list, info_t);
 	__add_pkg_info(pkgid, info_t);
+	if (info_t->lpid != pid && info_t->is_subapp == true
+			&& info_t->status != STATUS_SERVICE) {
+		__update_leader_app_info(pid);
+	} else if (info_t->lpid == pid && info_t->is_subapp == false
+			&& info_t->status != STATUS_SERVICE && info_t->taskmanage == true) {
+		taskmanage_apps++;
+		if (limit_bg_apps > 0 && limit_bg_apps < taskmanage_apps)
+			__kill_bg_apps();
+	}
+
 	_D("pid(%d) appid(%s) pkgid(%s) comp(%s)", pid, appid, pkgid, component_type);
 
 	return 0;
@@ -297,6 +349,8 @@ int _status_update_app_info_list(int pid, int status, uid_t uid)
 		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
 			info_t->status = status;
 			__update_pkg_info(info_t->pkgid, info_t);
+			if (info_t->status == STATUS_VISIBLE)
+				__update_leader_app_info(info_t->lpid);
 
 			_D("pid(%d) appid(%s) pkgid(%s) status(%d)", pid, info_t->appid, info_t->pkgid, info_t->status);
 			break;
@@ -335,6 +389,8 @@ int _status_remove_app_info_list(int pid, uid_t uid)
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
 		info_t = (app_status_info_t *)iter->data;
 		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
+			if (info_t->status != STATUS_SERVICE && info_t->taskmanage == true)
+				taskmanage_apps--;
 			app_status_info_list = g_slist_remove(app_status_info_list, info_t);
 			__remove_pkg_info(info_t->pkgid, info_t, uid);
 			__destroy_app_status_info(info_t);
@@ -717,6 +773,84 @@ int _status_get_pkgid_bypid(int fd, int pid)
 	return 0;
 }
 
+static gint __sort_app_status_info(gconstpointer p1, gconstpointer p2)
+{
+	app_status_info_t *info_t1 = (app_status_info_t *)p1;
+	app_status_info_t *info_t2 = (app_status_info_t *)p2;
+	int app_group_cnt1;
+	int app_group_cnt2;
+	int *app_group_pids1;
+	int *app_group_pids2;
+
+	if (info_t1->status == STATUS_SERVICE
+			|| info_t1->is_subapp == true
+			|| info_t1->taskmanage == false
+			|| info_t2->status == STATUS_SERVICE
+			|| info_t2->is_subapp == true
+			|| info_t2->taskmanage == false)
+		return 0;
+
+	if (info_t1->timestamp > info_t2->timestamp) {
+		return 1;
+	} else if (info_t1->timestamp < info_t2->timestamp) {
+		return -1;
+	} else {
+		app_group_get_group_pids(info_t1->lpid, &app_group_cnt1, &app_group_pids1);
+		app_group_get_group_pids(info_t2->lpid, &app_group_cnt2, &app_group_pids2);
+		free(app_group_pids1);
+		free(app_group_pids2);
+
+		if (app_group_cnt1 > app_group_cnt2)
+			return 1;
+		else if (app_group_cnt1 < app_group_cnt2)
+			return -1;
+		else
+			return 0;
+	}
+}
+
+static void __kill_bg_apps(void)
+{
+	GSList *iter;
+	GSList *iter_next;
+	app_status_info_t *info_t;
+	int n = taskmanage_apps - limit_bg_apps;
+	int i = 0;
+
+	if (n <= 0)
+		return;
+
+	app_status_info_list = g_slist_sort(app_status_info_list, (GCompareFunc)__sort_app_status_info);
+
+	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
+		if (i == n)
+			break;
+
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t && info_t->status != STATUS_SERVICE
+				&& info_t->taskmanage == true
+				&& info_t->is_subapp == false) {
+			aul_send_app_terminate_request_signal(info_t->pid, NULL, NULL, NULL);
+			_term_app(info_t->pid, 0);
+			i++;
+		}
+	}
+}
+
+static void __vconf_cb(keynode_t *key, void *data)
+{
+	const char *name;
+
+	name = vconf_keynode_get_name(key);
+	if (name == NULL) {
+		return;
+	} else if (strcmp(name, VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS) == 0) {
+		limit_bg_apps = vconf_keynode_get_int(key);
+		if (limit_bg_apps > 0 && limit_bg_apps < taskmanage_apps)
+			__kill_bg_apps();
+	}
+}
+
 static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
 		GFile *other_file, GFileMonitorEvent event_type,
 		gpointer user_data)
@@ -759,6 +893,12 @@ int _status_init(void)
 
 	g_signal_connect(monitor, "changed", G_CALLBACK(__socket_monitor_cb),
 			NULL);
+
+	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_apps))
+		limit_bg_apps = 0;
+
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, __vconf_cb, NULL) != 0)
+		_E("Unable to register callback for VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS");
 
 	return 0;
 }
