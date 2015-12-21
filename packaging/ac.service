@@ -1,0 +1,15 @@
+#
+#  Systemd script to Launch AMD
+#
+
+[Unit]
+Description=Start the Access Control server
+
+[Service]
+EnvironmentFile=-/run/tizen-system-env
+ExecStart=/usr/bin/amd
+
+OOMScoreAdjust=-100
+
+[Install]
+WantedBy=default.target
