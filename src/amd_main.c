@@ -22,7 +22,6 @@
 #include <fcntl.h>
 #include <string.h>
 #include <aul.h>
-#include <vconf.h>
 #include <pkgmgr-info.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -53,21 +52,7 @@ struct restart_info {
 
 static GHashTable *restart_tbl;
 
-static void __vconf_cb(keynode_t *key, void *data);
 static int __init(void);
-
-static void __vconf_cb(keynode_t *key, void *data)
-{
-	const char *name;
-
-	name = vconf_keynode_get_name(key);
-	if (name == NULL)
-		return;
-	else if (strcmp(name, VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS) == 0) {
-		//TODO : clear bgapp
-
-	}
-}
 
 static gboolean __restart_timeout_handler(void *data)
 {
@@ -298,10 +283,6 @@ static int __init(void)
 	_request_init();
 	_status_init();
 	app_group_init();
-
-	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS,
-				__vconf_cb, NULL) != 0)
-		_E("Unable to register callback for VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS\n");
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");

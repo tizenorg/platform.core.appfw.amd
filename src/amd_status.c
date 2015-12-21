@@ -22,13 +22,15 @@
 #include <aul.h>
 #include <string.h>
 #include <linux/limits.h>
-
 #include <gio/gio.h>
+#include <vconf.h>
+#include <time.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
 #include "amd_appinfo.h"
 #include "amd_request.h"
+#include "amd_launch.h"
 #include "simple_util.h"
 #include "app_sock.h"
 #include "menu_db_util.h"
@@ -51,10 +53,18 @@ typedef struct _app_status_info_t {
 	bool is_subapp;
 	pkg_status_info_t *pkginfo;
 	uid_t uid;
+	int timestamp;
+	int lpid;
+	int fg_count;
+	bool managed;
 } app_status_info_t;
 
 static GSList *app_status_info_list = NULL;
 static GHashTable *pkg_status_info_table = NULL;
+static int limit_bg_uiapps = 0;
+static GSList *running_uiapp_list = NULL;
+
+static void __check_running_uiapp_list(void);
 
 static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 {
@@ -211,6 +221,25 @@ static void __destroy_app_status_info(app_status_info_t *info_t)
 	free(info_t);
 }
 
+static void __update_leader_app_info(int lpid)
+{
+	GSList *iter;
+	GSList *iter_next;
+	app_status_info_t *info_t;
+
+	if (lpid < 0)
+		return;
+
+	GSLIST_FOREACH_SAFE(running_uiapp_list, iter, iter_next) {
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t && info_t->pid == lpid) {
+			info_t->timestamp = time(NULL) / 10;
+			info_t->fg_count++;
+			break;
+		}
+	}
+}
+
 int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 				int pad_pid, bool is_subapp, uid_t uid)
 {
@@ -220,6 +249,7 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	const struct appinfo *ai;
 	const char *component_type = NULL;
 	const char *pkgid = NULL;
+	const char *taskmanage = NULL;
 
 	if (!appid || !app_path)
 		return -1;
@@ -227,9 +257,9 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
 		info_t = (app_status_info_t *)iter->data;
 		if (pid == info_t->pid) {
-			if (uid == info_t->uid)
+			if (uid == info_t->uid) {
 				return 0;
-			else {
+			} else {
 				/* PID is unique so if it is exist but user value is not correct remove it. */
 				app_status_info_list = g_slist_remove(app_status_info_list, info_t);
 				__remove_pkg_info(info_t->pkgid, info_t, uid);
@@ -275,6 +305,20 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 	if (info_t->pkgid == NULL)
 		goto error;
 
+	info_t->lpid = app_group_get_leader_pid(pid);;
+	info_t->timestamp = time(NULL) / 10;
+	info_t->fg_count = 0;
+
+	taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
+	if (taskmanage && strcmp(taskmanage, "true") == 0
+			&& info_t->lpid > 0
+			&& info_t->is_subapp == false) {
+		info_t->managed = true;
+		running_uiapp_list = g_slist_append(running_uiapp_list, info_t);
+	} else {
+		info_t->managed = false;
+	}
+
 	app_status_info_list = g_slist_append(app_status_info_list, info_t);
 	__add_pkg_info(pkgid, info_t);
 	_D("pid(%d) appid(%s) pkgid(%s) comp(%s)", pid, appid, pkgid, component_type);
@@ -297,6 +341,15 @@ int _status_update_app_info_list(int pid, int status, uid_t uid)
 		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
 			info_t->status = status;
 			__update_pkg_info(info_t->pkgid, info_t);
+			if (info_t->status == STATUS_VISIBLE) {
+				info_t->timestamp = time(NULL) / 10;
+				info_t->fg_count++;
+				if (info_t->managed == false)
+					__update_leader_app_info(info_t->lpid);
+				if (info_t->fg_count == 1
+						&& limit_bg_uiapps > 0)
+					__check_running_uiapp_list();
+			}
 
 			_D("pid(%d) appid(%s) pkgid(%s) status(%d)", pid, info_t->appid, info_t->pkgid, info_t->status);
 			break;
@@ -717,6 +770,96 @@ int _status_get_pkgid_bypid(int fd, int pid)
 	return 0;
 }
 
+static gint __compare_app_status_info_for_sorting(gconstpointer p1, gconstpointer p2)
+{
+	app_status_info_t *info_t1 = (app_status_info_t *)p1;
+	app_status_info_t *info_t2 = (app_status_info_t *)p2;
+	int app_group_cnt1;
+	int app_group_cnt2;
+	int *app_group_pids1;
+	int *app_group_pids2;
+
+	if (info_t1->timestamp > info_t2->timestamp) {
+		return 1;
+	} else if (info_t1->timestamp < info_t2->timestamp) {
+		return -1;
+	} else {
+		app_group_get_group_pids(info_t1->lpid,
+				&app_group_cnt1, &app_group_pids1);
+		app_group_get_group_pids(info_t2->lpid,
+				&app_group_cnt2, &app_group_pids2);
+		free(app_group_pids1);
+		free(app_group_pids2);
+
+		if (app_group_cnt1 < app_group_cnt2) {
+			return 1;
+		} else if (app_group_cnt1 > app_group_cnt2) {
+			return -1;
+		} else {
+			if (info_t1->fg_count > info_t2->fg_count)
+				return 1;
+			else if (info_t1->fg_count < info_t2->fg_count)
+				return -1;
+			else
+				return 0;
+		}
+	}
+}
+
+static void __cleanup_bg_uiapps(int n)
+{
+	GSList *iter;
+	GSList *iter_next;
+	app_status_info_t *info_t;
+	int i = 0;
+
+	GSLIST_FOREACH_SAFE(running_uiapp_list, iter, iter_next) {
+		if (i == n)
+			break;
+
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t && info_t->status != STATUS_VISIBLE) {
+			running_uiapp_list = g_slist_remove(running_uiapp_list, info_t);
+			aul_send_app_terminate_request_signal(info_t->pid,
+					NULL, NULL, NULL);
+			_term_app(info_t->pid, 0);
+			i++;
+		}
+	}
+}
+
+static void __check_running_uiapp_list(void)
+{
+	int len;
+	int n;
+
+	len = g_slist_length(running_uiapp_list);
+	if (len <= 0)
+		return;
+
+	n = len - limit_bg_uiapps;
+	if (n <= 0)
+		return;
+
+	running_uiapp_list = g_slist_sort(running_uiapp_list,
+			(GCompareFunc)__compare_app_status_info_for_sorting);
+	__cleanup_bg_uiapps(n);
+}
+
+static void __vconf_cb(keynode_t *key, void *data)
+{
+	const char *name;
+
+	name = vconf_keynode_get_name(key);
+	if (name == NULL) {
+		return;
+	} else if (strcmp(name, VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS) == 0) {
+		limit_bg_uiapps = vconf_keynode_get_int(key);
+		if (limit_bg_uiapps > 0)
+			__check_running_uiapp_list();
+	}
+}
+
 static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
 		GFile *other_file, GFileMonitorEvent event_type,
 		gpointer user_data)
@@ -759,6 +902,12 @@ int _status_init(void)
 
 	g_signal_connect(monitor, "changed", G_CALLBACK(__socket_monitor_cb),
 			NULL);
+
+	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_uiapps))
+		limit_bg_uiapps = 0;
+
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, __vconf_cb, NULL) != 0)
+		_E("Unable to register callback for VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS");
 
 	return 0;
 }
