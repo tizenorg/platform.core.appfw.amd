@@ -541,7 +541,6 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 		st = _status_get_app_info_status(pid, caller_uid);
 
 	if (pid == -1 || st == STATUS_DYING) {
-
 		if (app_group_find_singleton(appid, &found_pid, &found_lpid) == 0) {
 			pid = found_pid;
 			*new_process = FALSE;
@@ -829,7 +828,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	}
 
 	if (pid > 0) {
-		_status_add_app_info_list(appid, app_path, pid, LAUNCHPAD_PID, is_subapp, caller_uid);
+		_status_add_app_info_list(appid, app_path, pid, LAUNCHPAD_PID, is_subapp, lpid, caller_uid);
 		if (strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
 			if (new_process) {
 				_D("add app group info");

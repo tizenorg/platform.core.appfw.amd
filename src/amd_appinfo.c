@@ -64,6 +64,7 @@ enum _appinfo_idx {
 	_AI_LAUNCH_MODE,
 	_AI_GLOBAL,
 	_AI_EFFECTIVE_APPID,
+	_AI_TASKMANAGE,
 	_AI_MAX,
 };
 #define _AI_START _AI_NAME /* start index */
@@ -439,6 +440,18 @@ static int __appinfo_add_effective_appid(const pkgmgrinfo_appinfo_h handle, stru
 	return 0;
 }
 
+static int __appinfo_add_taskmanage(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	bool taskmanage = false;
+
+	if (pkgmgrinfo_appinfo_is_taskmanage(handle, &taskmanage) != PMINFO_R_OK)
+		_D("Failed to get taskmanage info");
+
+	info->val[_AI_TASKMANAGE] = strdup(taskmanage ? "true" : "false");
+
+	return 0;
+}
+
 static struct appinfo_t _appinfos[] = {
 	[_AI_NAME] = {"Name", AIT_NAME, __appinfo_add_name},
 	[_AI_EXEC] = {"Exec", AIT_EXEC, __appinfo_add_exec},
@@ -459,6 +472,7 @@ static struct appinfo_t _appinfos[] = {
 	[_AI_LAUNCH_MODE] = {"launch_mode", AIT_LAUNCH_MODE, __appinfo_add_launch_mode},
 	[_AI_GLOBAL] = {"global", AIT_GLOBAL, __appinfo_add_global},
 	[_AI_EFFECTIVE_APPID] = {"effective-appid", AIT_EFFECTIVE_APPID, __appinfo_add_effective_appid},
+	[_AI_TASKMANAGE] = {"Taskmanage", AIT_TASKMANAGE, __appinfo_add_taskmanage},
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
