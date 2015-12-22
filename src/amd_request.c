@@ -61,7 +61,7 @@
 #define MAX_NR_OF_DESCRIPTORS 2
 #define PENDING_REQUEST_TIMEOUT 5000 /* msec */
 
-static GHashTable *__socket_pair_hash = NULL;
+static GHashTable *__dc_socket_pair_hash = NULL;
 static GHashTable *pending_table;
 
 struct pending_item {
@@ -505,10 +505,53 @@ static int __check_app_control_privilege(int fd, const char *operation)
 	return 0;
 }
 
-static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-	char *caller;
-	char *callee;
+	int handles[2] = {0, 0};
+	struct iovec vec[3];
+	int msglen = 0;
+	char buffer[1024];
+	struct sockaddr_un saddr;
+	int ret = 0;
+
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
+		_E("error create socket pair");
+		__send_result_to_client(clifd, -1);
+		return -1;
+	}
+
+	if (handles[0] == -1) {
+		_E("error socket open");
+		__send_result_to_client(clifd, -1);
+		return -1;
+	}
+
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sun_family = AF_UNIX;
+
+	_D("amd send mp fd : [%d, %d]", handles[0], handles[1]);
+	vec[0].iov_base = buffer;
+	vec[0].iov_len = strlen(buffer) + 1;
+
+	msglen = __send_message(clifd, vec, 1, handles, 2);
+	if (msglen < 0) {
+		_E("Error[%d]: while sending message\n", -msglen);
+		__send_result_to_client(clifd, -1);
+		ret = -1;
+	}
+
+	close(handles[0]);
+	close(handles[1]);
+
+	return ret;
+}
+
+static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	const char *caller;
+	const char *callee;
+	const char *datacontrol_type;
 	char *socket_pair_key;
 	int socket_pair_key_len;
 	int *handles = NULL;
@@ -516,13 +559,12 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 	int msglen = 0;
 	char buffer[1024];
 	struct sockaddr_un saddr;
-	char *datacontrol_type;
 	bundle *kb;
 
 	kb = bundle_decode(pkt->data, pkt->len);
-	caller = (char *)bundle_get_val(kb, AUL_K_CALLER_APPID);
-	callee = (char *)bundle_get_val(kb, AUL_K_CALLEE_APPID);
-	datacontrol_type = (char *)bundle_get_val(kb, "DATA_CONTOL_TYPE");
+	caller = bundle_get_val(kb, AUL_K_CALLER_APPID);
+	callee = bundle_get_val(kb, AUL_K_CALLEE_APPID);
+	datacontrol_type = bundle_get_val(kb, "DATA_CONTOL_TYPE");
 
 	socket_pair_key_len = strlen(caller) + strlen(callee) + 2;
 
@@ -535,7 +577,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 	snprintf(socket_pair_key, socket_pair_key_len, "%s_%s", caller, callee);
 	_D("socket pair key : %s", socket_pair_key);
 
-	handles = g_hash_table_lookup(__socket_pair_hash, socket_pair_key);
+	handles = g_hash_table_lookup(__dc_socket_pair_hash, socket_pair_key);
 	if (handles == NULL) {
 		handles = (int *)calloc(2, sizeof(int));
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
@@ -555,7 +597,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 				free(handles);
 			goto err_out;
 		}
-		g_hash_table_insert(__socket_pair_hash, strdup(socket_pair_key),
+		g_hash_table_insert(__dc_socket_pair_hash, strdup(socket_pair_key),
 				handles);
 
 		_D("New socket pair insert done.");
@@ -576,14 +618,14 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
 				__send_result_to_client(clifd, -1);
-				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
+				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
 			close(handles[0]);
 			handles[0] = -1;
 			if (handles[1] == -1) {
 				_E("remove from hash : %s", socket_pair_key);
-				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
+				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 			}
 
 		} else {
@@ -591,14 +633,14 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
 				__send_result_to_client(clifd, -1);
-				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
+				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
 			close(handles[1]);
 			handles[1] = -1;
 			if (handles[0] == -1) {
 				_E("remove from hash : %s", socket_pair_key);
-				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
+				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 			}
 		}
 	}
@@ -1138,7 +1180,8 @@ static const char *__convert_cmd_to_privilege(int cmd)
 }
 
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
-	[APP_GET_SOCKET_PAIR] =  __dispatch_get_socket_pair,
+	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
+	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
 	[APP_START] =  __dispatch_app_start,
 	[APP_OPEN] = __dispatch_app_start,
 	[APP_RESUME] = __dispatch_app_start,
@@ -1461,7 +1504,7 @@ int _request_init(void)
 	GPollFD *gpollfd;
 	GSource *src;
 
-	__socket_pair_hash = g_hash_table_new_full(g_str_hash,  g_str_equal, free, free);
+	__dc_socket_pair_hash = g_hash_table_new_full(g_str_hash,  g_str_equal, free, free);
 	pending_table = g_hash_table_new(g_direct_hash, g_direct_equal);
 
 	fd = __create_sock_activation();
