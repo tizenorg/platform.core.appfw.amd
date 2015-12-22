@@ -541,7 +541,6 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 		st = _status_get_app_info_status(pid, caller_uid);
 
 	if (pid == -1 || st == STATUS_DYING) {
-
 		if (app_group_find_singleton(appid, &found_pid, &found_lpid) == 0) {
 			pid = found_pid;
 			*new_process = FALSE;
@@ -716,7 +715,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	char tmpbuf[MAX_PID_STR_BUFSZ];
 	const char *hwacc;
 	char *caller_appid;
-	int lpid;
+	int lpid = -1;
 	int callee_status = -1;
 	gboolean can_attach = FALSE;
 	gboolean new_process = FALSE;
@@ -774,7 +773,8 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		pid = _status_app_is_running(appid, caller_uid);
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
+	if (component_type &&
+		strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
 		pid = __get_pid_for_app_group(appid, pid, caller_uid, kb,
 				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
@@ -828,7 +828,6 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	}
 
 	if (pid > 0) {
-		_status_add_app_info_list(appid, app_path, pid, LAUNCHPAD_PID, is_subapp, caller_uid);
 		if (strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
 			if (new_process) {
 				_D("add app group info");
@@ -838,6 +837,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 				app_group_restart_app(pid, kb);
 			}
 		}
+		_status_add_app_info_list(appid, app_path, pid, LAUNCHPAD_PID, is_subapp, caller_uid);
 	}
 
 	return pid;
