@@ -59,7 +59,6 @@ int __app_send_raw_with_noreply(int pid, int cmd, unsigned char *kb_data, int da
 int __app_send_raw_with_noreply_for_uid(int pid, uid_t uid, int cmd, unsigned char *kb_data, int datalen);
 int __app_send_raw_with_delay_reply(int pid, int cmd, unsigned char *kb_data, int datalen);
 int __app_send_raw_with_delay_reply_for_uid(int pid, uid_t uid, int cmd, unsigned char *kb_data, int datalen);
-int __app_send_raw_with_fd_reply(int pid, uid_t uid, int cmd, unsigned char *kb_data, int datalen, int *ret_fd);
 int __app_agent_send_raw(int uid, const char *pad_type, int cmd, unsigned char *kb_data, int datalen);
 int __app_agent_send_raw_with_noreply(int uid, const char *pad_type, int cmd, unsigned char *kb_data, int datalen);
 app_pkt_t *__app_recv_raw(int fd, int *clifd, struct ucred *cr);
