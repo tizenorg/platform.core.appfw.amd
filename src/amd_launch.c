@@ -54,6 +54,10 @@
 
 #define AUL_PR_NAME         16
 
+#define PROC_STATUS_LAUNCH  0
+#define PROC_STATUS_FG	3
+#define PROC_STATUS_BG	4
+
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
 #define PATH_GLOBAL_APP_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
@@ -73,6 +77,22 @@ typedef struct {
 } app_info_from_pkgmgr;
 
 static int __pid_of_last_launched_ui_app;
+
+static DBusConnection *conn;
+
+static GList *_fgmgr_list;
+
+struct fgmgr {
+	guint tid;
+	int pid;
+};
+
+static GHashTable *proc_info_tbl;
+
+typedef struct proc_info {
+	pid_t pid;
+	guint timer_id;
+} proc_info_t;
 
 static void __set_reply_handler(int fd, int pid, int clifd, int cmd);
 static void __real_send(int clifd, int ret);
@@ -577,8 +597,6 @@ static int __tep_mount(char *mnt_path[])
 	int rv = 0;
 	struct stat link_buf = {0,};
 
-	static DBusConnection *conn = NULL;
-
 	if (!conn) {
 		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
 		if (!conn) {
@@ -674,6 +692,285 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		if (mnt_path[1])
 			free(mnt_path[1]);
 	}
+}
+
+static gboolean __fg_timeout_handler(gpointer data)
+{
+	struct fgmgr *fg = data;
+
+	if (!fg)
+		return FALSE;
+
+	_status_update_app_info_list(fg->pid, STATUS_BG, TRUE, getuid());
+
+	_fgmgr_list = g_list_remove(_fgmgr_list, fg);
+	free(fg);
+
+	return FALSE;
+}
+
+void __add_fgmgr_list(int pid)
+{
+	struct fgmgr *fg;
+
+	fg = calloc(1, sizeof(struct fgmgr));
+	if (!fg)
+		return;
+
+	fg->pid = pid;
+	fg->tid = g_timeout_add(5000, __fg_timeout_handler, fg);
+
+	_fgmgr_list = g_list_append(_fgmgr_list, fg);
+}
+
+static void __del_fgmgr_list(int pid)
+{
+	GList *iter = NULL;
+	struct fgmgr *fg;
+
+	if (pid < 0)
+		return;
+
+	for (iter = _fgmgr_list; iter != NULL; iter = g_list_next(iter)) {
+		fg = (struct fgmgr *)iter->data;
+		if (fg->pid == pid) {
+			g_source_remove(fg->tid);
+			_fgmgr_list = g_list_remove(_fgmgr_list, fg);
+			free(fg);
+			return;
+		}
+	}
+}
+
+static void __destroy_proc_info_value(gpointer data)
+{
+	proc_info_t *proc = (proc_info_t *)data;
+	if (proc)
+		free(proc);
+}
+
+void _amd_proc_init(void)
+{
+	if (!proc_info_tbl)
+		proc_info_tbl = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, __destroy_proc_info_value);
+
+	_D("_amd_proc_init done");
+}
+
+void _amd_proc_fini(void)
+{
+	g_hash_table_destroy(proc_info_tbl);
+	_D("_amd_proc_fini done");
+}
+
+proc_info_t *_amd_proc_create_proc_info(int pid)
+{
+	proc_info_t *proc = NULL;
+
+	if (pid < 1) {
+		_E("invalid pid");
+		return NULL;
+	}
+
+	proc = (proc_info_t *)malloc(sizeof(proc_info_t));
+	if (proc == NULL) {
+		_E("insufficient memory");
+		return NULL;
+	}
+
+	proc->pid = pid;
+	proc->timer_id = 0;
+
+	return proc;
+}
+
+proc_info_t *_amd_proc_find_proc_info(int pid)
+{
+	proc_info_t *proc = NULL;
+
+	if (pid < 1) {
+		_E("invalid pid");
+		return NULL;
+	}
+
+	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl, GINT_TO_POINTER(pid));
+	if (proc == NULL) {
+		_E("proc info not found");
+		return NULL;
+	}
+
+	return proc;
+}
+
+int _amd_proc_add_proc_info(proc_info_t *proc)
+{
+	if (proc == NULL) {
+		_E("invalid proc info");
+		return -1;
+	}
+
+	if (proc->pid < 1) {
+		_E("invalid pid");
+		return -1;
+	}
+
+	g_hash_table_insert(proc_info_tbl, GINT_TO_POINTER(proc->pid), proc);
+
+	return 0;
+}
+
+int _amd_proc_remove_proc_info(int pid)
+{
+	proc_info_t *proc = NULL;
+
+	if (pid < 1) {
+		_E("invalid pid");
+		return -1;
+	}
+
+	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl, GINT_TO_POINTER(pid));
+	if (proc == NULL) {
+		_E("proc info not found");
+		return -1;
+	}
+
+	g_hash_table_remove(proc_info_tbl, GINT_TO_POINTER(pid));
+
+	return 0;
+}
+
+static int __request_to_suspend(int pid)
+{
+	DBusMessage *message = NULL;
+
+	if (conn == NULL) {
+		_E("D-bus connection is null.");
+		return -1;
+	}
+
+	message = dbus_message_new_signal(APPFW_SUSPEND_HINT_PATH,
+			APPFW_SUSPEND_HINT_INTERFACE,
+			APPFW_SUSPEND_HINT_SIGNAL);
+
+	if (dbus_message_append_args(message,
+				DBUS_TYPE_INT32, &pid,
+				DBUS_TYPE_INVALID) == FALSE) {
+		_E("Failed to load data error");
+		return -1;
+	}
+
+	if (dbus_connection_send(conn, message, NULL) == FALSE) {
+		_E("dbus send error");
+		return -1;
+	}
+
+	dbus_connection_flush(conn);
+	dbus_message_unref(message);
+
+	SECURE_LOGD("[__SUSPEND__] Send suspend hint, pid: %d", pid);
+
+	return 0;
+}
+
+static gboolean __send_suspend_hint(gpointer data)
+{
+	proc_info_t *proc = NULL;
+	int pid = GPOINTER_TO_INT(data);
+
+	proc = _amd_proc_find_proc_info(pid);
+	if (proc && proc->timer_id > 0) {
+		__request_to_suspend(pid);
+		proc->timer_id = 0;
+	}
+
+	return FALSE;
+}
+
+void _amd_suspend_add_timer(int pid, const struct appinfo *ai)
+{
+	int bg_allowed = 0x00;
+	proc_info_t *proc = NULL;
+
+	bg_allowed = (int)appinfo_get_value(ai, AIT_BG_CATEGORY);
+	if (bg_allowed)
+		return;
+
+	proc = _amd_proc_find_proc_info(pid);
+	if (proc == NULL) {
+		proc = _amd_proc_create_proc_info(pid);
+		if (proc)
+			_amd_proc_add_proc_info(proc);
+	}
+
+	if (proc)
+		proc->timer_id = g_timeout_add_seconds(10, __send_suspend_hint, GINT_TO_POINTER(pid));
+}
+
+void _amd_suspend_remove_timer(int pid)
+{
+	proc_info_t *proc = NULL;
+
+	proc = _amd_proc_find_proc_info(pid);
+	if (proc && proc->timer_id > 0) {
+		g_source_remove(proc->timer_id);
+		proc->timer_id = 0;
+	}
+}
+
+int __app_status_handler(int pid, int status, void *data)
+{
+	char *appid = NULL;
+	int bg_category = 0x00;
+	int app_status = -1;
+	const struct appinfo *ai = NULL;
+
+	_W("pid(%d) status(%d)", pid, status);
+
+	app_status  = _status_get_app_info_status(pid, getuid());
+
+	if (app_status == STATUS_DYING && status != PROC_STATUS_LAUNCH)
+		return 0;
+
+	if (status == PROC_STATUS_FG) {
+		__del_fgmgr_list(pid);
+		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
+		_amd_suspend_remove_timer(pid);
+	} else if (status == PROC_STATUS_BG) {
+		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
+		appid = _status_app_get_appid_bypid(pid);
+		if (appid) {
+			ai = appinfo_find(getuid(), appid);
+			bg_category = (bool)appinfo_get_value(ai, AIT_BG_CATEGORY);
+			if (!bg_category)
+				_amd_suspend_add_timer(pid, ai);
+		}
+	} else if (status == PROC_STATUS_LAUNCH) {
+		_D("pid(%d) status(%d)", pid, status);
+	}
+
+	return 0;
+}
+
+int _launch_init()
+{
+	int ret = 0;
+
+	_D("_launch_init");
+
+	if (!conn) {
+		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+		if (!conn) {
+			_E("dbus_bus_get error");
+			return -1;
+		}
+	}
+
+	ret = aul_listen_app_status_signal(__app_status_handler, NULL);
+	_D("ret : %d", ret);
+
+	_amd_proc_init();
+
+	return 0;
 }
 
 int _send_hint_for_visibility(uid_t uid)
@@ -833,6 +1130,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 				_D("add app group info");
 				__pid_of_last_launched_ui_app = pid;
 				app_group_start_app(pid, kb, lpid, can_attach, launch_mode);
+				/*__add_fgmgr_list(pid);*/
 			} else {
 				app_group_restart_app(pid, kb);
 			}

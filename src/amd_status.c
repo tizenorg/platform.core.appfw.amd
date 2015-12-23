@@ -330,7 +330,7 @@ error:
 	return -1;
 }
 
-int _status_update_app_info_list(int pid, int status, uid_t uid)
+int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 {
 	GSList *iter = NULL;
 	app_status_info_t *info_t = NULL;
@@ -356,7 +356,7 @@ int _status_update_app_info_list(int pid, int status, uid_t uid)
 		}
 	}
 
-	app_group_set_status(pid, status, false);
+	app_group_set_status(pid, status, force);
 
 	return 0;
 }

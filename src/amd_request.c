@@ -308,7 +308,7 @@ static int __app_process_by_pid(int cmd,
 	case APP_KILL_BY_PID:
 		if ((ret = _send_to_sigkill(pid)) < 0)
 			_E("fail to killing - %d\n", pid);
-		_status_update_app_info_list(pid, STATUS_DYING, cr->uid);
+		_status_update_app_info_list(pid, STATUS_DYING, FALSE, cr->uid);
 		__real_send(clifd, ret);
 		break;
 	case APP_TERM_REQ_BY_PID:
@@ -1039,7 +1039,7 @@ static int __dispatch_app_status_update(int clifd, const app_pkt_t *pkt, struct 
 	} else {
 		if (*status == STATUS_VISIBLE && cr->pid == _get_pid_of_last_launched_ui_app())
 			_send_hint_for_visibility(cr->uid);
-		_status_update_app_info_list(cr->pid, *status, cr->uid);
+		_status_update_app_info_list(cr->pid, *status, FALSE, cr->uid);
 	}
 	close(clifd);
 

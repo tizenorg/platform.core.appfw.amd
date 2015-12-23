@@ -283,6 +283,11 @@ static int __init(void)
 	_request_init();
 	_status_init();
 	app_group_init();
+	/*
+	 * TODO : After applying emit app status signal in enlightment,
+	 *        remove this comment.
+	 * _launch_init();
+	 */
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");

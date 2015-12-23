@@ -23,7 +23,7 @@
 #include <aul.h>
 
 int _status_add_app_info_list(const char *appid, const char *app_path, int pid, int pad_pid, bool is_subapp, uid_t uid);
-int _status_update_app_info_list(int pid, int status,  uid_t uid);
+int _status_update_app_info_list(int pid, int status, bool force, uid_t uid);
 int _status_remove_app_info_list_with_uid(uid_t uid);
 int _status_remove_app_info_list(int pid, uid_t uid);
 int _status_get_app_info_status(int pid, uid_t uid);
