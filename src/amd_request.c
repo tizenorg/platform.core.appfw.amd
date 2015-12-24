@@ -35,6 +35,7 @@
 #include <tzplatform_config.h>
 #include <systemd/sd-login.h>
 #include <aul_sock.h>
+#include <aul_app_com.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -45,6 +46,10 @@
 #include "amd_app_group.h"
 #include "amd_cynara.h"
 #include "amd_socket.h"
+#include "amd_app_com.h"
+#include "aul_svc.h"
+#include "aul_svc_priv_key.h"
+#include "app_launchpad_types.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -1079,6 +1084,139 @@ static int __dispatch_amd_reload_appinfo(int clifd, const app_pkt_t *pkt, struct
 	return 0;
 }
 
+static int __dispatch_app_com_create(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	bundle *kb;
+	int ret;
+	size_t propagate_size;
+	unsigned int *propagate;
+	const char *privilege;
+	const char *endpoint;
+
+	kb = bundle_decode(pkt->data, pkt->len);
+	if (kb == NULL) {
+		close(clifd);
+		return -1;
+	}
+
+	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
+	if (endpoint == NULL) {
+		bundle_free(kb);
+		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		return 0;
+	}
+
+	privilege = bundle_get_val(kb, AUL_K_COM_PRIVILEGE);
+	if (!privilege) {
+		/* privilege is not mandatory so far */
+		_D("non-privileged endpoint: %s", endpoint);
+	}
+
+	ret = bundle_get_byte(kb, AUL_K_COM_PROPAGATE, (void **)&propagate, &propagate_size);
+	if (ret < 0)
+		propagate = 0;
+
+	_D("endpoint: %s propagate: %x privilege: %s", endpoint, *propagate, privilege);
+
+	ret = app_com_add_endpoint(endpoint, *propagate, privilege);
+	if (ret == AUL_APP_COM_R_ERROR_OK || ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
+		ret = app_com_join(endpoint, getpgid(cr->pid), clifd, NULL);
+
+		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
+			_E("illegal access: remove endpoint");
+			app_com_remove_endpoint(endpoint);
+		}
+	}
+
+	bundle_free(kb);
+	_send_result_to_client(clifd, ret);
+	return 0;
+}
+
+static int __dispatch_app_com_join(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	bundle *kb;
+	int ret;
+	const char *endpoint;
+	const char *filter;
+
+	kb = bundle_decode(pkt->data, pkt->len);
+	if (kb == NULL) {
+		close(clifd);
+		return -1;
+	}
+
+	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
+	if (endpoint == NULL) {
+		bundle_free(kb);
+		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		return 0;
+	}
+
+	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
+
+	ret = app_com_join(endpoint, getpgid(cr->pid), clifd, filter);
+
+	bundle_free(kb);
+	_send_result_to_client(clifd, ret);
+
+	return 0;
+}
+
+static int __dispatch_app_com_send(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	bundle *kb;
+	int ret;
+	const char *endpoint;
+
+	kb = bundle_decode(pkt->data, pkt->len);
+	if (kb == NULL) {
+		close(clifd);
+		return -1;
+	}
+
+	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
+	if (endpoint == NULL) {
+		bundle_free(kb);
+		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		return 0;
+	}
+
+	ret = app_com_send(endpoint, getpgid(cr->pid), kb);
+	_send_result_to_client(clifd, ret);
+
+	bundle_free(kb);
+
+	return 0;
+}
+
+static int __dispatch_app_com_leave(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	bundle *kb;
+	int ret;
+	const char *endpoint;
+
+	kb = bundle_decode(pkt->data, pkt->len);
+	if (kb == NULL) {
+		close(clifd);
+		return -1;
+	}
+
+	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
+	if (endpoint == NULL) {
+		bundle_free(kb);
+		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		return 0;
+	}
+
+	ret = app_com_leave(endpoint, getpgid(cr->pid));
+	_send_result_to_client(clifd, ret);
+
+	bundle_free(kb);
+
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1126,6 +1264,10 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_PID] = __dispatch_app_is_running,
 	[AMD_RELOAD_APPINFO] = __dispatch_amd_reload_appinfo,
 	[AGENT_DEAD_SIGNAL] = __dispatch_agent_dead_signal,
+	[APP_COM_CREATE] = __dispatch_app_com_create,
+	[APP_COM_JOIN] = __dispatch_app_com_join,
+	[APP_COM_SEND] = __dispatch_app_com_send,
+	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 };
 
 static void __free_request(gpointer data)
