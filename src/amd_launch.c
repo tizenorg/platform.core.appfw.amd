@@ -828,7 +828,8 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	}
 
 	if (pid > 0) {
-		if (strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
+		if (component_type &&
+			strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
 			if (new_process) {
 				_D("add app group info");
 				__pid_of_last_launched_ui_app = pid;

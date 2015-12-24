@@ -390,10 +390,12 @@ static int __get_previous_pid(int pid)
 
 		while (i != NULL) {
 			ac = (app_group_context_t*)i->data;
-			if (ac && ac->pid == pid)
-				return previous_pid;
+			if (ac) {
+				if (ac->pid == pid)
+					return previous_pid;
 
-			previous_pid = ac->pid;
+				previous_pid = ac->pid;
+			}
 			i = g_list_next(i);
 		}
 	}
@@ -636,27 +638,29 @@ int app_group_set_window(int pid, int wid)
 		previous_wid = 0;
 		while (i != NULL) {
 			app_group_context_t *ac = (app_group_context_t*) i->data;
-			if (ac && ac->pid == pid) {
-				ac->wid = wid;
-				if (previous_wid != 0)
-					__attach_window(previous_wid, wid);
+			if (ac) {
+				if (ac->pid == pid) {
+					ac->wid = wid;
+					if (previous_wid != 0)
+						__attach_window(previous_wid, wid);
 
-				if (ac->can_shift && ac->caller_pid > 0) {
-					caller_wid = app_group_get_window(ac->caller_pid);
-					if (caller_wid != 0)
-						__attach_window(caller_wid, wid);
+					if (ac->can_shift && ac->caller_pid > 0) {
+						caller_wid = app_group_get_window(ac->caller_pid);
+						if (caller_wid != 0)
+							__attach_window(caller_wid, wid);
+					}
+
+					i = g_list_next(i);
+					if (i) {
+						ac = (app_group_context_t*) i->data;
+						if (ac->wid != 0)
+							__attach_window(wid, ac->wid);
+					}
+
+					return 0;
 				}
-
-				i = g_list_next(i);
-				if (i) {
-					ac = (app_group_context_t*) i->data;
-					if (ac->wid != 0)
-						__attach_window(wid, ac->wid);
-				}
-
-				return 0;
+				previous_wid = ac->wid;
 			}
-			previous_wid = ac->wid;
 			i = g_list_next(i);
 		}
 	}
