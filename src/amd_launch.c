@@ -34,18 +34,19 @@
 #include <poll.h>
 #include <tzplatform_config.h>
 
+#include <aul_sock.h>
+#include <aul_svc.h>
+#include <aul_svc_priv_key.h>
+
 #include "amd_config.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"
 #include "amd_status.h"
 #include "amd_app_group.h"
-#include "app_sock.h"
 #include "simple_util.h"
 #include "app_signal.h"
-#include "aul_svc.h"
-#include "aul_svc_priv_key.h"
 #include "amd_cynara.h"
-#include "app_launchpad_types.h"
+#include "amd_socket.h"
 
 #define DAC_ACTIVATE
 
@@ -75,7 +76,6 @@ typedef struct {
 static int __pid_of_last_launched_ui_app;
 
 static void __set_reply_handler(int fd, int pid, int clifd, int cmd);
-static void __real_send(int clifd, int ret);
 static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd);
 
 static void __set_stime(bundle *kb)
@@ -134,7 +134,7 @@ int _resume_app(int pid, int clifd)
 	int dummy;
 	int ret;
 
-	if ((ret = __app_send_raw_with_delay_reply(pid, APP_RESUME_BY_PID,
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_RESUME_BY_PID,
 			(unsigned char *)&dummy, 0)) < 0) {
 		if (ret == -EAGAIN)
 			_E("resume packet timeout error");
@@ -144,7 +144,7 @@ int _resume_app(int pid, int clifd)
 			_send_to_sigkill(pid);
 			ret = -1;
 		}
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 	}
 	_D("resume done\n");
 
@@ -159,7 +159,7 @@ int _pause_app(int pid, int clifd)
 	int dummy;
 	int ret;
 
-	if ((ret = __app_send_raw_with_delay_reply(pid, APP_PAUSE_BY_PID,
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_PAUSE_BY_PID,
 			(unsigned char *)&dummy, 0)) < 0) {
 		if (ret == -EAGAIN)
 			_E("pause packet timeout error");
@@ -184,7 +184,7 @@ int _term_sub_app(int pid)
 	int dummy;
 	int ret;
 
-	if ((ret = __app_send_raw_with_noreply(pid, APP_TERM_BY_PID_ASYNC,
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID_ASYNC,
 			(unsigned char *)&dummy, 0)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
@@ -192,6 +192,8 @@ int _term_sub_app(int pid)
 			return -1;
 		}
 	}
+
+	close(ret);
 
 	return 0;
 }
@@ -218,15 +220,15 @@ int _term_app(int pid, int clifd)
 		}
 	}
 
-	if ((ret = __app_send_raw_with_delay_reply(pid, APP_TERM_BY_PID,
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID,
 			(unsigned char *)&dummy, 0)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
-			__real_send(clifd, -1);
+			_send_result_to_client(clifd, -1);
 			return -1;
 		}
-		__real_send(clifd, 0);
+		_send_result_to_client(clifd, 0);
 	}
 	_D("term done\n");
 	if (ret > 0)
@@ -240,10 +242,10 @@ int _term_req_app(int pid, int clifd)
 	int dummy;
 	int ret;
 
-	if ((ret = __app_send_raw_with_delay_reply(pid, APP_TERM_REQ_BY_PID,
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_REQ_BY_PID,
 			(unsigned char *)&dummy, 0)) < 0) {
 		_D("terminate req send error");
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 	}
 
 	if (ret > 0)
@@ -276,15 +278,15 @@ int _term_bgapp(int pid, int clifd)
 		free(pids);
 	}
 
-	if ((fd = __app_send_raw_with_delay_reply(pid, APP_TERM_BGAPP_BY_PID,
+	if ((fd = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BGAPP_BY_PID,
 			(unsigned char *)&dummy, sizeof(int))) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d", pid);
-			__real_send(clifd, -1);
+			_send_result_to_client(clifd, -1);
 			return -1;
 		}
-		__real_send(clifd, 0);
+		_send_result_to_client(clifd, 0);
 	}
 	_D("term_bgapp done");
 	if (fd > 0)
@@ -300,9 +302,9 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 	bundle_raw *kb_data;
 
 	bundle_encode(kb, &kb_data, &datalen);
-	if ((ret = __app_send_raw_with_delay_reply(pid, cmd, kb_data, datalen)) < 0) {
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 	}
 	free(kb_data);
 
@@ -310,21 +312,6 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 		__set_reply_handler(ret, pid, clifd, cmd);
 
 	return ret;
-}
-
-static void __real_send(int clifd, int ret)
-{
-	if (clifd < 0)
-		return;
-
-	if (send(clifd, &ret, sizeof(int), MSG_NOSIGNAL) < 0) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-
-		_E("send fail to client");
-	}
-
-	close(clifd);
 }
 
 static gboolean __au_glib_check(GSource *src)
@@ -392,9 +379,9 @@ static gboolean __reply_handler(gpointer data)
 	close(fd);
 
 	if (res < 0)
-		__real_send(clifd, res);
+		_send_result_to_client(clifd, res);
 	else
-		__real_send(clifd, pid);
+		_send_result_to_client(clifd, pid);
 
 	_D("listen fd : %d , send fd : %d, pid : %d", fd, clifd, pid);
 
@@ -413,7 +400,7 @@ static gboolean __recv_timeout_handler(gpointer data)
 	int fd = r_info->gpollfd->fd;
 	int clifd = r_info->clifd;
 
-	__real_send(clifd, -EAGAIN);
+	_send_result_to_client(clifd, -EAGAIN);
 
 	close(fd);
 
@@ -512,7 +499,7 @@ static int __compare_signature(const struct appinfo *ai, int cmd,
 						appid, &compare_result);
 				if (compare_result != PMINFO_CERT_COMPARE_MATCH) {
 					ret = -EILLEGALACCESS;
-					__real_send(fd, ret);
+					_send_result_to_client(fd, ret);
 					return ret;
 				}
 			}
@@ -683,7 +670,7 @@ int _send_hint_for_visibility(uid_t uid)
 
 	b = bundle_create();
 
-	ret = app_agent_send_cmd(uid, LAUNCHPAD_PROCESS_POOL_SOCK,
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, uid,
 			PAD_CMD_VISIBILITY, b);
 
 	if (b)
@@ -746,7 +733,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	ai = appinfo_find(caller_uid, appid);
 	if (ai == NULL) {
 		_D("cannot find appinfo of %s", appid);
-		__real_send(fd, -ENOENT);
+		_send_result_to_client(fd, -ENOENT);
 		return -1;
 	}
 
@@ -756,7 +743,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 
 	if (!strcmp(status, "blocking")) {
 		_D("blocking");
-		__real_send(fd, -EREJECTED);
+		_send_result_to_client(fd, -EREJECTED);
 		return -EREJECTED;
 	}
 
@@ -778,7 +765,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		pid = __get_pid_for_app_group(appid, pid, caller_uid, kb,
 				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
-			__real_send(fd, pid);
+			_send_result_to_client(fd, pid);
 			return pid;
 		}
 	}
@@ -794,12 +781,12 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		if (caller_pid == pid) {
 			SECURE_LOGD("caller process & callee process is same.[%s:%d]", appid, pid);
 			pid = -ELOCALLAUNCH_ID;
-			__real_send(fd, pid);
+			_send_result_to_client(fd, pid);
 		} else {
 			aul_send_app_resume_request_signal(pid, appid, pkg_id, component_type);
 			if ((ret = __nofork_processing(cmd, pid, kb, fd)) < 0) {
 				pid = ret;
-				__real_send(fd, pid);
+				_send_result_to_client(fd, pid);
 			}
 		}
 	} else {
@@ -820,7 +807,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;
 
-		pid = app_agent_send_cmd(caller_uid, pad_type, PAD_CMD_LAUNCH, kb);
+		pid = _send_cmd_to_launchpad(pad_type, caller_uid, PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
 			aul_send_app_launch_request_signal(pid, appid, pkg_id, component_type);
@@ -837,7 +824,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 				app_group_restart_app(pid, kb);
 			}
 		}
-		_status_add_app_info_list(appid, app_path, pid, LAUNCHPAD_PID, is_subapp, caller_uid);
+		_status_add_app_info_list(appid, app_path, pid, is_subapp, caller_uid);
 	}
 
 	return pid;

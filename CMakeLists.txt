@@ -47,7 +47,7 @@ ADD_EXECUTABLE(amd
 	src/amd_status.c
 	src/amd_app_group.c
 	src/amd_cynara.c
-	src/app_sock.c
+	src/amd_socket.c
 	src/simple_util.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")

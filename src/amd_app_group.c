@@ -23,8 +23,8 @@
 #include <aul.h>
 #include <aul_svc.h>
 #include <bundle_internal.h>
+#include <aul_sock.h>
 
-#include "app_sock.h"
 #include "simple_util.h"
 #include "amd_app_group.h"
 #include "amd_launch.h"
@@ -221,18 +221,24 @@ static GList* __find_removable_apps(int from)
 static void __prepare_to_suspend_services(int pid)
 {
 	/*
+	int ret;
 	int dummy;
 	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	__app_send_raw_with_noreply(pid, APP_SUSPEND, (unsigned char *)&dummy, sizeof(int));
+	ret = aul_sock_send_raw_async(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy, sizeof(int));
+	if (ret > 0)
+		close(ret);
 	*/
 }
 
 static void __prepare_to_wake_services(int pid)
 {
 	/*
+	int ret;
 	int dummy;
 	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	__app_send_raw_with_noreply(pid, APP_WAKE, (unsigned char *)&dummy, sizeof(int));
+	ret = aul_sock_send_raw_async(pid, getuid(), APP_WAKE, (unsigned char *)&dummy, sizeof(int));
+	if (ret > 0)
+		close(ret);
 	*/
 }
 
