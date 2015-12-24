@@ -41,6 +41,7 @@
 #include "amd_request.h"
 #include "amd_app_group.h"
 #include "amd_cynara.h"
+#include "amd_app_com.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
@@ -152,6 +153,8 @@ static int __app_dead_handler(int pid, void *data)
 		if (tmp_appid)
 			appid = strdup(tmp_appid);
 	}
+
+	app_com_client_remove(pid);
 
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
@@ -299,6 +302,7 @@ static int __init(void)
 	r = rua_clear_history();
 
 	_D("rua_clear_history : %d", r);
+	app_com_broker_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
@@ -324,5 +328,6 @@ int main(int argc, char *argv[])
 	}
 	g_main_loop_run(mainloop);
 
+	app_com_broker_fini();
 	return 0;
 }
