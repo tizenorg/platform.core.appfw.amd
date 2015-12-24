@@ -25,6 +25,7 @@
 #include <gio/gio.h>
 #include <vconf.h>
 #include <time.h>
+#include <aul_socket.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
@@ -32,7 +33,6 @@
 #include "amd_request.h"
 #include "amd_launch.h"
 #include "simple_util.h"
-#include "app_sock.h"
 #include "menu_db_util.h"
 #include "amd_app_group.h"
 
@@ -49,7 +49,6 @@ typedef struct _app_status_info_t {
 	char *pkgid;
 	int status;
 	int pid;
-	int pad_pid;
 	bool is_subapp;
 	pkg_status_info_t *pkginfo;
 	uid_t uid;
@@ -240,8 +239,8 @@ static void __update_leader_app_info(int lpid)
 	}
 }
 
-int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
-				int pad_pid, bool is_subapp, uid_t uid)
+int _status_add_app_info_list(const char *appid, const char *app_path,
+		int pid, bool is_subapp, uid_t uid)
 {
 	GSList *iter;
 	GSList *iter_next;
@@ -298,7 +297,6 @@ int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
 		goto error;
 
 	info_t->pid = pid;
-	info_t->pad_pid = pad_pid;
 	info_t->is_subapp = is_subapp;
 	info_t->uid = uid;
 	info_t->pkgid = strdup(pkgid);
@@ -541,8 +539,6 @@ int _status_send_running_appinfo(int fd, uid_t uid)
 {
 	GSList *iter = NULL;
 	app_status_info_t *info_t = NULL;
-	app_pkt_t *pkt = NULL;
-	int len;
 	char tmp_pid[MAX_PID_STR_BUFSZ];
 	char buf[AUL_SOCK_MAXBUFF] = {0, };
 
@@ -560,27 +556,8 @@ int _status_send_running_appinfo(int fd, uid_t uid)
 		strncat(buf, ";", 1);
 	}
 
-	len = strlen(buf);
-	pkt = (app_pkt_t *)malloc(AUL_PKT_HEADER_SIZE + len);
-	if (!pkt) {
-		_E("malloc fail");
-		return 0;
-	}
-
-	pkt->cmd = APP_RUNNING_INFO_RESULT;
-	pkt->len = len;
-	memcpy(pkt->data, buf, len);
-
-	if ((len = send(fd, pkt, pkt->len + AUL_PKT_HEADER_SIZE, 0)) !=
-			pkt->len + AUL_PKT_HEADER_SIZE) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-		_E("send fail to client");
-	}
-
-	if (pkt)
-		free(pkt);
-
+	aul_socket_send_raw_async_with_fd(fd, APP_RUNNING_INFO_RESULT,
+			(unsigned char *)buf, strlen(buf));
 	close(fd);
 
 	return 0;
@@ -633,7 +610,6 @@ static int __get_appid_bypid(int pid, char *appid, int len)
 
 int _status_get_appid_bypid(int fd, int pid)
 {
-	app_pkt_t *pkt = NULL;
 	int cmd;
 	int len = 0;
 	int pgid;
@@ -662,26 +638,8 @@ int _status_get_appid_bypid(int fd, int pid)
 	}
 
  out:
-	pkt = (app_pkt_t *)malloc(AUL_PKT_HEADER_SIZE + len);
-	if (!pkt) {
-		_E("malloc fail");
-		close(fd);
-		return 0;
-	}
-	pkt->cmd = cmd;
-	pkt->len = len;
-	memcpy(pkt->data, appid, len);
-
-	if ((len = send(fd, pkt, pkt->len + AUL_PKT_HEADER_SIZE, 0)) !=
-			pkt->len + AUL_PKT_HEADER_SIZE) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-		_E("send fail to client");
-	}
-
-	if (pkt)
-		free(pkt);
-
+	aul_socket_send_raw_async_with_fd(fd, cmd,
+			(unsigned char *)appid, len);
 	close(fd);
 
 	return 0;
@@ -717,7 +675,6 @@ static int __get_pkgid_bypid(int pid, char *pkgid, int len)
 
 int _status_get_pkgid_bypid(int fd, int pid)
 {
-	app_pkt_t *pkt = NULL;
 	int cmd;
 	int len = 0;
 	int pgid;
@@ -746,26 +703,8 @@ int _status_get_pkgid_bypid(int fd, int pid)
 	}
 
  out:
-	pkt = (app_pkt_t *)malloc(AUL_PKT_HEADER_SIZE + len);
-	if (!pkt) {
-		_E("malloc fail");
-		close(fd);
-		return 0;
-	}
-	pkt->cmd = cmd;
-	pkt->len = len;
-	memcpy(pkt->data, pkgid, len);
-
-	if ((len = send(fd, pkt, pkt->len + AUL_PKT_HEADER_SIZE, 0)) !=
-			pkt->len + AUL_PKT_HEADER_SIZE) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-		_E("send fail to client");
-	}
-
-	if (pkt)
-		free(pkt);
-
+	aul_socket_send_raw_async_with_fd(fd, cmd,
+			(unsigned char *)pkgid, len);
 	close(fd);
 
 	return 0;

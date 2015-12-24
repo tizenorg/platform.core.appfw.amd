@@ -25,9 +25,7 @@
 #include <string.h>
 #include <dlfcn.h>
 #include <poll.h>
-
 #include <glib.h>
-
 #include <aul.h>
 #include <bundle.h>
 #include <bundle_internal.h>
@@ -35,19 +33,19 @@
 #include <rua_stat.h>
 #include <tzplatform_config.h>
 #include <systemd/sd-login.h>
+#include <aul_socket.h>
+#include <aul_svc.h>
+#include <aul_svc_priv_key.h>
 
 #include "amd_config.h"
 #include "simple_util.h"
-#include "app_sock.h"
 #include "amd_request.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"
 #include "amd_status.h"
 #include "amd_app_group.h"
 #include "amd_cynara.h"
-#include "aul_svc.h"
-#include "aul_svc_priv_key.h"
-#include "app_launchpad_types.h"
+#include "amd_socket.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -88,8 +86,6 @@ typedef struct _rua_stat_pkt_t {
 } rua_stat_pkt_t;
 
 typedef int (*app_cmd_dispatch_func)(int clifd, const app_pkt_t *pkt, struct ucred *cr);
-
-static int __send_result_to_client(int fd, int res);
 static gboolean __request_handler(gpointer data);
 static gboolean __timeout_pending_item(gpointer user_data);
 
@@ -147,65 +143,8 @@ static int __send_message(int sock, const struct iovec *vec, int vec_size, const
 		return sndret;
 }
 
-static int __send_result_data(int fd, int cmd, unsigned char *kb_data, int datalen)
-{
-	int len;
-	int sent = 0;
-	int res = 0;
-	app_pkt_t *pkt = NULL;
-
-	pkt = (app_pkt_t *)malloc(AUL_PKT_HEADER_SIZE + datalen);
-	if (NULL == pkt) {
-		_E("Malloc Failed!");
-		return -ENOMEM;
-	}
-
-	pkt->cmd = cmd;
-	pkt->len = datalen;
-	memcpy(pkt->data, kb_data, datalen);
-
-	while (sent != AUL_PKT_HEADER_SIZE + datalen) {
-		len = send(fd, pkt, AUL_PKT_HEADER_SIZE + datalen - sent, 0);
-		if (len <= 0) {
-			_E("send error fd:%d (errno %d)", fd, errno);
-			close(fd);
-			free(pkt);
-			return -ECOMM;
-		}
-		sent += len;
-	}
-
-	free(pkt);
-	close(fd);
-
-	return res;
-}
-
 extern int __app_dead_handler(int pid, uid_t user);
 extern int __agent_dead_handler(uid_t user);
-
-static int __send_result_to_client(int fd, int res)
-{
-	if (send(fd, &res, sizeof(int), MSG_NOSIGNAL) < 0) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-		_E("send fail to client");
-	}
-	close(fd);
-	return 0;
-}
-
-static void __real_send(int clifd, int ret)
-{
-	if (send(clifd, &ret, sizeof(int), MSG_NOSIGNAL) < 0) {
-		if (errno == EPIPE)
-			_E("send failed due to EPIPE.\n");
-
-		_E("send fail to client");
-	}
-
-	close(clifd);
-}
 
 static int __get_caller_pid(bundle *kb)
 {
@@ -248,10 +187,12 @@ static int __foward_cmd(int cmd, bundle *kb, int cr_pid)
 	}
 
 	bundle_encode(kb, &kb_data, &datalen);
-	if ((res = __app_send_raw_with_noreply(pid, cmd, kb_data, datalen)) < 0)
+	if ((res = aul_socket_send_raw_async(pid, getuid(), cmd, kb_data, datalen)) < 0)
 		res = AUL_R_ERROR;
 
 	free(kb_data);
+	if (res > 0)
+		close(res);
 
 	return res;
 }
@@ -279,7 +220,7 @@ static int __app_process_by_pid(int cmd,
 	appid = _status_app_get_appid_bypid(pid);
 	if (appid == NULL) {
 		_E("pid %d is not an app", pid);
-		__real_send(clifd, -1);
+		_send_result_to_client(clifd, -1);
 		return -1;
 	}
 
@@ -309,16 +250,22 @@ static int __app_process_by_pid(int cmd,
 		if ((ret = _send_to_sigkill(pid)) < 0)
 			_E("fail to killing - %d\n", pid);
 		_status_update_app_info_list(pid, STATUS_DYING, cr->uid);
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 		break;
 	case APP_TERM_REQ_BY_PID:
 		ret = _term_req_app(pid, clifd);
 		break;
 	case APP_TERM_BY_PID_ASYNC:
-		if ((ret = __app_send_raw_with_noreply(pid, cmd, (unsigned char *)&dummy, sizeof(int))) < 0)
+		ret = aul_socket_send_raw_async(pid, getuid(), cmd,
+				(unsigned char *)&dummy, sizeof(int));
+		if (ret > 0) {
+			close(ret);
+			ret = 0;
+		} else {
 			_D("terminate req packet send error");
+		}
 
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 		break;
 	case APP_PAUSE_BY_PID:
 		ret = _pause_app(pid, clifd);
@@ -540,7 +487,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 		handles = (int *)calloc(2, sizeof(int));
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 			_E("error create socket pair");
-			__send_result_to_client(clifd, -1);
+			_send_result_to_client(clifd, -1);
 
 			if (handles)
 				free(handles);
@@ -549,7 +496,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 
 		if (handles[0] == -1) {
 			_E("error socket open");
-			__send_result_to_client(clifd, -1);
+			_send_result_to_client(clifd, -1);
 
 			if (handles)
 				free(handles);
@@ -575,7 +522,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 			msglen = __send_message(clifd, vec, 1, &handles[0], 1);
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
-				__send_result_to_client(clifd, -1);
+				_send_result_to_client(clifd, -1);
 				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
@@ -590,7 +537,7 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 			msglen = __send_message(clifd, vec, 1, &handles[1], 1);
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
-				__send_result_to_client(clifd, -1);
+				_send_result_to_client(clifd, -1);
 				g_hash_table_remove(__socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
@@ -628,8 +575,9 @@ static int __dispatch_remove_history(int clifd, const app_pkt_t *pkt, struct ucr
 	result = rua_delete_history_from_db(b);
 	bundle_free(b);
 
-	__send_result_data(clifd, APP_REMOVE_HISTORY,
+	aul_socket_send_raw_async_with_fd(clifd, APP_REMOVE_HISTORY,
 			(unsigned char *)&result, sizeof(int));
+	close(clifd);
 */
 	return 0;
 }
@@ -646,7 +594,7 @@ static int __dispatch_app_group_get_window(int clifd, const app_pkt_t *pkt, stru
 	pid = atoi(buf);
 	bundle_free(b);
 	wid = app_group_get_window(pid);
-	__send_result_to_client(clifd, wid);
+	_send_result_to_client(clifd, wid);
 
 	return 0;
 }
@@ -663,7 +611,7 @@ static int __dispatch_app_group_set_window(int clifd, const app_pkt_t *pkt, stru
 	wid = atoi(buf);
 	bundle_free(b);
 	ret = app_group_set_window(cr->pid, wid);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 
 	return ret;
 }
@@ -680,7 +628,7 @@ static int __dispatch_app_group_get_fg_flag(int clifd, const app_pkt_t *pkt, str
 	pid = atoi(buf);
 	bundle_free(b);
 	fg = app_group_get_fg_flag(pid);
-	__send_result_to_client(clifd, fg);
+	_send_result_to_client(clifd, fg);
 
 	return 0;
 }
@@ -688,7 +636,7 @@ static int __dispatch_app_group_get_fg_flag(int clifd, const app_pkt_t *pkt, str
 static int __dispatch_app_group_clear_top(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
 	app_group_clear_top(cr->pid);
-	__send_result_to_client(clifd, 0);
+	_send_result_to_client(clifd, 0);
 
 	return 0;
 }
@@ -706,7 +654,7 @@ static int __dispatch_app_group_get_leader_pid(int clifd,
 	pid = atoi(buf);
 	bundle_free(b);
 	lpid = app_group_get_leader_pid(pid);
-	__send_result_to_client(clifd, lpid);
+	_send_result_to_client(clifd, lpid);
 
 	return 0;
 }
@@ -720,12 +668,15 @@ static int __dispatch_app_group_get_leader_pids(int clifd,
 
 	app_group_get_leader_pids(&cnt, &pids);
 
-	if (pids == NULL || cnt == 0) {
-		__send_result_data(clifd, APP_GROUP_GET_LEADER_PIDS, empty, 0);
-	} else {
-		__send_result_data(clifd, APP_GROUP_GET_LEADER_PIDS,
-			(unsigned char *)pids, cnt * sizeof(int));
-	}
+	if (pids == NULL || cnt == 0)
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_LEADER_PIDS, empty, 0);
+	else
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_LEADER_PIDS,
+				(unsigned char *)pids, cnt * sizeof(int));
+	close(clifd);
+
 	if (pids != NULL)
 		free(pids);
 
@@ -741,12 +692,15 @@ static int __dispatch_app_group_get_idle_pids(int clifd,
 
 	app_group_get_idle_pids(&cnt, &pids);
 
-	if (pids == NULL || cnt == 0) {
-		__send_result_data(clifd, APP_GROUP_GET_IDLE_PIDS, empty, 0);
-	} else {
-		__send_result_data(clifd, APP_GROUP_GET_IDLE_PIDS,
-			(unsigned char *)pids, cnt * sizeof(int));
-	}
+	if (pids == NULL || cnt == 0)
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_IDLE_PIDS, empty, 0);
+	else
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_IDLE_PIDS,
+				(unsigned char *)pids, cnt * sizeof(int));
+	close(clifd);
+
 	if (pids != NULL)
 		free(pids);
 
@@ -768,12 +722,15 @@ static int __dispatch_app_group_get_group_pids(int clifd, const app_pkt_t *pkt, 
 	bundle_free(b);
 
 	app_group_get_group_pids(leader_pid, &cnt, &pids);
-	if (pids == NULL || cnt == 0) {
-		__send_result_data(clifd, APP_GROUP_GET_GROUP_PIDS, empty, 0);
-	} else {
-		__send_result_data(clifd, APP_GROUP_GET_GROUP_PIDS,
-			(unsigned char *)pids, cnt * sizeof(int));
-	}
+	if (pids == NULL || cnt == 0)
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_GROUP_PIDS, empty, 0);
+	else
+		aul_socket_send_raw_async_with_fd(clifd,
+				APP_GROUP_GET_GROUP_PIDS,
+				(unsigned char *)pids, cnt * sizeof(int));
+	close(clifd);
+
 	if (pids != NULL)
 		free(pids);
 
@@ -785,7 +742,7 @@ static int __dispatch_app_group_lower(int clifd, const app_pkt_t *pkt, struct uc
 	int ret = 0;
 
 	app_group_lower(cr->pid, &ret);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 
 	return ret;
 }
@@ -822,7 +779,7 @@ static int __dispatch_app_start(int clifd, const app_pkt_t *pkt, struct ucred *c
 						t_uid, clifd, &pending);
 			} else {
 				_E("uid:%d session is %s", t_uid, state);
-				__real_send(clifd, AUL_R_ERROR);
+				_send_result_to_client(clifd, AUL_R_ERROR);
 				goto error;
 			}
 		} else {
@@ -835,7 +792,7 @@ static int __dispatch_app_start(int clifd, const app_pkt_t *pkt, struct ucred *c
 		if (operation) {
 			ret = __check_app_control_privilege(clifd, operation);
 			if (ret != 0) {
-				__real_send(clifd, ret);
+				_send_result_to_client(clifd, ret);
 				goto error;
 			}
 		}
@@ -985,13 +942,13 @@ static int __dispatch_app_is_running(int clifd, const app_pkt_t *pkt, struct ucr
 	appid = malloc(MAX_PACKAGE_STR_SIZE);
 	if (appid == NULL) {
 		_E("out of memory");
-		__send_result_to_client(clifd, -1);
+		_send_result_to_client(clifd, -1);
 		return -1;
 	}
 	strncpy(appid, (const char*)pkt->data, MAX_PACKAGE_STR_SIZE-1);
 	ret = _status_app_is_running(appid, cr->uid);
 	SECURE_LOGD("APP_IS_RUNNING : %s : %d", appid, ret);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 	free(appid);
 
 	return 0;
@@ -1021,7 +978,7 @@ static int __dispatch_app_get_pkgid_by_pid(int clifd, const app_pkt_t *pkt, stru
 
 static int __dispatch_legacy_command(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-	__send_result_to_client(clifd, 0);
+	_send_result_to_client(clifd, 0);
 	return 0;
 }
 
@@ -1053,7 +1010,7 @@ static int __dispatch_app_get_status(int clifd, const app_pkt_t *pkt, struct ucr
 
 	memcpy(&pid, pkt->data, sizeof(int));
 	ret = _status_get_app_info_status(pid, 0);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 
 	return 0;
 }
@@ -1072,10 +1029,10 @@ static int __dispatch_app_add_loader(int clifd, const app_pkt_t *pkt, struct ucr
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "%d", getpgid(cr->pid));
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
-	ret = app_agent_send_cmd(cr->uid, LAUNCHPAD_PROCESS_POOL_SOCK,
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, cr->uid,
 			PAD_CMD_ADD_LOADER, kb);
 	bundle_free(kb);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 
 	return ret;
 }
@@ -1091,10 +1048,10 @@ static int __dispatch_app_remove_loader(int clifd, const app_pkt_t *pkt, struct 
 		return -1;
 	}
 
-	ret = app_agent_send_cmd(cr->uid, LAUNCHPAD_PROCESS_POOL_SOCK,
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, cr->uid,
 			PAD_CMD_REMOVE_LOADER, kb);
 	bundle_free(kb);
-	__send_result_to_client(clifd, ret);
+	_send_result_to_client(clifd, ret);
 
 	return ret;
 }
@@ -1112,7 +1069,7 @@ static int __dispatch_amd_reload_appinfo(int clifd, const app_pkt_t *pkt, struct
 {
 	_D("AMD_RELOAD_APPINFO");
 	appinfo_reload();
-	__send_result_to_client(clifd, 0);
+	_send_result_to_client(clifd, 0);
 
 	return 0;
 }
@@ -1212,14 +1169,14 @@ static void __timeout_pending_request(gpointer data, gpointer user_data)
 {
 	struct request *req = (struct request *)data;
 
-	__send_result_to_client(req->clifd, -1);
+	_send_result_to_client(req->clifd, -1);
 }
 
 static gboolean __timeout_pending_item(gpointer user_data)
 {
 	struct pending_item *item = (struct pending_item *)user_data;
 
-	__send_result_to_client(item->clifd, item->pid);
+	_send_result_to_client(item->clifd, item->pid);
 	g_list_foreach(item->pending_list, __timeout_pending_request, NULL);
 
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(item->pid));
@@ -1251,7 +1208,7 @@ int _request_reply_for_pending_request(int pid)
 	if (item == NULL)
 		return -1;
 
-	__send_result_to_client(item->clifd, pid);
+	_send_result_to_client(item->clifd, pid);
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(pid));
 	g_list_foreach(item->pending_list, __process_pending_request, NULL);
 
@@ -1368,7 +1325,7 @@ static gboolean __request_handler(gpointer data)
 	const char *privilege;
 	struct request *req;
 
-	if ((pkt = __app_recv_raw(fd, &clifd, &cr)) == NULL) {
+	if ((pkt = aul_socket_recv_pkt(fd, &clifd, &cr)) == NULL) {
 		_E("recv error");
 		return FALSE;
 	}
@@ -1387,7 +1344,7 @@ static gboolean __request_handler(gpointer data)
 			if (ret < 0) {
 				_E("request has been denied by smack");
 				ret = -EILLEGALACCESS;
-				__real_send(clifd, ret);
+				_send_result_to_client(clifd, ret);
 				__free_request(req);
 				free(pkt);
 				return TRUE;
@@ -1397,7 +1354,7 @@ static gboolean __request_handler(gpointer data)
 
 	ret = __check_request(req);
 	if (ret < 0) {
-		__real_send(clifd, ret);
+		_send_result_to_client(clifd, ret);
 		__free_request(req);
 		free(pkt);
 		return TRUE;
@@ -1464,10 +1421,10 @@ int _request_init(void)
 	__socket_pair_hash = g_hash_table_new_full(g_str_hash,  g_str_equal, free, free);
 	pending_table = g_hash_table_new(g_direct_hash, g_direct_equal);
 
-	fd = __create_sock_activation();
+	fd = _create_sock_activation();
 	if (fd == -1) {
 		_D("Create server socket without socket activation");
-		fd = __create_server_sock(AUL_UTIL_PID);
+		fd = aul_socket_create_server(AUL_UTIL_PID, getuid());
 		if (fd == -1) {
 			_E("Create server socket failed.");
 			return -1;
