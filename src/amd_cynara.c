@@ -20,7 +20,7 @@
 #include <cynara-creds-socket.h>
 #include <cynara-session.h>
 
-#include "simple_util.h"
+#include "amd_util.h"
 
 static cynara *r_cynara = NULL;
 

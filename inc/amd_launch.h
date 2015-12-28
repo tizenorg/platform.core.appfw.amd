@@ -19,7 +19,7 @@
 #include <stdbool.h>
 
 #include <bundle.h>
-#include "simple_util.h"
+#include "amd_util.h"
 #include "amd_appinfo.h"
 
 int _send_to_sigkill(int pid);

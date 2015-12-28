@@ -26,13 +26,14 @@
 #include <vconf.h>
 #include <time.h>
 #include <aul_sock.h>
+#include <aul_proc.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
 #include "amd_appinfo.h"
 #include "amd_request.h"
 #include "amd_launch.h"
-#include "simple_util.h"
+#include "amd_util.h"
 #include "menu_db_util.h"
 #include "amd_app_group.h"
 
@@ -589,7 +590,7 @@ int _status_app_is_running_v2(const char *appid, uid_t caller_uid)
 	if (ai == NULL)
 		return -1;
 
-	ret = __proc_iter_appid(__find_pid_by_appid, (void *)appid);
+	ret = aul_proc_iter_appid(__find_pid_by_appid, (void *)appid);
 
 	return ret;
 }
@@ -598,7 +599,7 @@ static int __get_appid_bypid(int pid, char *appid, int len)
 {
 	char *result;
 
-	result = __proc_get_appid_bypid(pid);
+	result = aul_proc_get_appid_bypid(pid);
 	if (result == NULL)
 		return -1;
 
@@ -650,11 +651,11 @@ static int __get_pkgid_bypid(int pid, char *pkgid, int len)
 	char *appid;
 	app_info_from_db *menu_info;
 	uid_t uid;
-	appid = __proc_get_appid_bypid(pid);
+	appid = aul_proc_get_appid_bypid(pid);
 	if (appid == NULL)
 		return -1;
 
-	uid = __proc_get_usr_bypid(pid);
+	uid = aul_proc_get_usr_bypid(pid);
 	if (uid == -1) {
 		free(appid);
 		return -1;

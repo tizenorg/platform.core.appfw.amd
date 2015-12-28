@@ -25,7 +25,7 @@
 #include <bundle_internal.h>
 #include <aul_sock.h>
 
-#include "simple_util.h"
+#include "amd_util.h"
 #include "amd_app_group.h"
 #include "amd_launch.h"
 #include "amd_request.h"
