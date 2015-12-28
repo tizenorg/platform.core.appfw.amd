@@ -19,7 +19,8 @@
 #include <pkgmgr-info.h>
 #include <string.h>
 #include <stdio.h>
-#include "simple_util.h"
+
+#include "amd_util.h"
 
 #define MAX_PATH_LEN	1024
 

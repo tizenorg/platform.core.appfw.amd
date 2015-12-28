@@ -27,7 +27,7 @@
 #include <pkgmgr-info.h>
 #include <vconf.h>
 #include "amd_config.h"
-#include "simple_util.h"
+#include "amd_util.h"
 #include "amd_appinfo.h"
 #include "amd_launch.h"
 #include "amd_status.h"
