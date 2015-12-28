@@ -27,7 +27,7 @@
 #include <systemd/sd-daemon.h>
 #include <aul_sock.h>
 
-#include "simple_util.h"
+#include "amd_util.h"
 
 int _create_sock_activation(void)
 {

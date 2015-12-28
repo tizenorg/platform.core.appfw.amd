@@ -38,7 +38,7 @@
 #include <aul_svc_priv_key.h>
 
 #include "amd_config.h"
-#include "simple_util.h"
+#include "amd_util.h"
 #include "amd_request.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"

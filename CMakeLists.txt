@@ -48,7 +48,6 @@ ADD_EXECUTABLE(amd
 	src/amd_app_group.c
 	src/amd_cynara.c
 	src/amd_socket.c
-	src/simple_util.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")

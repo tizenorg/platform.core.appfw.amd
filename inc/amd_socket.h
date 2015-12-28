@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#define AUL_UTIL_PID -2
 #define LAUNCHPAD_PROCESS_POOL_SOCK ".launchpad-process-pool-sock"
 #define DEBUG_LAUNCHPAD_SOCK ".debug-launchpad-sock"
 

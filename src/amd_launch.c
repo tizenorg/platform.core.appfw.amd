@@ -43,7 +43,7 @@
 #include "amd_appinfo.h"
 #include "amd_status.h"
 #include "amd_app_group.h"
-#include "simple_util.h"
+#include "amd_util.h"
 #include "app_signal.h"
 #include "amd_cynara.h"
 #include "amd_socket.h"
