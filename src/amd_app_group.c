@@ -396,6 +396,11 @@ static int __get_previous_pid(int pid)
 
 		while (i != NULL) {
 			ac = (app_group_context_t*)i->data;
+			if (ac == NULL) {
+				i = g_list_next(i);
+				continue;
+			}
+
 			if (ac && ac->pid == pid)
 				return previous_pid;
 
@@ -634,6 +639,7 @@ int app_group_set_window(int pid, int wid)
 	GList *i;
 	int previous_wid;
 	int caller_wid;
+	app_group_context_t *ac;
 
 	g_hash_table_iter_init(&iter, app_group_hash);
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
@@ -641,7 +647,12 @@ int app_group_set_window(int pid, int wid)
 		i = g_list_first(list);
 		previous_wid = 0;
 		while (i != NULL) {
-			app_group_context_t *ac = (app_group_context_t*) i->data;
+			ac = (app_group_context_t*) i->data;
+			if (ac == NULL) {
+				i = g_list_next(i);
+				continue;
+			}
+
 			if (ac && ac->pid == pid) {
 				ac->wid = wid;
 				if (previous_wid != 0)

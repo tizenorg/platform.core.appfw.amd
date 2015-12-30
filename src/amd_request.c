@@ -485,6 +485,11 @@ static int __dispatch_get_socket_pair(int clifd, const app_pkt_t *pkt, struct uc
 	handles = g_hash_table_lookup(__socket_pair_hash, socket_pair_key);
 	if (handles == NULL) {
 		handles = (int *)calloc(2, sizeof(int));
+		if (handles == NULL) {
+			_E("calloc fail");
+			goto err_out;
+		}
+
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 			_E("error create socket pair");
 			_send_result_to_client(clifd, -1);

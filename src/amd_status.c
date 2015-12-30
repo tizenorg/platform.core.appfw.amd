@@ -806,14 +806,15 @@ static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
 {
 	char *path;
 	char *p;
-	int pid;
+	int pid = 0;
 
 	if (event_type != G_FILE_MONITOR_EVENT_CREATED)
 		return;
 
 	path = g_file_get_path(file);
 	p = strrchr(path, '/');
-	pid = atoi(p + 1);
+	if (p != NULL)
+		pid = atoi(p + 1);
 
 	if (pid < 1)
 		return;
