@@ -615,17 +615,15 @@ err_out:
 
 static int __dispatch_remove_history(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-/*
 	int result = 0;
 	bundle *b = NULL;
 	b = bundle_decode(pkt->data, pkt->len);
 	result = rua_delete_history_from_db(b);
 	bundle_free(b);
+	_D("rua_delete_history_from_db result : %d", result);
 
-	aul_sock_send_raw_async_with_fd(clifd, APP_REMOVE_HISTORY,
-			(unsigned char *)&result, sizeof(int));
+	_send_result_to_client(clifd, result);
 	close(clifd);
-*/
 	return 0;
 }
 
