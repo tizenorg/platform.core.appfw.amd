@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <aul.h>
+#include <rua.h>
 #include <pkgmgr-info.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@
 #include "amd_launch.h"
 #include "amd_request.h"
 #include "amd_app_group.h"
+#include "amd_cynara.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
@@ -269,6 +271,8 @@ static int __syspopup_dbus_signal_handler_init(void)
 
 static int __init(void)
 {
+	int r;
+
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");
 		return -1;
@@ -280,9 +284,20 @@ static int __init(void)
 	}
 
 	restart_tbl = g_hash_table_new(g_str_hash, g_str_equal);
+
+	r = init_cynara();
+	if (r != 0) {
+		_E("cynara initialize failed.");
+		return -1;
+	}
+
 	_request_init();
 	_status_init();
 	app_group_init();
+	r = rua_init();
+	r = rua_clear_history();
+
+	_D("rua_clear_history : %d", r);
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");

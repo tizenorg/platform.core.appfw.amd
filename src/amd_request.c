@@ -1476,12 +1476,6 @@ int _request_init(void)
 		}
 	}
 
-	r = init_cynara();
-	if (r != 0) {
-		_E("cynara initialize failed.");
-		close(fd);
-		return -1;
-	}
 
 	src = g_source_new(&funcs, sizeof(GSource));
 	if (!src) {
@@ -1516,10 +1510,6 @@ int _request_init(void)
 		close(fd);
 		return -1;
 	}
-	r = rua_init();
-	r = rua_clear_history();
-
-	_D("rua_clear_history : %d", r);
 
 	return 0;
 }
