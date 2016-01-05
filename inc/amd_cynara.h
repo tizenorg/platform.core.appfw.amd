@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <aul_sock.h>
+
 int init_cynara(void);
 void finish_cynara(void);
-int check_privilege_by_cynara(int sockfd, const char *privilege);
+int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt);
