@@ -33,6 +33,8 @@
 #include <pkgmgr-info.h>
 #include <poll.h>
 #include <tzplatform_config.h>
+#include <cert-svc/ccert.h>
+#include <cert-svc/cinstance.h>
 
 #include <aul_sock.h>
 #include <aul_svc.h>
@@ -54,6 +56,8 @@
 #define INIT_PID 1
 
 #define AUL_PR_NAME         16
+#define OSP_K_LAUNCH_TYPE "__OSP_LAUNCH_TYPE__"
+#define OSP_V_LAUNCH_TYPE_DATACONTROL "datacontrol"
 
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
@@ -663,6 +667,126 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 	}
 }
 
+static char *__get_cert_value_from_pkginfo(const char *pkgid, uid_t uid)
+{
+	int ret;
+	const char *cert_value;
+	pkgmgrinfo_certinfo_h certinfo;
+
+	ret = pkgmgrinfo_pkginfo_create_certinfo(&certinfo);
+	if (ret != PMINFO_R_OK) {
+		_E("Failed to create certinfo");
+		return NULL;
+	}
+
+	ret = pkgmgrinfo_pkginfo_load_certinfo(pkgid, certinfo, uid);
+	if (ret != PMINFO_R_OK) {
+		_E("Failed to load certinfo");
+		pkgmgrinfo_pkginfo_destroy_certinfo(certinfo);
+		return NULL;
+	}
+
+	ret = pkgmgrinfo_pkginfo_get_cert_value(certinfo,
+			PMINFO_DISTRIBUTOR_ROOT_CERT, &cert_value);
+	if (ret != PMINFO_R_OK || cert_value == NULL) {
+		_E("Failed to get cert value");
+		pkgmgrinfo_pkginfo_destroy_certinfo(certinfo);
+		return NULL;
+	}
+
+	pkgmgrinfo_pkginfo_destroy_certinfo(certinfo);
+
+	return strdup(cert_value);
+}
+
+static int __get_visibility_from_certsvc(const char *cert_value)
+{
+	int ret;
+	CertSvcInstance instance;
+	CertSvcCertificate certificate;
+	CertSvcVisibility visibility = CERTSVC_VISIBILITY_PUBLIC;
+
+	if (cert_value == NULL)
+		return (int)visibility;
+
+	ret = certsvc_instance_new(&instance);
+	if (ret != CERTSVC_SUCCESS) {
+		_E("certsvc_instance_new() is failed.");
+		return (int)visibility;
+	}
+
+	ret = certsvc_certificate_new_from_memory(instance,
+			(const unsigned char *)cert_value,
+			strlen(cert_value),
+			CERTSVC_FORM_DER_BASE64,
+			&certificate);
+	if (ret != CERTSVC_SUCCESS) {
+		_E("certsvc_certificate_new_from_memory() is failed.");
+		certsvc_instance_free(instance);
+		return (int)visibility;
+	}
+
+	ret = certsvc_certificate_get_visibility(certificate, &visibility);
+	if (ret != CERTSVC_SUCCESS)
+		_E("certsvc_certificate_get_visibility() is failed.");
+
+	certsvc_instance_free(instance);
+
+	return (int)visibility;
+}
+
+static int __check_execute_permission(const char *callee_pkgid,
+		const char *caller_appid, uid_t caller_uid, bundle *kb)
+{
+	struct appinfo *ai;
+	const char *caller_pkgid;
+	const char *launch_type;
+	const char *v;
+	char num[256];
+	int vi_num;
+	int visibility;
+	char *cert_value;
+
+	if (callee_pkgid == NULL)
+		return 0;
+
+	ai = appinfo_find(caller_uid, caller_appid);
+	if (ai == NULL)
+		return 0;
+
+	caller_pkgid = appinfo_get_value(ai, AIT_PKGID);
+	if (caller_pkgid == NULL)
+		return 0;
+
+	if (strcmp(caller_pkgid, callee_pkgid) == 0)
+		return 0;
+
+	launch_type = bundle_get_val(kb, OSP_K_LAUNCH_TYPE);
+	if (launch_type == NULL
+		|| strcmp(launch_type, OSP_V_LAUNCH_TYPE_DATACONTROL) != 0) {
+		v = appinfo_get_value(ai, AIT_VISIBILITY);
+		if (v == NULL) {
+			cert_value = __get_cert_value_from_pkginfo(caller_pkgid,
+					caller_uid);
+			vi_num = __get_visibility_from_certsvc(cert_value);
+			if (cert_value)
+				free(cert_value);
+
+			snprintf(num, sizeof(num), "%d", vi_num);
+			appinfo_set_value(ai, AIT_VISIBILITY, num);
+			v = num;
+		}
+
+		visibility = atoi(v);
+		if (!(visibility & CERTSVC_VISIBILITY_PLATFORM)) {
+			_E("Couldn't launch service app in other packages");
+			return -EREJECTED;
+		}
+	}
+
+	return 0;
+}
+
 int _send_hint_for_visibility(uid_t uid)
 {
 	bundle *b = NULL;
@@ -760,13 +884,23 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		pid = _status_app_is_running(appid, caller_uid);
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type &&
-		strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
+	if (component_type
+			&& strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
 		pid = __get_pid_for_app_group(appid, pid, caller_uid, kb,
 				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
 			_send_result_to_client(fd, pid);
 			return pid;
+		}
+	} else if (component_type
+			&& strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0) {
+		if (caller_appid) {
+			ret = __check_execute_permission(pkg_id,
+					caller_appid, caller_uid, kb);
+			if (ret != 0) {
+				_send_result_to_client(fd, ret);
+				return ret;
+			}
 		}
 	}
 
