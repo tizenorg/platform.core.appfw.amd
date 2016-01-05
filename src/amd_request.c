@@ -184,12 +184,10 @@ static int __foward_cmd(int cmd, bundle *kb, int cr_pid)
 	}
 
 	bundle_encode(kb, &kb_data, &datalen);
-	if ((res = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen)) < 0)
+	if ((res = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0)
 		res = AUL_R_ERROR;
 
 	free(kb_data);
-	if (res > 0)
-		close(res);
 
 	return res;
 }
@@ -254,13 +252,9 @@ static int __app_process_by_pid(int cmd,
 		break;
 	case APP_TERM_BY_PID_ASYNC:
 		ret = aul_sock_send_raw_async(pid, getuid(), cmd,
-				(unsigned char *)&dummy, sizeof(int));
-		if (ret > 0) {
-			close(ret);
-			ret = 0;
-		} else {
+				(unsigned char *)&dummy, sizeof(int), AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY);
+		if (ret < 0)
 			_D("terminate req packet send error");
-		}
 
 		_send_result_to_client(clifd, ret);
 		break;
@@ -687,12 +681,11 @@ static int __dispatch_app_group_get_leader_pids(int clifd,
 
 	if (pids == NULL || cnt == 0)
 		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_LEADER_PIDS, empty, 0);
+				APP_GROUP_GET_LEADER_PIDS, empty, 0, AUL_SOCK_CLOSE);
 	else
 		aul_sock_send_raw_async_with_fd(clifd,
 				APP_GROUP_GET_LEADER_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int));
-	close(clifd);
+				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
 
 	if (pids != NULL)
 		free(pids);
@@ -711,12 +704,11 @@ static int __dispatch_app_group_get_idle_pids(int clifd,
 
 	if (pids == NULL || cnt == 0)
 		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_IDLE_PIDS, empty, 0);
+				APP_GROUP_GET_IDLE_PIDS, empty, 0, AUL_SOCK_CLOSE);
 	else
 		aul_sock_send_raw_async_with_fd(clifd,
 				APP_GROUP_GET_IDLE_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int));
-	close(clifd);
+				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
 
 	if (pids != NULL)
 		free(pids);
@@ -741,12 +733,11 @@ static int __dispatch_app_group_get_group_pids(int clifd, const app_pkt_t *pkt, 
 	app_group_get_group_pids(leader_pid, &cnt, &pids);
 	if (pids == NULL || cnt == 0)
 		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_GROUP_PIDS, empty, 0);
+				APP_GROUP_GET_GROUP_PIDS, empty, 0, AUL_SOCK_CLOSE);
 	else
 		aul_sock_send_raw_async_with_fd(clifd,
 				APP_GROUP_GET_GROUP_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int));
-	close(clifd);
+				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
 
 	if (pids != NULL)
 		free(pids);
@@ -1406,19 +1397,7 @@ static int __check_request(struct request *req)
 	int pid;
 	struct pending_item *item;
 
-	/* TODO: categorize commands */
-	if (req->pkt->cmd != APP_START && req->pkt->cmd != APP_OPEN &&
-			req->pkt->cmd != APP_RESUME &&
-			req->pkt->cmd != APP_RESUME_BY_PID &&
-			req->pkt->cmd != APP_TERM_BY_PID &&
-			req->pkt->cmd != APP_TERM_BY_PID_WITHOUT_RESTART &&
-			req->pkt->cmd != APP_START_RES &&
-			req->pkt->cmd != APP_KILL_BY_PID &&
-			req->pkt->cmd != APP_TERM_REQ_BY_PID &&
-			req->pkt->cmd != APP_TERM_BY_PID_ASYNC &&
-			req->pkt->cmd != APP_TERM_BGAPP_BY_PID &&
-			req->pkt->cmd != APP_PAUSE &&
-			req->pkt->cmd != APP_PAUSE_BY_PID)
+	if ((req->pkt->opt & AUL_SOCK_QUEUE) == 0)
 		return 0;
 
 	pid = __check_app_is_running(req);
