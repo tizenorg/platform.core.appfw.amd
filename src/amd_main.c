@@ -30,6 +30,7 @@
 #include <dbus/dbus-glib-lowlevel.h>
 #include <bundle.h>
 #include <stdbool.h>
+#include <systemd/sd-daemon.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -290,6 +291,14 @@ static int __init(void)
 	return 0;
 }
 
+static gboolean __amd_ready(gpointer user_data)
+{
+	sd_notify(0, "READY=1");
+	_D("AMD ready");
+
+	return FALSE;
+}
+
 int main(int argc, char *argv[])
 {
 	GMainLoop *mainloop = NULL;
@@ -304,6 +313,9 @@ int main(int argc, char *argv[])
 		_E("failed to create glib main loop");
 		return -1;
 	}
+
+	g_idle_add(__amd_ready, NULL);
+
 	g_main_loop_run(mainloop);
 
 	return 0;
