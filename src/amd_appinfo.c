@@ -65,6 +65,7 @@ enum _appinfo_idx {
 	_AI_GLOBAL,
 	_AI_EFFECTIVE_APPID,
 	_AI_TASKMANAGE,
+	_AI_VISIBILITY,
 	_AI_MAX,
 };
 #define _AI_START _AI_NAME /* start index */
@@ -473,6 +474,7 @@ static struct appinfo_t _appinfos[] = {
 	[_AI_GLOBAL] = {"global", AIT_GLOBAL, __appinfo_add_global},
 	[_AI_EFFECTIVE_APPID] = {"effective-appid", AIT_EFFECTIVE_APPID, __appinfo_add_effective_appid},
 	[_AI_TASKMANAGE] = {"Taskmanage", AIT_TASKMANAGE, __appinfo_add_taskmanage},
+	[_AI_VISIBILITY] = {"visibility", AIT_VISIBILITY, NULL},
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
