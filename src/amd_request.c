@@ -26,6 +26,7 @@
 #include <dlfcn.h>
 #include <poll.h>
 #include <glib.h>
+#include <gio/gio.h>
 #include <aul.h>
 #include <bundle.h>
 #include <bundle_internal.h>
@@ -59,6 +60,9 @@
 #define MAX_NR_OF_DESCRIPTORS 2
 #define PENDING_REQUEST_TIMEOUT 5000 /* msec */
 
+static int amd_fd;
+static GIOChannel *amd_io;
+static guint amd_wid;
 static GHashTable *__dc_socket_pair_hash = NULL;
 static GHashTable *pending_table;
 
@@ -86,7 +90,6 @@ typedef struct _rua_stat_pkt_t {
 } rua_stat_pkt_t;
 
 typedef int (*app_cmd_dispatch_func)(int clifd, const app_pkt_t *pkt, struct ucred *cr);
-static gboolean __request_handler(gpointer data);
 static gboolean __timeout_pending_item(gpointer user_data);
 
 static int __send_message(int sock, const struct iovec *vec, int vec_size, const int *desc, int nr_desc)
@@ -1359,10 +1362,10 @@ static int __check_request(struct request *req)
 	return 1;
 }
 
-static gboolean __request_handler(gpointer data)
+static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
+		gpointer data)
 {
-	GPollFD *gpollfd = (GPollFD *) data;
-	int fd = gpollfd->fd;
+	int fd = g_io_channel_unix_get_fd(io);
 	app_pkt_t *pkt;
 	int ret;
 	int clifd;
@@ -1421,95 +1424,32 @@ static gboolean __request_handler(gpointer data)
 	return TRUE;
 }
 
-static gboolean __au_glib_check(GSource *src)
-{
-	GSList *fd_list;
-	GPollFD *tmp;
-
-	fd_list = src->poll_fds;
-	do {
-		tmp = (GPollFD *) fd_list->data;
-		if ((tmp->revents & (POLLIN | POLLPRI)))
-			return TRUE;
-		fd_list = fd_list->next;
-	} while (fd_list);
-
-	return FALSE;
-}
-
-static gboolean __au_glib_dispatch(GSource *src, GSourceFunc callback,
-		gpointer data)
-{
-	callback(data);
-	return TRUE;
-}
-
-static gboolean __au_glib_prepare(GSource *src, gint *timeout)
-{
-	return FALSE;
-}
-
-static GSourceFuncs funcs = {
-	.prepare = __au_glib_prepare,
-	.check = __au_glib_check,
-	.dispatch = __au_glib_dispatch,
-	.finalize = NULL
-};
-
 int _request_init(void)
 {
-	int fd;
-	int r;
-	GPollFD *gpollfd;
-	GSource *src;
-
 	__dc_socket_pair_hash = g_hash_table_new_full(g_str_hash,  g_str_equal, free, free);
 	pending_table = g_hash_table_new(g_direct_hash, g_direct_equal);
 
-	fd = _create_sock_activation();
-	if (fd == -1) {
+	amd_fd = _create_sock_activation();
+	if (amd_fd == -1) {
 		_D("Create server socket without socket activation");
-		fd = aul_sock_create_server(AUL_UTIL_PID, getuid());
-		if (fd == -1) {
+		amd_fd = aul_sock_create_server(AUL_UTIL_PID, getuid());
+		if (amd_fd == -1) {
+			g_hash_table_destroy(pending_table);
+			g_hash_table_destroy(__dc_socket_pair_hash);
 			_E("Create server socket failed.");
 			return -1;
 		}
 	}
 
-
-	src = g_source_new(&funcs, sizeof(GSource));
-	if (!src) {
-		_E("out of memory");
-		finish_cynara();
-		close(fd);
+	amd_io = g_io_channel_unix_new(amd_fd);
+	if (amd_io == NULL) {
+		close(amd_fd);
+		g_hash_table_destroy(pending_table);
+		g_hash_table_destroy(__dc_socket_pair_hash);
 		return -1;
 	}
 
-	gpollfd = (GPollFD *) g_malloc(sizeof(GPollFD));
-	if (!gpollfd) {
-		_E("out of memory");
-		g_source_destroy(src);
-		finish_cynara();
-		close(fd);
-		return -1;
-	}
-
-	gpollfd->events = POLLIN;
-	gpollfd->fd = fd;
-
-	g_source_add_poll(src, gpollfd);
-	g_source_set_callback(src, (GSourceFunc) __request_handler,
-			(gpointer) gpollfd, NULL);
-	g_source_set_priority(src, G_PRIORITY_DEFAULT);
-
-	r = g_source_attach(src, NULL);
-	if (r  == 0) {
-		g_free(gpollfd);
-		g_source_destroy(src);
-		finish_cynara();
-		close(fd);
-		return -1;
-	}
+	amd_wid = g_io_add_watch(amd_io, G_IO_IN, __request_handler, NULL);
 
 	return 0;
 }
