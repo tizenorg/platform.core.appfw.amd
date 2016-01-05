@@ -30,6 +30,7 @@
 #include <dbus/dbus-glib-lowlevel.h>
 #include <bundle.h>
 #include <stdbool.h>
+#include <systemd/sd-daemon.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -287,6 +288,8 @@ static int __init(void)
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
+	sd_notify(0, "READY=1");
+
 	return 0;
 }
 
@@ -304,6 +307,7 @@ int main(int argc, char *argv[])
 		_E("failed to create glib main loop");
 		return -1;
 	}
+
 	g_main_loop_run(mainloop);
 
 	return 0;

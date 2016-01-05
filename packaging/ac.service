@@ -6,6 +6,7 @@
 Description=Start the Access Control server
 
 [Service]
+Type=notify
 EnvironmentFile=-/run/tizen-system-env
 ExecStart=/usr/bin/amd
 
