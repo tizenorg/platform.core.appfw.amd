@@ -37,6 +37,7 @@ BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  pkgconfig(cynara-client)
 BuildRequires:  pkgconfig(cynara-creds-socket)
 BuildRequires:  pkgconfig(cynara-session)
+BuildRequires:  pkgconfig(cert-svc-vcore)
 %if %{with wayland}
 BuildRequires:  pkgconfig(ecore-wayland)
 BuildRequires:  pkgconfig(wayland-client)
