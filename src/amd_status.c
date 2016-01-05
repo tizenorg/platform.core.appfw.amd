@@ -558,9 +558,7 @@ int _status_send_running_appinfo(int fd, uid_t uid)
 	}
 
 	aul_sock_send_raw_async_with_fd(fd, APP_RUNNING_INFO_RESULT,
-			(unsigned char *)buf, strlen(buf));
-	close(fd);
-
+			(unsigned char *)buf, strlen(buf), AUL_SOCK_CLOSE);
 	return 0;
 }
 
@@ -640,8 +638,7 @@ int _status_get_appid_bypid(int fd, int pid)
 
  out:
 	aul_sock_send_raw_async_with_fd(fd, cmd,
-			(unsigned char *)appid, len);
-	close(fd);
+			(unsigned char *)appid, len, AUL_SOCK_CLOSE);
 
 	return 0;
 }
@@ -705,8 +702,7 @@ int _status_get_pkgid_bypid(int fd, int pid)
 
  out:
 	aul_sock_send_raw_async_with_fd(fd, cmd,
-			(unsigned char *)pkgid, len);
-	close(fd);
+			(unsigned char *)pkgid, len, AUL_SOCK_CLOSE);
 
 	return 0;
 }
