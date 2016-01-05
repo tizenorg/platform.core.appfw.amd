@@ -19,16 +19,56 @@
 #include <cynara-client.h>
 #include <cynara-creds-socket.h>
 #include <cynara-session.h>
+#include <bundle.h>
+#include <aul_sock.h>
+#include <aul_svc.h>
+#include <aul_svc_priv_key.h>
 
 #include "amd_util.h"
 
-static cynara *r_cynara = NULL;
+#define PRIVILEGE_APPMANAGER_LAUNCH "http://tizen.org/privilege/appmanager.launch"
+#define PRIVILEGE_APPMANAGER_KILL "http://tizen.org/privilege/appmanager.kill"
+#define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
+#define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
+#define PRIVILEGE_CALL "http://tizen.org/privilege/call"
+
+static cynara *r_cynara;
+
+static const char *__convert_cmd_to_privilege(int cmd)
+{
+	switch (cmd) {
+	case APP_OPEN:
+	case APP_RESUME:
+	case APP_START:
+	case APP_START_RES:
+		return PRIVILEGE_APPMANAGER_LAUNCH;
+	case APP_TERM_BY_PID_WITHOUT_RESTART:
+	case APP_TERM_BY_PID_ASYNC:
+	case APP_TERM_BY_PID:
+	case APP_KILL_BY_PID:
+		return PRIVILEGE_APPMANAGER_KILL;
+	case APP_TERM_BGAPP_BY_PID:
+		return PRIVILEGE_APPMANAGER_KILL_BGAPP;
+	default:
+		return NULL;
+	}
+}
+
+static const char *__convert_operation_to_privilege(const char *operation)
+{
+	if (!strcmp(operation, AUL_SVC_OPERATION_DOWNLOAD))
+		return PRIVILEGE_DOWNLOAD;
+	else if (!strcmp(operation, AUL_SVC_OPERATION_CALL))
+		return PRIVILEGE_CALL;
+	else
+		return NULL;
+}
 
 static int _get_caller_info_from_cynara(int sockfd, char **client, char **user, char **session)
 {
 	pid_t pid;
 	int r;
-	char buf[MAX_LOCAL_BUFSZ] = {0,};
+	char buf[MAX_LOCAL_BUFSZ];
 
 	r = cynara_creds_socket_get_pid(sockfd, &pid);
 	if (r != CYNARA_API_SUCCESS) {
@@ -60,23 +100,13 @@ static int _get_caller_info_from_cynara(int sockfd, char **client, char **user, 
 	return 0;
 }
 
-int check_privilege_by_cynara(int sockfd, const char *privilege)
+static int __check_privilege(const char *client, const char *session, const char *user, const char *privilege)
 {
-	int r;
 	int ret;
-	char buf[MAX_LOCAL_BUFSZ] = {0,};
-	char *client = NULL;
-	char *session = NULL;
-	char *user = NULL;
+	char buf[MAX_LOCAL_BUFSZ];
 
-	r = _get_caller_info_from_cynara(sockfd, &client, &user, &session);
-	if (r < 0) {
-		ret = -1;
-		goto end;
-	}
-
-	r = cynara_check(r_cynara, client, session, user, privilege);
-	switch (r) {
+	ret = cynara_check(r_cynara, client, session, user, privilege);
+	switch (ret) {
 	case CYNARA_API_ACCESS_ALLOWED:
 		_D("%s(%s) from user %s privilege %s allowed.", client, session, user, privilege);
 		ret = 0;
@@ -86,10 +116,51 @@ int check_privilege_by_cynara(int sockfd, const char *privilege)
 		ret = -1;
 		break;
 	default:
-		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
+		cynara_strerror(ret, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_check failed: %s", buf);
 		ret = -1;
 		break;
+	}
+
+	return ret;
+}
+
+int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt)
+{
+	int r;
+	int ret;
+	char *client = NULL;
+	char *session = NULL;
+	char *user = NULL;
+	bundle *kb = NULL;
+	const char *privilege;
+	char *operation;
+
+	privilege = __convert_cmd_to_privilege(pkt->cmd);
+	if (privilege == NULL)
+		return 0;
+
+	r = _get_caller_info_from_cynara(sockfd, &client, &user, &session);
+	if (r < 0) {
+		ret = -1;
+		goto end;
+	}
+
+	ret = __check_privilege(client, session, user, privilege);
+	if (ret < 0)
+		goto end;
+
+	if (pkt->cmd == APP_START || pkt->cmd == APP_OPEN ||
+			pkt->cmd == APP_RESUME || pkt->cmd == APP_START_RES) {
+		kb = bundle_decode(pkt->data, pkt->len);
+		if (kb == NULL)
+			goto end;
+		if (bundle_get_str(kb, AUL_SVC_K_OPERATION, &operation))
+			goto end;
+		privilege = __convert_operation_to_privilege(operation);
+		if (privilege == NULL)
+			goto end;
+		ret = __check_privilege(client, session, user, privilege);
 	}
 
 end:
@@ -99,6 +170,8 @@ end:
 		free(session);
 	if (client)
 		free(client);
+	if (kb)
+		bundle_free(kb);
 
 	return ret;
 }
