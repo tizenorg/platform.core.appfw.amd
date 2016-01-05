@@ -135,7 +135,7 @@ int _resume_app(int pid, int clifd)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_RESUME_BY_PID,
-			(unsigned char *)&dummy, 0)) < 0) {
+			(unsigned char *)&dummy, 0, 0)) < 0) {
 		if (ret == -EAGAIN)
 			_E("resume packet timeout error");
 		else {
@@ -160,7 +160,7 @@ int _pause_app(int pid, int clifd)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_PAUSE_BY_PID,
-			(unsigned char *)&dummy, 0)) < 0) {
+			(unsigned char *)&dummy, 0, 0)) < 0) {
 		if (ret == -EAGAIN)
 			_E("pause packet timeout error");
 		else {
@@ -185,15 +185,13 @@ int _term_sub_app(int pid)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID_ASYNC,
-			(unsigned char *)&dummy, 0)) < 0) {
+			(unsigned char *)&dummy, 0, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
 			return -1;
 		}
 	}
-
-	close(ret);
 
 	return 0;
 }
@@ -221,7 +219,7 @@ int _term_app(int pid, int clifd)
 	}
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID,
-			(unsigned char *)&dummy, 0)) < 0) {
+			(unsigned char *)&dummy, 0, 0)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
@@ -243,7 +241,7 @@ int _term_req_app(int pid, int clifd)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_REQ_BY_PID,
-			(unsigned char *)&dummy, 0)) < 0) {
+			(unsigned char *)&dummy, 0, 0)) < 0) {
 		_D("terminate req send error");
 		_send_result_to_client(clifd, ret);
 	}
@@ -279,7 +277,7 @@ int _term_bgapp(int pid, int clifd)
 	}
 
 	if ((fd = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BGAPP_BY_PID,
-			(unsigned char *)&dummy, sizeof(int))) < 0) {
+			(unsigned char *)&dummy, sizeof(int), 0)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d", pid);
@@ -302,7 +300,7 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 	bundle_raw *kb_data;
 
 	bundle_encode(kb, &kb_data, &datalen);
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen)) < 0) {
+	if ((ret = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen, 0)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
 		_send_result_to_client(clifd, ret);
 	}
