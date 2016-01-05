@@ -172,7 +172,8 @@ int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
 		return -1;
 
 	bundle_encode(kb, &kb_data, &datalen);
-	res = aul_sock_send_raw_async_with_fd(fd, cmd, kb_data, datalen);
+	res = aul_sock_send_raw_async_with_fd(fd, cmd, kb_data, datalen,
+						AUL_SOCK_NONE);
 	if (res < 0) {
 		free(kb_data);
 		close(fd);
