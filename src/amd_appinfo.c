@@ -680,11 +680,13 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 	}
 
 	if (!strcasecmp(key, "error")) {
-		if (!strcasecmp(val, "uninstall") ||
-				!strcasecmp(val, "update")) {
+		op = g_hash_table_lookup(pkg_pending, pkgid);
+		if (op == NULL)
+			return 0;
+
+		if (!strcasecmp(op, "uninstall") || !strcasecmp(op, "update"))
 			appinfo_foreach(target_uid, __appinfo_unset_blocking_cb,
 					(void *)pkgid);
-		}
 		g_hash_table_remove(pkg_pending, pkgid);
 	}
 
