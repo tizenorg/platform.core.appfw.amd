@@ -895,8 +895,13 @@ int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val
 	for (i = _AI_START; i < sizeof(_appinfos)/sizeof(_appinfos[0]); i++) {
 		if (type == _appinfos[i].type) {
 			_D("%s : %s : %s", c->val[_AI_FILE], c->val[i], val);
-			free(c->val[i]);
-			c->val[i] = strdup(val);
+			if (i == _AI_BG_CATEGORY) {
+				c->val[i] = (char *)(((int)((intptr_t)(c->val[i])))
+					| ((int)((intptr_t)val)));
+			} else {
+				free(c->val[i]);
+				c->val[i] = strdup(val);
+			}
 			break;
 		}
 	}
