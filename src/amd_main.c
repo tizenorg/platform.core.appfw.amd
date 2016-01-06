@@ -296,9 +296,8 @@ static int __init(void)
 	_status_init();
 	app_group_init();
 	r = rua_init();
-	r = rua_clear_history();
-
-	_D("rua_clear_history : %d", r);
+	r = rua_delete_history_from_db(NULL);
+	_D("rua_delete_history : %d", r);
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
