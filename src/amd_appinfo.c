@@ -887,6 +887,7 @@ const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val)
 {
 	int i;
+	int category;
 
 	if (!c || !val) {
 		errno = EINVAL;
@@ -897,8 +898,14 @@ int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val
 	for (i = _AI_START; i < sizeof(_appinfos)/sizeof(_appinfos[0]); i++) {
 		if (type == _appinfos[i].type) {
 			_D("%s : %s : %s", c->val[_AI_FILE], c->val[i], val);
-			free(c->val[i]);
-			c->val[i] = strdup(val);
+			if (i == _AI_BG_CATEGORY) {
+				category = (intptr_t)c->val[i];
+				c->val[i] = (char *)((intptr_t)(category | (int)((intptr_t)val)));
+			} else {
+				if (c->val[i])
+					free(c->val[i]);
+				c->val[i] = strdup(val);
+			}
 			break;
 		}
 	}
