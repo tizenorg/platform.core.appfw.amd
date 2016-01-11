@@ -14,7 +14,7 @@ ENDIF (with_x11)
 # Set required packages
 INCLUDE(FindPkgConfig)
 
-SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore)
+SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore libsmack)
 IF (with_wayland)
 	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} wayland-client tizen-extension-client ecore-wayland )
 ENDIF (with_wayland)
@@ -49,6 +49,7 @@ ADD_EXECUTABLE(amd
 	src/amd_app_group.c
 	src/amd_cynara.c
 	src/amd_socket.c
+	src/amd_share.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")
