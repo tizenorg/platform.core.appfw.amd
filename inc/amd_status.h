@@ -35,6 +35,19 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 char *_status_app_get_appid_bypid(int pid);
 int _status_get_appid_bypid(int fd, int pid);
 int _status_get_pkgid_bypid(int fd, int pid);
+
+int _status_set_exec_label(int pid, uid_t uid, const char *exec_label);
+const char* _status_get_exec_label(int pid, uid_t uid);
+int _status_add_shared_info(int pid, uid_t uid, const char *exec_label, char **paths);
+int _status_clear_shared_info_list(int pid, uid_t uid);
+GList* _status_get_shared_info_list(int pid, uid_t uid);
+
 int _status_init(void);
+
+typedef struct _shared_info_t {
+	char *owner_exec_label;
+	char **paths;
+} shared_info_t;
+
 
 
