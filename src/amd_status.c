@@ -57,6 +57,8 @@ typedef struct _app_status_info_t {
 	int lpid;
 	int fg_count;
 	bool managed;
+	char *exec_label;
+	GList *shared_info_list;
 } app_status_info_t;
 
 static GSList *app_status_info_list = NULL;
@@ -65,6 +67,21 @@ static int limit_bg_uiapps = 0;
 static GSList *running_uiapp_list = NULL;
 
 static void __check_running_uiapp_list(void);
+
+static app_status_info_t* __get_app_status_info(int pid, uid_t uid)
+{
+	GSList *iter;
+	GSList *iter_next;
+	app_status_info_t *info;
+
+	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
+		info = (app_status_info_t *)iter->data;
+		if (pid == info->pid && uid == info->uid)
+			return info;
+	}
+
+	return NULL;
+}
 
 static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 {
@@ -198,6 +215,42 @@ static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo, uid
 	}
 }
 
+static void __remove_all_shared_info(app_status_info_t *info_t)
+{
+	GList *list;
+
+	if (!info_t || !(info_t->shared_info_list))
+		return;
+
+	list = info_t->shared_info_list;
+
+	while (list) {
+		shared_info_t *sit = (shared_info_t*)list->data;
+
+		if (sit) {
+			if (sit->owner_exec_label)
+				free(sit->owner_exec_label);
+			if (sit->paths) {
+				int i = 0;
+				while (1) {
+					if (sit->paths[i] == NULL) {
+						free(sit->paths);
+						break;
+					}
+
+					free(sit->paths[i]);
+					i++;
+				}
+			}
+			free(sit);
+		}
+		list = g_list_next(list);
+	}
+
+	g_list_free(info_t->shared_info_list);
+	info_t->shared_info_list = NULL;
+}
+
 static void __destroy_app_status_info(app_status_info_t *info_t)
 {
 	if (info_t == NULL)
@@ -217,6 +270,13 @@ static void __destroy_app_status_info(app_status_info_t *info_t)
 		free(info_t->pkgid);
 		info_t->pkgid = NULL;
 	}
+
+	if (info_t->exec_label) {
+		free(info_t->exec_label);
+		info_t->exec_label = NULL;
+	}
+
+	__remove_all_shared_info(info_t);
 
 	free(info_t);
 }
@@ -505,6 +565,75 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 			}
 		}
 	}
+}
+
+int _status_set_exec_label(int pid, uid_t uid, const char *exec_label)
+{
+	app_status_info_t *info_t = __get_app_status_info(pid, uid);
+
+	if (info_t) {
+		if (info_t->exec_label)
+			free(info_t->exec_label);
+		info_t->exec_label = strdup(exec_label);
+		return 0;
+	}
+
+	return -1;
+}
+
+const char* _status_get_exec_label(int pid, uid_t uid)
+{
+	app_status_info_t *info_t = __get_app_status_info(pid, uid);
+
+	if (info_t)
+		return info_t->exec_label;
+
+	return NULL;
+}
+
+int _status_add_shared_info(int pid, uid_t uid, const char *exec_label, char **paths)
+{
+	shared_info_t *sit = (shared_info_t*)malloc(sizeof(shared_info_t));
+
+	if (!sit)
+		return -1;
+
+	sit->owner_exec_label = strdup(exec_label);
+	sit->paths = paths;
+
+	app_status_info_t* info_t = __get_app_status_info(pid, uid);
+
+	if (info_t) {
+		info_t->shared_info_list = g_list_append(info_t->shared_info_list, sit);
+		return 0;
+	}
+
+	if (sit->owner_exec_label)
+		free(sit->owner_exec_label);
+	free(sit);
+	return -1;
+}
+
+int _status_clear_shared_info_list(int pid, uid_t uid)
+{
+	app_status_info_t* info_t = __get_app_status_info(pid, uid);
+
+	if (info_t) {
+		__remove_all_shared_info(info_t);
+		return 0;
+	}
+
+	return -1;
+}
+
+GList* _status_get_shared_info_list(int pid, uid_t uid)
+{
+	app_status_info_t *info_t = __get_app_status_info(pid, uid);
+
+	if (info_t)
+		return info_t->shared_info_list;
+
+	return NULL;
 }
 
 int _status_app_is_running(const char *appid, uid_t uid)
