@@ -42,6 +42,7 @@
 #include "amd_app_group.h"
 #include "amd_cynara.h"
 #include "amd_app_com.h"
+#include "amd_share.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
@@ -184,6 +185,7 @@ static int __app_dead_handler(int pid, void *data)
 		app_group_remove(pid);
 	}
 
+	_temporary_permission_drop(pid, getuid());
 	_status_remove_app_info_list(pid, getuid());
 	_request_flush_pending_request(pid);
 	aul_send_app_terminated_signal(pid);

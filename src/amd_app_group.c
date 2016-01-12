@@ -32,6 +32,7 @@
 #include "amd_status.h"
 #include "app_signal.h"
 #include "amd_appinfo.h"
+#include "amd_share.h"
 
 #define APP_SVC_K_LAUNCH_MODE   "__APP_SVC_LAUNCH_MODE__"
 
@@ -593,7 +594,7 @@ static void __do_recycle(app_group_context_t *context)
 		context->fg = 0;
 	}
 	recycle_bin = g_list_append(recycle_bin, context);
-	/* _revoke_temporary_permission(context->pid); */
+	_temporary_permission_drop(context->pid, getuid());
 }
 
 void app_group_init()
