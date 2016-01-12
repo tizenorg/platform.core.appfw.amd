@@ -22,74 +22,41 @@
 #include <errno.h>
 #include <glib.h>
 #include <dirent.h>
-
 #include <package-manager.h>
 #include <pkgmgr-info.h>
 #include <vconf.h>
+
 #include "amd_config.h"
 #include "amd_util.h"
 #include "amd_appinfo.h"
 #include "amd_launch.h"
 #include "amd_status.h"
 
-#define SERVICE_GROUP "Service"
-
 static pkgmgr_client *pc;
 static GHashTable *user_tbl;
 static GHashTable *pkg_pending;
 struct user_appinfo {
 	uid_t uid;
-	GHashTable *tbl; /* key is filename, value is struct appinfo */
+	GHashTable *tbl; /* key is appid, value is struct appinfo */
 	void *extra_data;
 };
-
-enum _appinfo_idx {
-	_AI_FILE = 0, /* service filename */
-	_AI_NAME,
-	_AI_EXEC,
-	_AI_TYPE,
-	_AI_ONBOOT,
-	_AI_RESTART,
-	_AI_MULTI,
-	_AI_HWACC,
-	_AI_PERM,
-	_AI_PKGID,
-	_AI_PRELOAD,
-	_AI_STATUS,
-	_AI_POOL,
-	_AI_COMPTYPE,
-	_AI_TEP,
-	_AI_STORAGE_TYPE,
-	_AI_BG_CATEGORY,
-	_AI_LAUNCH_MODE,
-	_AI_GLOBAL,
-	_AI_EFFECTIVE_APPID,
-	_AI_TASKMANAGE,
-	_AI_VISIBILITY,
-	_AI_MAX,
-};
-#define _AI_START _AI_NAME /* start index */
 
 typedef int (*appinfo_handler_cb)(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data);
 
 struct appinfo_t {
-	char *name;
 	enum appinfo_type type;
-	appinfo_handler_cb add;
+	char *name;
+	appinfo_handler_cb add_cb;
 };
 
 enum _background_category {
-	_BACKGROUND_CATEGORY_MEDIA =				0x01,
-	_BACKGROUND_CATEGORY_DOWNLOAD =				0x02,
-	_BACKGROUND_CATEGORY_BACKGROUND_NETWORK =	0x04,
-	_BACKGROUND_CATEGORY_LOCATION =				0x08,
-	_BACKGROUND_CATEGORY_SENSOR =				0x10,
-	_BACKGROUND_CATEGORY_IOT_COMMUNICATION =	0x20,
-	_BACKGROUND_CATEGORY_SYSTEM =				0x40
-};
-
-struct appinfo {
-	char *val[_AI_MAX];
+	_BACKGROUND_CATEGORY_MEDIA = 0x01,
+	_BACKGROUND_CATEGORY_DOWNLOAD = 0x02,
+	_BACKGROUND_CATEGORY_BACKGROUND_NETWORK = 0x04,
+	_BACKGROUND_CATEGORY_LOCATION = 0x08,
+	_BACKGROUND_CATEGORY_SENSOR = 0x10,
+	_BACKGROUND_CATEGORY_IOT_COMMUNICATION = 0x20,
+	_BACKGROUND_CATEGORY_SYSTEM = 0x40
 };
 
 static int gles = 1;
@@ -102,8 +69,8 @@ static void __free_appinfo(gpointer data)
 	if (!c)
 		return;
 
-	for (i = 0; i < sizeof(c->val)/sizeof(c->val[0]); i++) {
-		if (i != _AI_BG_CATEGORY && c->val[i] != NULL)
+	for (i = AIT_NAME; i < AIT_MAX); i++) {
+		if (i != AIT_BG_CATEGORY && c->val[i] != NULL)
 			free(c->val[i]);
 	}
 
@@ -135,44 +102,30 @@ static char *__convert_apptype(const char *type)
 static int __read_background_category(const char *category_name, void *user_data)
 {
 	struct appinfo *c = user_data;
-	int category = (intptr_t)(c->val[_AI_BG_CATEGORY]);
+	int category = (intptr_t)(c->val[AIT_BG_CATEGORY]);
 
 	if (!category_name)
 		return 0;
 
 	if (strncmp(category_name, "disable", strlen("disable")) == 0) {
-		c->val[_AI_BG_CATEGORY] = 0x00;
+		c->val[AIT_BG_CATEGORY] = 0x00;
 		return -1;
 	}
 
 	if (strncmp(category_name, "media", strlen("media")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_MEDIA));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_MEDIA));
 	else if (strncmp(category_name, "download", strlen("download")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_DOWNLOAD));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_DOWNLOAD));
 	else if (strncmp(category_name, "background-network", strlen("background-network")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_BACKGROUND_NETWORK));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_BACKGROUND_NETWORK));
 	else if (strncmp(category_name, "location", strlen("location")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_LOCATION));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_LOCATION));
 	else if (strncmp(category_name, "sensor", strlen("sensor")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_SENSOR));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_SENSOR));
 	else if (strncmp(category_name, "iot-communication", strlen("iot-communication")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_IOT_COMMUNICATION));
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_IOT_COMMUNICATION));
 	else if (strncmp(category_name, "system", strlen("system")) == 0)
-		c->val[_AI_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_SYSTEM));
-
-	return 0;
-}
-
-static int __appinfo_add_name(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
-{
-	char *appid = NULL;
-
-	if (pkgmgrinfo_appinfo_get_appid(handle, &appid) != PMINFO_R_OK) {
-		_E("fail to get appinfo");
-		return -1;
-	}
-
-	info->val[_AI_NAME] = strdup(appid);
+		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_SYSTEM));
 
 	return 0;
 }
@@ -186,7 +139,7 @@ static int __appinfo_add_exec(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 		return -1;
 	}
 
-	info->val[_AI_EXEC] = strdup(exec);
+	info->val[AIT_EXEC] = strdup(exec);
 
 	return 0;
 }
@@ -200,7 +153,7 @@ static int __appinfo_add_type(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 		return -1;
 	}
 
-	info->val[_AI_TYPE] = __convert_apptype(type);
+	info->val[AIT_TYPE] = __convert_apptype(type);
 
 	return 0;
 }
@@ -214,7 +167,7 @@ static int __appinfo_add_onboot(const pkgmgrinfo_appinfo_h handle, struct appinf
 		return -1;
 	}
 
-	info->val[_AI_ONBOOT] = strdup(onboot ? "true" : "false");
+	info->val[AIT_ONBOOT] = strdup(onboot ? "true" : "false");
 
 	return 0;
 }
@@ -228,7 +181,7 @@ static int __appinfo_add_restart(const pkgmgrinfo_appinfo_h handle, struct appin
 		return -1;
 	}
 
-	info->val[_AI_RESTART] = strdup(restart ? "true" : "false");
+	info->val[AIT_RESTART] = strdup(restart ? "true" : "false");
 
 	return 0;
 }
@@ -242,7 +195,7 @@ static int __appinfo_add_multi(const pkgmgrinfo_appinfo_h handle, struct appinfo
 		return -1;
 	}
 
-	info->val[_AI_MULTI] = strdup(multiple ? "true" : "false");
+	info->val[AIT_MULTI] = strdup(multiple ? "true" : "false");
 
 	return 0;
 }
@@ -256,7 +209,7 @@ static int __appinfo_add_hwacc(const pkgmgrinfo_appinfo_h handle, struct appinfo
 		return -1;
 	}
 
-	info->val[_AI_HWACC] = strdup(
+	info->val[AIT_HWACC] = strdup(
 				(gles == 0 ||
 				 hwacc == PMINFO_HWACCELERATION_NOT_USE_GL) ?
 				"NOT_USE" :
@@ -277,7 +230,7 @@ static int __appinfo_add_perm(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 		return -1;
 	}
 
-	info->val[_AI_PERM] = strdup(
+	info->val[AIT_PERM] = strdup(
 				(permission == PMINFO_PERMISSION_SIGNATURE) ?
 				"signature" :
 				(permission == PMINFO_PERMISSION_PRIVILEGE) ?
@@ -296,7 +249,7 @@ static int __appinfo_add_pkgid(const pkgmgrinfo_appinfo_h handle, struct appinfo
 		return -1;
 	}
 
-	info->val[_AI_PKGID] = strdup(pkgid);
+	info->val[AIT_PKGID] = strdup(pkgid);
 
 	return 0;
 }
@@ -310,14 +263,14 @@ static int __appinfo_add_preload(const pkgmgrinfo_appinfo_h handle, struct appin
 		return -1;
 	}
 
-	info->val[_AI_PRELOAD] = strdup(preload ? "true" : "false");
+	info->val[AIT_PRELOAD] = strdup(preload ? "true" : "false");
 
 	return 0;
 }
 
 static int __appinfo_add_status(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-	info->val[_AI_STATUS] = strdup("installed");
+	info->val[AIT_STATUS] = strdup("installed");
 
 	return 0;
 }
@@ -331,7 +284,7 @@ static int __appinfo_add_pool(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 		return -1;
 	}
 
-	info->val[_AI_POOL] = strdup(process_pool ? "true" : "false");
+	info->val[AIT_POOL] = strdup(process_pool ? "true" : "false");
 
 	return 0;
 }
@@ -346,7 +299,7 @@ static int __appinfo_add_comptype(const pkgmgrinfo_appinfo_h handle, struct appi
 		return -1;
 	}
 
-	info->val[_AI_COMPTYPE] = strdup(component_type);
+	info->val[AIT_COMPTYPE] = strdup(component_type);
 
 	return 0;
 }
@@ -359,9 +312,9 @@ static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle, struct appinfo *
 	if (pkgmgrinfo_pkginfo_get_tep_name((pkgmgrinfo_pkginfo_h)user_data->extra_data,
 						&tep_name) != PMINFO_R_OK) {
 		_E("failed to get tep_name");
-		info->val[_AI_TEP] = NULL;
+		info->val[AIT_TEP] = NULL;
 	} else {
-		info->val[_AI_TEP] = strdup(tep_name);
+		info->val[AIT_TEP] = strdup(tep_name);
 	}
 
 	return 0;
@@ -374,11 +327,11 @@ static int __appinfo_add_storage_type(const pkgmgrinfo_appinfo_h handle, struct 
 	if (pkgmgrinfo_appinfo_get_installed_storage_location(handle,
 		&installed_storage) == PMINFO_R_OK) {
 		if (installed_storage == PMINFO_INTERNAL_STORAGE)
-			info->val[_AI_STORAGE_TYPE] = strdup("internal");
+			info->val[AIT_STORAGE_TYPE] = strdup("internal");
 		else if (installed_storage == PMINFO_EXTERNAL_STORAGE)
-			info->val[_AI_STORAGE_TYPE] = strdup("external");
+			info->val[AIT_STORAGE_TYPE] = strdup("external");
 	} else {
-		info->val[_AI_STORAGE_TYPE] = strdup("internal");
+		info->val[AIT_STORAGE_TYPE] = strdup("internal");
 	}
 
 	return 0;
@@ -386,7 +339,7 @@ static int __appinfo_add_storage_type(const pkgmgrinfo_appinfo_h handle, struct 
 
 static int __appinfo_add_bg_category(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-	info->val[_AI_BG_CATEGORY] = 0x0;
+	info->val[AIT_BG_CATEGORY] = 0x0;
 	if (pkgmgrinfo_appinfo_foreach_background_category(handle,
 		__read_background_category, info) != PMINFO_R_OK) {
 		_E("Failed to get background category");
@@ -405,7 +358,7 @@ static int __appinfo_add_launch_mode(const pkgmgrinfo_appinfo_h handle, struct a
 		return -1;
 	}
 
-	info->val[_AI_LAUNCH_MODE] = strdup(mode ? mode : "single");
+	info->val[AIT_LAUNCH_MODE] = strdup(mode ? mode : "single");
 
 	return 0;
 }
@@ -421,7 +374,7 @@ static int __appinfo_add_global(const pkgmgrinfo_appinfo_h handle, struct appinf
 		return -1;
 	}
 
-	info->val[_AI_GLOBAL] = strdup(is_global ? "true" : "false");
+	info->val[AIT_GLOBAL] = strdup(is_global ? "true" : "false");
 
 	return 0;
 }
@@ -432,10 +385,10 @@ static int __appinfo_add_effective_appid(const pkgmgrinfo_appinfo_h handle, stru
 
 	if (pkgmgrinfo_appinfo_get_effective_appid(handle, &effective_appid) != PMINFO_R_OK) {
 		_D("Failed to get effective appid");
-		info->val[_AI_EFFECTIVE_APPID] = NULL;
+		info->val[AIT_EFFECTIVE_APPID] = NULL;
 	} else {
 		if (effective_appid && strlen(effective_appid) > 0)
-			info->val[_AI_EFFECTIVE_APPID] = strdup(effective_appid);
+			info->val[AIT_EFFECTIVE_APPID] = strdup(effective_appid);
 	}
 
 	return 0;
@@ -448,33 +401,33 @@ static int __appinfo_add_taskmanage(const pkgmgrinfo_appinfo_h handle, struct ap
 	if (pkgmgrinfo_appinfo_is_taskmanage(handle, &taskmanage) != PMINFO_R_OK)
 		_D("Failed to get taskmanage info");
 
-	info->val[_AI_TASKMANAGE] = strdup(taskmanage ? "true" : "false");
+	info->val[AIT_TASKMANAGE] = strdup(taskmanage ? "true" : "false");
 
 	return 0;
 }
 
 static struct appinfo_t _appinfos[] = {
-	[_AI_NAME] = {"Name", AIT_NAME, __appinfo_add_name},
-	[_AI_EXEC] = {"Exec", AIT_EXEC, __appinfo_add_exec},
-	[_AI_TYPE] = {"PkgType", AIT_TYPE, __appinfo_add_type},
-	[_AI_ONBOOT] = {"StartOnBoot", AIT_ONBOOT, __appinfo_add_onboot},
-	[_AI_RESTART] = {"AutoRestart", AIT_RESTART, __appinfo_add_restart},
-	[_AI_MULTI] = {"Multiple", AIT_MULTI, __appinfo_add_multi},
-	[_AI_HWACC] = {"Hwacceleration", AIT_HWACC, __appinfo_add_hwacc},
-	[_AI_PERM] = {"PermissionType", AIT_PERM, __appinfo_add_perm},
-	[_AI_PKGID] = {"PackageId", AIT_PKGID, __appinfo_add_pkgid},
-	[_AI_PRELOAD] = {"Preload", AIT_PRELOAD, __appinfo_add_preload},
-	[_AI_STATUS] = {"Status", AIT_STATUS, __appinfo_add_status},
-	[_AI_POOL] = {"ProcessPool", AIT_POOL, __appinfo_add_pool},
-	[_AI_COMPTYPE] = {"ComponentType", AIT_COMPTYPE, __appinfo_add_comptype},
-	[_AI_TEP] = {"Tep", AIT_TEP, __appinfo_add_tep},
-	[_AI_STORAGE_TYPE] = {"StorageType", AIT_STORAGE_TYPE, __appinfo_add_storage_type},
-	[_AI_BG_CATEGORY] = {"BackgroundCategory", AIT_BG_CATEGORY, __appinfo_add_bg_category},
-	[_AI_LAUNCH_MODE] = {"launch_mode", AIT_LAUNCH_MODE, __appinfo_add_launch_mode},
-	[_AI_GLOBAL] = {"global", AIT_GLOBAL, __appinfo_add_global},
-	[_AI_EFFECTIVE_APPID] = {"effective-appid", AIT_EFFECTIVE_APPID, __appinfo_add_effective_appid},
-	[_AI_TASKMANAGE] = {"Taskmanage", AIT_TASKMANAGE, __appinfo_add_taskmanage},
-	[_AI_VISIBILITY] = {"visibility", AIT_VISIBILITY, NULL},
+	{AIT_NAME, "Name", NULL},
+	{AIT_EXEC, "Exec", __appinfo_add_exec},
+	{AIT_TYPE, "PkgType", __appinfo_add_type},
+	{AIT_ONBOOT, "StartOnBoot", __appinfo_add_onboot},
+	{AIT_RESTART, "AutoRestart", __appinfo_add_restart},
+	{AIT_MULTI, "Multiple", __appinfo_add_multi},
+	{AIT_HWACC, "Hwacceleration", __appinfo_add_hwacc},
+	{AIT_PERM, "PermissionType", __appinfo_add_perm},
+	{AIT_PKGID, "PackageId", __appinfo_add_pkgid},
+	{AIT_PRELOAD, "Preload",  __appinfo_add_preload},
+	{AIT_STATUS, "Status", __appinfo_add_status},
+	{AIT_POOL, "ProcessPool", __appinfo_add_pool},
+	{AIT_COMPTYPE, "ComponentType", __appinfo_add_comptype},
+	{AIT_TEP, "Tep", __appinfo_add_tep},
+	{AIT_STORAGE_TYPE, "StorageType", __appinfo_add_storage_type},
+	{AIT_BG_CATEGORY, "BackgroundCategory", __appinfo_add_bg_category},
+	{AIT_LAUNCH_MODE, "launch_mode", __appinfo_add_launch_mode},
+	{AIT_GLOBAL, "global", __appinfo_add_global},
+	{AIT_EFFECTIVE_APPID, "effective-appid", __appinfo_add_effective_appid},
+	{AIT_TASKMANAGE, "Taskmanage", __appinfo_add_taskmanage},
+	{AIT_VISIBILITY, "visibility", NULL},
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
@@ -485,7 +438,7 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 	struct user_appinfo *info = (struct user_appinfo *)data;
 	char *appid;
 
-	if (!handle) {
+	if (!handle || !info) {
 		_E("null app handle");
 		return -1;
 	}
@@ -503,19 +456,19 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 		return -1;
 	}
 
-	c->val[_AI_FILE] = strdup(appid);
+	c->val[AIT_NAME] = strdup(appid);
 
-	for (i = 0; i < _AI_MAX; i++) {
-		if (_appinfos[i].add && _appinfos[i].add(handle, c, info) < 0) {
+	for (i = AIT_EXEC; i < AIT_MAX; i++) {
+		if (_appinfos[i].add_cb && _appinfos[i].add_cb(handle, c, info) < 0) {
 			__free_appinfo(c);
 			return -1;
 		}
 	}
 
-	SECURE_LOGD("%s : %s : %s", c->val[_AI_FILE], c->val[_AI_COMPTYPE],
-		c->val[_AI_TYPE]);
+	SECURE_LOGD("%s : %s : %s", c->val[AIT_NAME], c->val[AIT_COMPTYPE],
+		c->val[AIT_TYPE]);
 
-	g_hash_table_insert(info->tbl, c->val[_AI_FILE], c);
+	g_hash_table_insert(info->tbl, c->val[AIT_NAME], c);
 
 	return 0;
 }
@@ -555,11 +508,11 @@ static void __handle_onboot(void *user_data, const char *appid,
 {
 	uid_t uid = (uid_t)(intptr_t)user_data;
 
-	if (!strcmp(info->val[_AI_ONBOOT], "true")) {
+	if (!strcmp(info->val[AIT_ONBOOT], "true")) {
 		if (_status_app_is_running(appid, uid) > 0)
 			return;
 		_D("start app %s from user %d by onboot", appid, uid);
-		_start_app_local(uid, info->val[_AI_NAME]);
+		_start_app_local(uid, info->val[AIT_NAME]);
 	}
 }
 
@@ -612,11 +565,11 @@ static void __appinfo_set_blocking_cb(void *user_data,
 {
 	char *pkgid = (char *)user_data;
 
-	if (strcmp(info->val[_AI_PKGID], pkgid))
+	if (strcmp(info->val[AIT_PKGID], pkgid))
 		return;
 
-	free(info->val[_AI_STATUS]);
-	info->val[_AI_STATUS] = strdup("blocking");
+	free(info->val[AIT_STATUS]);
+	info->val[AIT_STATUS] = strdup("blocking");
 	_D("%s status changed: blocking", appid);
 }
 
@@ -625,11 +578,11 @@ static void __appinfo_unset_blocking_cb(void *user_data,
 {
 	char *pkgid = (char *)user_data;
 
-	if (strcmp(info->val[_AI_PKGID], pkgid))
+	if (strcmp(info->val[AIT_PKGID], pkgid))
 		return;
 
-	free(info->val[_AI_STATUS]);
-	info->val[_AI_STATUS] = strdup("installed");
+	free(info->val[AIT_STATUS]);
+	info->val[AIT_STATUS] = strdup("installed");
 	_D("%s status changed: installed", appid);
 }
 
@@ -638,8 +591,8 @@ static gboolean __appinfo_remove_cb(gpointer key, gpointer value, gpointer data)
 	char *pkgid = (char *)data;
 	struct appinfo *info = (struct appinfo *)value;
 
-	if (!strcmp(info->val[_AI_PKGID], pkgid)) {
-		_D("appinfo removed: %s", info->val[_AI_NAME]);
+	if (!strcmp(info->val[AIT_PKGID], pkgid)) {
+		_D("appinfo removed: %s", info->val[AIT_NAME]);
 		return TRUE;
 	}
 
@@ -758,7 +711,6 @@ int appinfo_init(void)
 	if (pkg_pending == NULL)
 		return -1;
 
-
 	global_appinfo = __add_user_appinfo(GLOBAL_USER);
 	if (global_appinfo == NULL) {
 		appinfo_fini();
@@ -865,28 +817,20 @@ void appinfo_reload(void)
 
 const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 {
-	enum _appinfo_idx i;
-
 	if (!c) {
 		errno = EINVAL;
 		_E("appinfo get value: %s", strerror(errno));
 		return NULL;
 	}
 
-	for (i = _AI_START; i < sizeof(_appinfos)/sizeof(_appinfos[0]); i++) {
-		if (type == _appinfos[i].type)
-			return c->val[i];
-	}
+	if (type < AIT_NAME || type >= AIT_MAX)
+		return NULL;
 
-	errno = ENOENT;
-	_E("appinfo get value: %s", strerror(errno));
-
-	return NULL;
+	return c->val[type];
 }
 
 int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val)
 {
-	int i;
 	int category;
 
 	if (!c || !val) {
@@ -895,33 +839,20 @@ int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val
 		return -1;
 	}
 
-	for (i = _AI_START; i < sizeof(_appinfos)/sizeof(_appinfos[0]); i++) {
-		if (type == _appinfos[i].type) {
-			_D("%s : %s : %s", c->val[_AI_FILE], c->val[i], val);
-			if (i == _AI_BG_CATEGORY) {
-				category = (intptr_t)c->val[i];
-				c->val[i] = (char *)((intptr_t)(category | (int)((intptr_t)val)));
-			} else {
-				if (c->val[i])
-					free(c->val[i]);
-				c->val[i] = strdup(val);
-			}
-			break;
-		}
+	if (type < AIT_NAME || type >= AIT_MAX)
+		return -1;
+
+	_D("%s : %s : %s", c->val[AIT_NAME], c->val[type], val);
+	if (type == AIT_BG_CATEGORY) {
+		category = (intptr_t)c->val[type];
+		c->val[type] = (char *)((intptr_t)(category | (int)((intptr_t)val)));
+	} else {
+		if (c->val[type])
+			free(c->val[type]);
+		c->val[type] = strdup(val);
 	}
 
 	return 0;
-}
-
-const char *appinfo_get_filename(const struct appinfo *c)
-{
-	if (!c) {
-		errno = EINVAL;
-		SECURE_LOGE("appinfo get filename: %s", strerror(errno));
-		return NULL;
-	}
-
-	return c->val[_AI_FILE];
 }
 
 struct _cbinfo {
@@ -932,6 +863,9 @@ struct _cbinfo {
 static void __iter_cb(gpointer key, gpointer value, gpointer user_data)
 {
 	struct _cbinfo *cbi = user_data;
+
+	if (cbi == NULL)
+		return;
 
 	cbi->cb(cbi->cb_data, key, value);
 }
@@ -978,4 +912,3 @@ int appinfo_get_boolean(const struct appinfo *c, enum appinfo_type type)
 
 	return -1;
 }
-
