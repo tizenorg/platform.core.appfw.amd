@@ -78,6 +78,7 @@ typedef struct {
 } app_info_from_pkgmgr;
 
 static int __pid_of_last_launched_ui_app;
+static DBusConnection *conn = NULL;
 
 static void __set_reply_handler(int fd, int pid, int clifd, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd);
@@ -318,6 +319,44 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 	return ret;
 }
 
+static int __send_watchdog_signal(int pid, int signal_num)
+{
+	DBusMessage *message;
+
+	if (conn == NULL) {
+		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+		if (conn == NULL) {
+			_E("dbus_bus_get error");
+			return -1;
+		}
+	}
+
+	message = dbus_message_new_signal(RESOURCED_PROC_OBJECT,
+					RESOURCED_PROC_INTERFACE,
+					RESOURCED_PROC_WATCHDOG_SIGNAL);
+	if (dbus_message_append_args(message,
+				DBUS_TYPE_INT32, &pid,
+				DBUS_TYPE_INT32, &signal_num,
+				DBUS_TYPE_INVALID) == FALSE) {
+		_E("Failed to load data error");
+		dbus_message_unref(message);
+		return -1;
+	}
+
+	if (dbus_connection_send(conn, message, NULL) == FALSE) {
+		_E("Failed to send message");
+		dbus_message_unref(message);
+		return -1;
+	}
+
+	dbus_connection_flush(conn);
+	dbus_message_unref(message);
+
+	_W("send a watchdog signal done: %d", pid);
+
+	return 0;
+}
+
 static gboolean __au_glib_check(GSource *src)
 {
 	GSList *fd_list;
@@ -400,14 +439,41 @@ static gboolean __reply_handler(gpointer data)
 
 static gboolean __recv_timeout_handler(gpointer data)
 {
-	struct reply_info *r_info = (struct reply_info *) data;
+	struct reply_info *r_info = (struct reply_info *)data;
 	int fd = r_info->gpollfd->fd;
 	int clifd = r_info->clifd;
+	const char *appid;
+	const struct appinfo *ai;
+	const char *taskmanage;
+	int ret = -EAGAIN;
 
-	_send_result_to_client(clifd, -EAGAIN);
-
+	_E("application is not responding: pid(%d) cmd(%d)",
+			r_info->pid, r_info->cmd);
 	close(fd);
 
+	switch (r_info->cmd) {
+	case APP_OPEN:
+	case APP_RESUME:
+	case APP_START:
+	case APP_START_RES:
+		appid = _status_app_get_appid_bypid(r_info->pid);
+		if (appid == NULL)
+			break;
+		ai = appinfo_find(getuid(), appid);
+		if (ai == NULL)
+			break;
+		taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
+		if (taskmanage && strcmp(taskmanage, "true") == 0)
+			__send_watchdog_signal(r_info->pid, SIGKILL);
+		break;
+	case APP_TERM_BY_PID:
+	case APP_TERM_BGAPP_BY_PID:
+		if (_send_to_sigkill(r_info->pid) == 0)
+			ret = 0;
+		break;
+	}
+
+	_send_result_to_client(clifd, ret);
 	g_source_remove_poll(r_info->src, r_info->gpollfd);
 	g_source_destroy(r_info->src);
 	g_free(r_info->gpollfd);
@@ -567,8 +633,6 @@ static int __tep_mount(char *mnt_path[])
 	int func_ret = 0;
 	int rv = 0;
 	struct stat link_buf = {0,};
-
-	static DBusConnection *conn = NULL;
 
 	if (!conn) {
 		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
