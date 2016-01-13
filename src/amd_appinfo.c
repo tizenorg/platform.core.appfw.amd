@@ -502,6 +502,9 @@ static void __handle_onboot(void *user_data, const char *appid,
 {
 	uid_t uid = (uid_t)(intptr_t)user_data;
 
+	if (strcmp(info->val[AIT_COMPTYPE], APP_TYPE_SERVICE) != 0)
+		return;
+
 	if (!strcmp(info->val[AIT_ONBOOT], "true")) {
 		if (_status_app_is_running(appid, uid) > 0)
 			return;
