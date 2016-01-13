@@ -56,8 +56,6 @@ struct restart_info {
 
 static GHashTable *restart_tbl;
 
-static int __init(void);
-
 static gboolean __restart_timeout_handler(void *data)
 {
 	struct restart_info *ri = (struct restart_info *)data;
@@ -106,28 +104,33 @@ static bool __check_restart(const char *appid)
 	return true;
 }
 
-static bool __can_restart_app(int pid)
+static bool __can_restart_app(const char *appid)
 {
 	const char *pkg_status;
-	const char *appid = NULL;
-	const struct appinfo *ai = NULL;
+	const char *component_type;
+	struct appinfo *ai;
+	int r;
 
-	appid = _status_app_get_appid_bypid(pid);
-
-	if (!appid)
+	_D("appid: %s", appid);
+	ai = appinfo_find(getuid(), appid);
+	if (!ai)
 		return false;
 
-	ai = appinfo_find(getuid(), appid);
+	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
+	if (!component_type)
+		return false;
+
+	if (strncmp(component_type, APP_TYPE_SERVICE,
+				strlen(APP_TYPE_SERVICE)) != 0)
+		return false;
+
 	pkg_status = appinfo_get_value(ai, AIT_STATUS);
-	_D("appid: %s", appid);
-
-	if (ai && pkg_status && strncmp(pkg_status, "blocking", 8) == 0) {
-		appinfo_set_value((struct appinfo *)ai, AIT_STATUS, "restart");
-	} else if (ai && pkg_status && strncmp(pkg_status, "norestart", 9) == 0) {
-		appinfo_set_value((struct appinfo *)ai, AIT_STATUS, "installed");
+	if (pkg_status && strncmp(pkg_status, "blocking", 8) == 0) {
+		appinfo_set_value(ai, AIT_STATUS, "restart");
+	} else if (pkg_status && strncmp(pkg_status, "norestart", 9) == 0) {
+		appinfo_set_value(ai, AIT_STATUS, "installed");
 	} else {
-		int r = appinfo_get_boolean(ai, AIT_RESTART);
-
+		r = appinfo_get_boolean(ai, AIT_RESTART);
 		if (r && __check_restart(appid))
 			return true;
 	}
@@ -137,22 +140,20 @@ static bool __can_restart_app(int pid)
 
 static int __app_dead_handler(int pid, void *data)
 {
+	bool restart;
+	const char *appid;
+	int caller_pid;
+
 	if (pid <= 0)
 		return 0;
 
-	 _D("APP_DEAD_SIGNAL : %d", pid);
+	_D("APP_DEAD_SIGNAL : %d", pid);
 
-	bool restart;
-	char *appid = NULL;
-	const char *tmp_appid;
+	appid = _status_app_get_appid_bypid(pid);
+	if (appid == NULL)
+		return 0;
 
-	restart =  __can_restart_app(pid);
-	if (restart) {
-		tmp_appid = _status_app_get_appid_bypid(pid);
-
-		if (tmp_appid)
-			appid = strdup(tmp_appid);
-	}
+	restart = __can_restart_app(appid);
 
 	app_com_client_remove(pid);
 
@@ -162,13 +163,14 @@ static int __app_dead_handler(int pid, void *data)
 			app_group_clear_top(pid);
 			app_group_set_dead_pid(pid);
 			app_group_remove(pid);
-		} else
+		} else {
 			app_group_remove_leader_pid(pid);
+		}
 	} else if (app_group_is_sub_app(pid)) {
 		_W("app_group_sub_app, pid: %d", pid);
-		int caller_pid = app_group_get_next_caller_pid(pid);
-
-		if (app_group_can_reroute(pid) || (caller_pid > 0 && caller_pid != pid)) {
+		caller_pid = app_group_get_next_caller_pid(pid);
+		if (app_group_can_reroute(pid)
+				|| (caller_pid > 0 && caller_pid != pid)) {
 			_W("app_group reroute");
 			app_group_reroute(pid);
 		} else {
@@ -185,8 +187,6 @@ static int __app_dead_handler(int pid, void *data)
 
 	if (restart)
 		_start_app_local(getuid(), appid);
-	if (appid)
-		free(appid);
 
 	return 0;
 }
@@ -216,8 +216,9 @@ static DBusHandlerResult __syspopup_signal_filter(DBusConnection *conn,
 
 	if (dbus_message_is_signal(message, interface,
 				AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL)) {
-		if (dbus_message_get_args(message, &error, DBUS_TYPE_STRING, &appid,
-				DBUS_TYPE_STRING, &b_raw, DBUS_TYPE_INVALID) == FALSE) {
+		if (dbus_message_get_args(message, &error, DBUS_TYPE_STRING,
+					&appid, DBUS_TYPE_STRING,
+					&b_raw, DBUS_TYPE_INVALID) == FALSE) {
 			_E("Failed to get data: %s", error.message);
 			dbus_error_free(&error);
 			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -263,7 +264,7 @@ static int __syspopup_dbus_signal_handler_init(void)
 	}
 
 	if (dbus_connection_add_filter(conn,
-				__syspopup_signal_filter, NULL, NULL) == FALSE) {
+			__syspopup_signal_filter, NULL, NULL) == FALSE) {
 		_E("Failed to add filter");
 		return -1;
 	}
