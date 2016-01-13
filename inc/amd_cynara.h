@@ -14,8 +14,13 @@
  * limitations under the License.
  */
 
+#ifndef __AMD_CYNARA_H__
+#define __AMD_CYNARA_H__
+
 #include <aul_sock.h>
 
 int init_cynara(void);
 void finish_cynara(void);
 int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt);
+
+#endif /* __AMD_CYNARA_H__ */
