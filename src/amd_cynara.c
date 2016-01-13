@@ -25,6 +25,7 @@
 #include <aul_svc_priv_key.h>
 
 #include "amd_util.h"
+#include "amd_cynara.h"
 
 #define PRIVILEGE_APPMANAGER_LAUNCH "http://tizen.org/privilege/appmanager.launch"
 #define PRIVILEGE_APPMANAGER_KILL "http://tizen.org/privilege/appmanager.kill"
@@ -180,7 +181,7 @@ int init_cynara(void)
 {
 	int ret;
 
-	ret  = cynara_initialize(&r_cynara, NULL);
+	ret = cynara_initialize(&r_cynara, NULL);
 	if (ret != CYNARA_API_SUCCESS) {
 		_E("cynara initialize failed.");
 		return ret;

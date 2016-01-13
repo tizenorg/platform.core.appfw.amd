@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <aul_sock.h>
 
 int init_cynara(void);

@@ -140,9 +140,6 @@ static int __send_message(int sock, const struct iovec *vec, int vec_size, const
 		return sndret;
 }
 
-extern int __app_dead_handler(int pid, uid_t user);
-extern int __agent_dead_handler(uid_t user);
-
 static int __get_caller_pid(bundle *kb)
 {
 	const char *pid_str;
@@ -422,18 +419,17 @@ static void __handle_agent_dead_signal(struct ucred *pcr)
 	/* TODO: check the credentials from the caller: must be the amd agent */
 
 	_D("AGENT_DEAD_SIGNAL : %d", pcr->uid);
-	__agent_dead_handler(pcr->uid);
+	_status_remove_app_info_list_with_uid(pcr->uid);
 }
 
 static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-	int handles[2] = {0, 0};
+	int handles[2] = {0,};
 	struct iovec vec[3];
 	int msglen = 0;
 	char buffer[1024];
 	struct sockaddr_un saddr;
 	int ret = 0;
-
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 		_E("error create socket pair");
