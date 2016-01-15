@@ -948,6 +948,20 @@ static int __dispatch_app_running_info(int clifd, const app_pkt_t *pkt, struct u
 	return 0;
 }
 
+static int __dispatch_app_all_running_info(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	int ret;
+
+	ret = check_privilege_by_cynara(clifd, pkt);
+	if (ret < 0) {
+		_send_result_to_client(clifd, ret);
+		return ret;
+	}
+
+	_status_send_all_running_appinfo(clifd, cr->uid);
+	return 0;
+}
+
 static int __dispatch_app_is_running(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
 	char *appid = NULL;
@@ -1326,6 +1340,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_SEND] = __dispatch_app_com_send,
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
+	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 };
 
 static void __free_request(gpointer data)
