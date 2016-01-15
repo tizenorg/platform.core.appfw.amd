@@ -538,23 +538,69 @@ char* _status_app_get_appid_bypid(int pid)
 
 int _status_send_running_appinfo(int fd, uid_t uid)
 {
-	GSList *iter = NULL;
-	app_status_info_t *info_t = NULL;
-	char tmp_pid[MAX_PID_STR_BUFSZ];
+	GSList *iter;
+	app_status_info_t *info_t;
+	char tmp_str[MAX_PID_STR_BUFSZ];
+	char buf[AUL_SOCK_MAXBUFF - AUL_PKT_HEADER_SIZE] = {0, };
+
+	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t->uid != uid ||
+			info_t->status == STATUS_DYING ||
+			app_group_is_sub_app(info_t->pid))
+			continue;
+
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->pid);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->appid, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->app_path, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->pkgid, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->status);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->is_subapp);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ";", sizeof(buf) - strlen(buf) - 1);
+	}
+
+	aul_sock_send_raw_async_with_fd(fd, APP_RUNNING_INFO_RESULT,
+			(unsigned char *)buf, strlen(buf));
+	close(fd);
+
+	return 0;
+}
+
+int _status_send_all_running_appinfo(int fd, uid_t uid)
+{
+	GSList *iter;
+	app_status_info_t *info_t;
+	char tmp_str[MAX_PID_STR_BUFSZ];
 	char buf[AUL_SOCK_MAXBUFF] = {0, };
 
 	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
-		if (info_t->uid != uid || app_group_is_sub_app(info_t->pid))
+		if (info_t->uid != uid ||  info_t->status == STATUS_DYING)
 			continue;
 
-		snprintf(tmp_pid, MAX_PID_STR_BUFSZ, "%d", info_t->pid);
-		strncat(buf, tmp_pid, MAX_PID_STR_BUFSZ);
-		strncat(buf, ":", 1);
-		strncat(buf, info_t->appid, MAX_PACKAGE_STR_SIZE);
-		strncat(buf, ":", 1);
-		strncat(buf, info_t->app_path, MAX_PACKAGE_APP_PATH_SIZE);
-		strncat(buf, ";", 1);
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->pid);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->appid, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->app_path, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, info_t->pkgid, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->status);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->is_subapp);
+		strncat(buf, tmp_str, sizeof(buf) - strlen(buf) - 1);
+		strncat(buf, ";", sizeof(buf) - strlen(buf) - 1);
 	}
 
 	aul_sock_send_raw_async_with_fd(fd, APP_RUNNING_INFO_RESULT,
