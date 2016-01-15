@@ -286,8 +286,15 @@ static void __set_fg_flag(int cpid, int flag, gboolean force)
 										pkgid,
 										STATUS_BACKGROUND,
 										APP_TYPE_UI);
-						if (!bg_category)
+						if (!bg_category) {
 							_status_find_service_apps(ac->pid, getuid(), STATUS_BG, __prepare_to_suspend_services, true);
+							/*
+							if (force == TRUE && cpid == ac->pid) {
+								__prepare_to_suspend_services(ac->pid);
+								_amd_suspend_add_timer(ac->pid, ai);
+							}*/
+						}
+
 
 					}
 					ac->fg = flag;
