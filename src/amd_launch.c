@@ -49,6 +49,7 @@
 #include "app_signal.h"
 #include "amd_cynara.h"
 #include "amd_socket.h"
+#include "amd_share.h"
 
 #define DAC_ACTIVATE
 
@@ -1010,6 +1011,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	app_group_launch_mode launch_mode;
 	const char *pad_type = LAUNCHPAD_PROCESS_POOL_SOCK;
 	bool is_subapp = false;
+	shared_info_h share_handle;
 
 	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
@@ -1083,6 +1085,10 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		}
 	}
 
+	share_handle = _temporary_permission_create(caller_pid, appid, kb, caller_uid);
+	if (share_handle == NULL)
+		_D("No sharable path : %d %s", caller_pid, appid);
+
 	tep_name = appinfo_get_value(ai, AIT_TEP);
 	if (tep_name != NULL)
 		__send_mount_request(ai, tep_name, kb);
@@ -1140,6 +1146,12 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 			}
 		}
 		_status_add_app_info_list(appid, app_path, pid, is_subapp, caller_uid);
+	}
+
+	if (share_handle) {
+		if (pid > 0 && (ret = _temporary_permission_apply(pid, caller_uid, share_handle)) != 0)
+			_D("Couldn't apply temporary permission: %d", ret);
+		_temporary_permission_destroy(share_handle);
 	}
 
 	return pid;

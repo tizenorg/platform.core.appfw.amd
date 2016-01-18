@@ -47,6 +47,7 @@
 #include "amd_cynara.h"
 #include "amd_socket.h"
 #include "amd_app_com.h"
+#include "amd_share.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -164,7 +165,7 @@ end:
 	return pid;
 }
 
-static int __foward_cmd(int cmd, bundle *kb, int cr_pid)
+static int __forward_cmd(int cmd, bundle *kb, int cr_pid, uid_t uid)
 {
 	int pid;
 	int pgid;
@@ -172,6 +173,9 @@ static int __foward_cmd(int cmd, bundle *kb, int cr_pid)
 	int datalen;
 	bundle_raw *kb_data;
 	int res;
+	shared_info_h si = NULL;
+	const char *appid;
+	int ret;
 
 	if ((pid = __get_caller_pid(kb)) < 0)
 			return AUL_R_ERROR;
@@ -183,11 +187,23 @@ static int __foward_cmd(int cmd, bundle *kb, int cr_pid)
 		bundle_add(kb, AUL_K_CALLEE_PID, tmp_pid);
 	}
 
+	appid = _status_app_get_appid_bypid(pgid);
+	if (appid != NULL) {
+		si = _temporary_permission_create(pgid, appid, kb, uid);
+		if (si == NULL)
+			_D("No sharable path : %d %s", pgid, appid);
+	}
+
 	bundle_encode(kb, &kb_data, &datalen);
 	if ((res = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0)
 		res = AUL_R_ERROR;
 
 	free(kb_data);
+	if (si) {
+		if (res >= 0 && (ret = _temporary_permission_apply(pid, uid, si)) != 0)
+			_D("Couldn't apply temporary permission: %d", ret);
+		_temporary_permission_destroy(si);
+	}
 
 	return res;
 }
@@ -831,7 +847,7 @@ static int __dispatch_app_result(int clifd, const app_pkt_t *pkt, struct ucred *
 		return -1;
 	}
 
-	__foward_cmd(pkt->cmd, kb, cr->pid);
+	__forward_cmd(pkt->cmd, kb, cr->pid, cr->uid);
 	close(clifd);
 	bundle_free(kb);
 

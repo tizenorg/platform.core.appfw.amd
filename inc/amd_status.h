@@ -22,6 +22,12 @@
 #include <stdbool.h>
 #include <aul.h>
 
+typedef struct _shared_info_t {
+	char *owner_appid;
+	char **paths;
+} shared_info_t;
+
+
 int _status_add_app_info_list(const char *appid, const char *app_path, int pid, bool is_subapp, uid_t uid);
 int _status_update_app_info_list(int pid, int status, bool force, uid_t uid);
 int _status_remove_app_info_list_with_uid(uid_t uid);
@@ -35,6 +41,12 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 char *_status_app_get_appid_bypid(int pid);
 int _status_get_appid_bypid(int fd, int pid);
 int _status_get_pkgid_bypid(int fd, int pid);
+
+int _status_add_shared_info(int pid, uid_t uid, shared_info_t *info);
+int _status_clear_shared_info_list(int pid, uid_t uid);
+GList* _status_get_shared_info_list(int pid, uid_t uid);
+
 int _status_init(void);
+
 
 
