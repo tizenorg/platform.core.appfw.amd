@@ -35,6 +35,7 @@
 #include <tzplatform_config.h>
 #include <cert-svc/ccert.h>
 #include <cert-svc/cinstance.h>
+#include <gio/gio.h>
 
 #include <aul_sock.h>
 #include <aul_svc.h>
@@ -84,7 +85,7 @@ typedef struct {
 
 static int __pid_of_last_launched_ui_app;
 
-static DBusConnection *conn;
+static GDBusConnection *conn;
 static GList *_fgmgr_list;
 
 struct fgmgr {
@@ -332,36 +333,36 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 
 static int __send_watchdog_signal(int pid, int signal_num)
 {
-	DBusMessage *message;
+	GError *err = NULL;
 
 	if (conn == NULL) {
-		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 		if (conn == NULL) {
-			_E("dbus_bus_get error");
+			_E("g_bus_get_sync() is failed: %s", err->message);
+			g_error_free(err);
 			return -1;
 		}
 	}
 
-	message = dbus_message_new_signal(RESOURCED_PROC_OBJECT,
+	if (g_dbus_connection_emit_signal(conn,
+					NULL,
+					RESOURCED_PROC_OBJECT,
 					RESOURCED_PROC_INTERFACE,
-					RESOURCED_PROC_WATCHDOG_SIGNAL);
-	if (dbus_message_append_args(message,
-				DBUS_TYPE_INT32, &pid,
-				DBUS_TYPE_INT32, &signal_num,
-				DBUS_TYPE_INVALID) == FALSE) {
-		_E("Failed to load data error");
-		dbus_message_unref(message);
+					RESOURCED_PROC_WATCHDOG_SIGNAL,
+					g_variant_new("(ii)", pid, signal_num),
+					&err) == FALSE) {
+		_E("g_dbus_connection_emit_signal() is failed: %s",
+					err->message);
+		g_error_free(err);
 		return -1;
 	}
 
-	if (dbus_connection_send(conn, message, NULL) == FALSE) {
-		_E("Failed to send message");
-		dbus_message_unref(message);
+	if (g_dbus_connection_flush_sync(conn, NULL, &err) == FALSE) {
+		_E("g_dbus_connection_flush_sync() is failed: %s",
+					err->message);
+		g_error_free(err);
 		return -1;
 	}
-
-	dbus_connection_flush(conn);
-	dbus_message_unref(message);
 
 	_W("send a watchdog signal done: %d", pid);
 
@@ -640,15 +641,17 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 
 static int __tep_mount(char *mnt_path[])
 {
-	DBusMessage *msg;
-	int func_ret = 0;
+	GError *err = NULL;
+	GDBusMessage *msg = NULL;
+	int ret = 0;
 	int rv = 0;
 	struct stat link_buf = {0,};
 
 	if (!conn) {
-		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 		if (!conn) {
-			_E("dbus_bus_get error");
+			_E("g_bus_get_sync() is failed: %s", err->message);
+			g_error_free(err);
 			return -1;
 		}
 	}
@@ -660,33 +663,36 @@ static int __tep_mount(char *mnt_path[])
 			_E("Unable tp remove link file %s", mnt_path[0]);
 	}
 
-	msg = dbus_message_new_method_call(TEP_BUS_NAME, TEP_OBJECT_PATH,
-			TEP_INTERFACE_NAME, TEP_MOUNT_METHOD);
-	if (!msg) {
-		_E("dbus_message_new_method_call(%s:%s-%s)", TEP_OBJECT_PATH,
-		   TEP_INTERFACE_NAME, TEP_MOUNT_METHOD);
-		return -1;
-	}
-
-	if (!dbus_message_append_args(msg,
-				DBUS_TYPE_STRING, &mnt_path[0],
-				DBUS_TYPE_STRING, &mnt_path[1],
-				DBUS_TYPE_INVALID)) {
-		_E("Ran out of memory while constructing args\n");
-		func_ret = -1;
+	msg = g_dbus_message_new_method_call(TEP_BUS_NAME,
+					TEP_OBJECT_PATH,
+					TEP_INTERFACE_NAME,
+					TEP_MOUNT_METHOD);
+	if (msg == NULL) {
+		_E("g_dbus_message_new_method_call() is failed.");
+		ret = -1;
 		goto func_out;
 	}
+	g_dbus_message_set_body(msg,
+			g_variant_new("(ss)", mnt_path[0], mnt_path[1]));
 
-	if (dbus_connection_send(conn, msg, NULL) == FALSE) {
-		_E("dbus_connection_send error");
-		func_ret = -1;
+	if (g_dbus_connection_send_message(conn,
+					msg,
+					G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+					NULL,
+					&err) == FALSE) {
+		_E("g_dbus_connection_send_message() is failed: %s",
+					err->message);
+		ret = -1;
 		goto func_out;
 	}
 
 func_out:
-	dbus_message_unref(msg);
+	if (msg)
+		g_object_unref(msg);
 
-	return func_ret;
+	g_clear_error(&err);
+
+	return ret;
 }
 
 static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
@@ -910,12 +916,12 @@ static void __del_fgmgr_list(int pid)
 	}
 }
 
-int __app_status_handler(int pid, int status, void *data)
+static int __app_status_handler(int pid, int status, void *data)
 {
-	//char *appid = NULL;
-	//int bg_category = 0x00;
+	/* char *appid = NULL; */
+	/* int bg_category = 0x00; */
 	int app_status = -1;
-	//const struct appinfo *ai = NULL;
+	/* const struct appinfo *ai = NULL; */
 
 	_W("pid(%d) status(%d)", pid, status);
 
@@ -927,7 +933,7 @@ int __app_status_handler(int pid, int status, void *data)
 	if (status == PROC_STATUS_FG) {
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
-		/*_amd_suspend_remove_timer(pid);*/
+		/* _amd_suspend_remove_timer(pid); */
 	} else if (status == PROC_STATUS_BG) {
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
 		/*
@@ -947,14 +953,16 @@ int __app_status_handler(int pid, int status, void *data)
 
 int _launch_init()
 {
-	int ret = 0;
+	int ret;
+	GError *err = NULL;
 
 	_D("_launch_init");
 
 	if (!conn) {
-		conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 		if (!conn) {
-			_E("dbus_bus_get error");
+			_E("g_bus_get_sync() is failed: %s", err->message);
+			g_error_free(err);
 			return -1;
 		}
 	}
