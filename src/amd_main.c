@@ -305,9 +305,24 @@ static int __init(void)
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
-	sd_notify(0, "READY=1");
-
 	return 0;
+}
+
+static void __ready(void)
+{
+	int fd;
+	char path[PATH_MAX];
+
+	_D("AMD is ready");
+
+	snprintf(path, sizeof(path), "/run/user/%d/.amd_ready", getuid());
+
+	fd = creat(path,
+		S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+	if (fd != -1)
+		close(fd);
+
+	sd_notify(0, "READY=1");
 }
 
 int main(int argc, char *argv[])
@@ -318,6 +333,8 @@ int main(int argc, char *argv[])
 		_E("AMD Initialization failed!\n");
 		return -1;
 	}
+
+	__ready();
 
 	mainloop = g_main_loop_new(NULL, FALSE);
 	if (!mainloop) {
