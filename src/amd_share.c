@@ -112,22 +112,6 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 	return h;
 }
 
-static void __delete_paths(char **paths)
-{
-	int i = 0;
-
-	if (paths) {
-		while (1) {
-			if (paths[i] == NULL) {
-				free(paths);
-				break;
-			}
-			free(paths[i]);
-			i++;
-		}
-	}
-}
-
 static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char **paths,
 		int *owner_pid, uid_t uid)
 {
@@ -293,7 +277,7 @@ finally:
 		h = __new_shared_info_handle(appid, uid, owner_appid, paths);
 
 		if (h == NULL) {
-			__delete_paths(paths);
+			g_strfreev(paths);
 			return NULL;
 		}
 
@@ -312,7 +296,7 @@ finally:
 		//}
 	}
 
-	__delete_paths(paths);
+	g_strfreev(paths);
 	return NULL;
 }
 
@@ -352,7 +336,7 @@ int _temporary_permission_destroy(shared_info_h handle)
 			//	_E("revoke error %d",r);
 
 			free(handle->shared_info->owner_appid);
-			__delete_paths(handle->shared_info->paths);
+			g_strfreev(handle->shared_info->paths);
 		}
 
 		free(handle->appid);
