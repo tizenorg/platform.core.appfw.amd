@@ -229,18 +229,7 @@ static void __remove_all_shared_info(app_status_info_t *info_t)
 		if (sit) {
 			if (sit->owner_appid)
 				free(sit->owner_appid);
-			if (sit->paths) {
-				int i = 0;
-				while (1) {
-					if (sit->paths[i] == NULL) {
-						free(sit->paths);
-						break;
-					}
-
-					free(sit->paths[i]);
-					i++;
-				}
-			}
+			g_strfreev(sit->paths);
 			free(sit);
 		}
 		list = g_list_next(list);
