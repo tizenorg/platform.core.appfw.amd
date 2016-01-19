@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <dbus/dbus.h>
-
 #define AUL_DBUS_PATH "/aul/dbus_handler"
 #define AUL_DBUS_SIGNAL_INTERFACE "org.tizen.aul.signal"
 #define AUL_DBUS_APPDEAD_SIGNAL	"app_dead"
