@@ -27,11 +27,10 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <tzplatform_config.h>
-#include <dbus/dbus.h>
-#include <dbus/dbus-glib-lowlevel.h>
 #include <bundle.h>
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
+#include <gio/gio.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -204,34 +203,22 @@ int __agent_dead_handler(uid_t user)
 	return 0;
 }
 
-static DBusHandlerResult __syspopup_signal_filter(DBusConnection *conn,
-				DBusMessage *message, void *data)
+static void __syspopup_signal_handler(GDBusConnection *conn,
+				const gchar *sender_name,
+				const gchar *object_path,
+				const gchar *interface_name,
+				const gchar *signal_name,
+				GVariant *parameters,
+				gpointer data)
 {
-	DBusError error;
-	const char *interface;
-	const char *appid;
-	const char *b_raw;
+	gchar *appid = NULL;
+	gchar *b_raw = NULL;
 	bundle *kb;
 
-	dbus_error_init(&error);
-
-	interface = dbus_message_get_interface(message);
-	if (interface == NULL) {
-		_E("reject by security issue - no interface");
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-	}
-
-	if (dbus_message_is_signal(message, interface,
-				AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL)) {
-		if (dbus_message_get_args(message, &error, DBUS_TYPE_STRING,
-					&appid, DBUS_TYPE_STRING,
-					&b_raw, DBUS_TYPE_INVALID) == FALSE) {
-			_E("Failed to get data: %s", error.message);
-			dbus_error_free(&error);
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-
+	if (g_strcmp0(signal_name, AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL) == 0) {
+		g_variant_get(parameters, "(ss)", &appid, &b_raw);
 		_D("syspopup launch request: %s", appid);
+
 		kb = bundle_decode((const bundle_raw *)b_raw, strlen(b_raw));
 		if (kb) {
 			if (_start_app_local_with_bundle(getuid(), appid, kb) < 0)
@@ -239,40 +226,37 @@ static DBusHandlerResult __syspopup_signal_filter(DBusConnection *conn,
 
 			bundle_free(kb);
 		}
+		g_free(appid);
+		g_free(b_raw);
 	}
-
-	return DBUS_HANDLER_RESULT_HANDLED;
 }
 
 static int __syspopup_dbus_signal_handler_init(void)
 {
-	DBusError error;
-	DBusConnection *conn;
-	char rule[MAX_LOCAL_BUFSZ];
+	GError *error = NULL;
+	GDBusConnection *conn;
+	guint subscription_id;
 
-	dbus_error_init(&error);
-
-	conn = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
 	if (conn == NULL) {
-		_E("Failed to connect to the D-BUS Daemon: %s", error.message);
-		dbus_error_free(&error);
+		_E("Failed to connect to the D-BUS Daemon: %s", error->message);
+		g_error_free(error);
 		return -1;
 	}
 
-	dbus_connection_setup_with_g_main(conn, NULL);
-
-	snprintf(rule, sizeof(rule), "path='%s',type='signal',interface='%s'",
-			AUL_SP_DBUS_PATH, AUL_SP_DBUS_SIGNAL_INTERFACE);
-	dbus_bus_add_match(conn, rule, &error);
-	if (dbus_error_is_set(&error)) {
-		_E("Failed to rule set: %s", error.message);
-		dbus_error_free(&error);
-		return -1;
-	}
-
-	if (dbus_connection_add_filter(conn,
-			__syspopup_signal_filter, NULL, NULL) == FALSE) {
-		_E("Failed to add filter");
+	subscription_id = g_dbus_connection_signal_subscribe(conn,
+					NULL,
+					AUL_SP_DBUS_PATH,
+					AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL,
+					AUL_SP_DBUS_SIGNAL_INTERFACE,
+					NULL,
+					G_DBUS_SIGNAL_FLAGS_NONE,
+					__syspopup_signal_handler,
+					NULL,
+					NULL);
+	if (subscription_id == 0) {
+		_E("g_dbus_connection_signal_subscribe() is failed.");
+		g_object_unref(conn);
 		return -1;
 	}
 
