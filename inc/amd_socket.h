@@ -29,6 +29,7 @@
 #define PAD_CMD_VISIBILITY	10
 #define PAD_CMD_ADD_LOADER	11
 #define PAD_CMD_REMOVE_LOADER	12
+#define PAD_CMD_MAKE_DEFAULT_SLOTS	13
 
 int _create_sock_activation(void);
 int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb);

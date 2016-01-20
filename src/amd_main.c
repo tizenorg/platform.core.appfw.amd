@@ -42,6 +42,7 @@
 #include "amd_cynara.h"
 #include "amd_app_com.h"
 #include "amd_share.h"
+#include "amd_socket.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
@@ -270,6 +271,7 @@ static int __syspopup_dbus_signal_handler_init(void)
 static int __init(void)
 {
 	int r;
+	bundle *b = NULL;
 
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");
@@ -305,6 +307,19 @@ static int __init(void)
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
+	b = bundle_create();
+
+	if (b == NULL) {
+		_E("failed to make a bundle");
+		return -1;
+	}
+
+	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
+	if (r != 0) {
+		 _E("failed to make default slots");
+	}
+
+	bundle_free(b);
 	return 0;
 }
 
