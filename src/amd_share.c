@@ -112,22 +112,6 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 	return h;
 }
 
-static void __delete_paths(char **paths)
-{
-	int i = 0;
-
-	if (paths) {
-		while (1) {
-			if (paths[i] == NULL) {
-				free(paths);
-				break;
-			}
-			free(paths[i]);
-			i++;
-		}
-	}
-}
-
 static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char **paths,
 		int *owner_pid, uid_t uid)
 {
@@ -164,19 +148,19 @@ static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char 
 		}
 
 		if (!paths) {
-			paths = (char**)malloc(sizeof(char*) * 2);
+			paths = (char**)g_malloc(sizeof(char*) * 2);
 			if (!paths) {
 				_E("Out of memory");
 				return false;
 			}
 
-			paths[0] = strdup(path);
+			paths[0] = g_strdup(path);
 			paths[1] = NULL;
 		} else {
 			int i = 0;
 			while (1) {
 				if (paths[i] == NULL) {
-					paths[i] = strdup(path);
+					paths[i] = g_strdup(path);
 					break;
 				}
 				i++;
@@ -229,13 +213,13 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 
 		}
 
-		paths = (char**)malloc(sizeof(char*) * 3);
+		paths = (char**)g_malloc(sizeof(char*) * 3);
 		if (!paths) {
 			_E("Out of memory");
 			goto finally;
 		}
 
-		paths[0] = strdup(path);
+		paths[0] = g_strdup(path);
 		paths[1] = NULL;
 		paths[2] = NULL;
 		valid = true;
@@ -257,7 +241,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		ai = appinfo_find(uid, owner_appid);
 		pkgid = appinfo_get_value(ai, AIT_PKGID);
 
-		paths = (char**)malloc(sizeof(char*) * (len + 2));
+		paths = (char**)g_malloc(sizeof(char*) * (len + 2));
 		if (!paths) {
 			_E("Out of memory");
 			goto finally;
@@ -265,7 +249,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 
 		for (i = 0; i < len; i++) {
 			if (__can_share(path_array[i], pkgid, uid) == 0)
-				paths[cnt++] = strdup(path_array[i]);
+				paths[cnt++] = g_strdup(path_array[i]);
 		}
 
 		if (cnt > 0){
@@ -273,7 +257,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 			paths[cnt + 1] = NULL;
 			valid = true;
 		} else {
-			free(paths);
+			g_free(paths);
 			paths = NULL;
 		}
 		break;
@@ -293,7 +277,7 @@ finally:
 		h = __new_shared_info_handle(appid, uid, owner_appid, paths);
 
 		if (h == NULL) {
-			__delete_paths(paths);
+			g_strfreev(paths);
 			return NULL;
 		}
 
@@ -312,7 +296,7 @@ finally:
 		//}
 	}
 
-	__delete_paths(paths);
+	g_strfreev(paths);
 	return NULL;
 }
 
@@ -352,7 +336,7 @@ int _temporary_permission_destroy(shared_info_h handle)
 			//	_E("revoke error %d",r);
 
 			free(handle->shared_info->owner_appid);
-			__delete_paths(handle->shared_info->paths);
+			g_strfreev(handle->shared_info->paths);
 		}
 
 		free(handle->appid);
