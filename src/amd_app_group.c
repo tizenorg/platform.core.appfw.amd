@@ -967,7 +967,7 @@ int app_group_get_status(int pid)
 		while (i != NULL) {
 			ac = (app_group_context_t*) i->data;
 			if (ac && ac->pid == pid)
-				return  ac->status;
+				return ac->status;
 
 			i = g_list_next(i);
 		}
