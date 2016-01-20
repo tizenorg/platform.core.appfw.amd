@@ -1221,6 +1221,45 @@ static int __dispatch_app_com_leave(int clifd, const app_pkt_t *pkt, struct ucre
 	return 0;
 }
 
+static int __dispatch_app_register_pid(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	bundle *kb;
+	const struct appinfo *ai;
+	const char *appid;
+	const char *app_path;
+	const char *pid_str;
+	int pid;
+	uid_t uid;
+
+	close(clifd);
+	kb = bundle_decode(pkt->data, pkt->len);
+	if (kb == NULL)
+		return -1;
+
+	appid = bundle_get_val(kb, AUL_K_APPID);
+	if (appid == NULL) {
+		bundle_free(kb);
+		return -1;
+	}
+
+	pid_str = bundle_get_val(kb, AUL_K_PID);
+	if (pid_str == NULL) {
+		bundle_free(kb);
+		return -1;
+	}
+
+	pid = atoi(pid_str);
+	_D("appid: %s, pid: %d", appid, pid);
+
+	uid = getuid();
+	ai = appinfo_find(uid, appid);
+	app_path = appinfo_get_value(ai, AIT_EXEC);
+	_status_add_app_info_list(appid, app_path, pid, false, uid);
+	bundle_free(kb);
+
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1272,6 +1311,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_JOIN] = __dispatch_app_com_join,
 	[APP_COM_SEND] = __dispatch_app_com_send,
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
+	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 };
 
 static void __free_request(gpointer data)
