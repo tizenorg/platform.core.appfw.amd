@@ -61,7 +61,7 @@ static void __free_endpoint(struct endpoint_info *info)
 	g_free(info);
 }
 
-int app_com_broker_init()
+int app_com_broker_init(void)
 {
 	if (!endpoint_tbl) {
 		endpoint_tbl = g_hash_table_new(g_str_hash, g_str_equal);
@@ -95,7 +95,7 @@ static void __remove_cpid(gpointer key, gpointer value, gpointer user_data)
 	g_list_free((GList *)value);
 }
 
-int app_com_broker_fini()
+int app_com_broker_fini(void)
 {
 	if (cpid_tbl) {
 		g_hash_table_foreach(cpid_tbl, __remove_cpid, NULL);
@@ -206,9 +206,8 @@ int app_com_join(const char *endpoint, int cpid, int clifd, const char *filter)
 
 	_E("endpoint=%s cpid=%d clifd=%d filter=%s", endpoint, cpid, clifd, filter);
 
-	if (__add_client(info, filter, cpid) == NULL) {
+	if (__add_client(info, filter, cpid) == NULL)
 		return AUL_APP_COM_R_ERROR_OUT_OF_MEMORY;
-	}
 
 	return AUL_APP_COM_R_ERROR_OK;
 }
@@ -250,14 +249,12 @@ int app_com_send(const char *endpoint, int cpid, bundle *envelope)
 		if (client->pid == cpid)
 			continue;
 
-		if (client->filter && __check_filter(client->filter, cpid, client->pid, envelope) < 0) {
+		if (client->filter && __check_filter(client->filter, cpid, client->pid, envelope) < 0)
 			continue;
-		}
 
 		ret = app_send_cmd_with_noreply(client->pid, APP_COM_MESSAGE, envelope);
 		if (ret < 0)
 			_E("failed to send message pid: %d (%d)", client->pid, ret);
-
 	}
 
 	return AUL_APP_COM_R_ERROR_OK;
@@ -325,5 +322,3 @@ int app_com_client_remove(int cpid)
 
 	return AUL_APP_COM_R_ERROR_OK;
 }
-
-
