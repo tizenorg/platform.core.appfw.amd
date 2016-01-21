@@ -1002,6 +1002,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	const char *status;
 	const char *multiple = NULL;
 	const char *app_path = NULL;
+	const char *app_type = NULL;
 	const char *pkg_type = NULL;
 	const char *pkg_id = NULL;
 	const char *component_type = NULL;
@@ -1060,6 +1061,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	}
 
 	app_path = appinfo_get_value(ai, AIT_EXEC);
+	app_type = appinfo_get_value(ai, AIT_APP_TYPE);
 	pkg_type = appinfo_get_value(ai, AIT_TYPE);
 	pkg_id = appinfo_get_value(ai, AIT_PKGID);
 	process_pool = appinfo_get_value(ai, AIT_POOL);
@@ -1129,6 +1131,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		bundle_add(kb, AUL_K_PKGID, pkg_id);
 		bundle_add(kb, AUL_K_INTERNAL_POOL, process_pool);
 		bundle_add(kb, AUL_K_COMP_TYPE, component_type);
+		bundle_add(kb, AUL_K_APP_TYPE, app_type);
 
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;

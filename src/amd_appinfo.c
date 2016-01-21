@@ -79,12 +79,13 @@ static void __free_user_appinfo(gpointer data)
 	free(info);
 }
 
-static char *__convert_apptype(const char *type)
+static char *__convert_pkgtype(const char *type)
 {
 	if (strncmp(type, "capp", 4) == 0) {
 		return strdup("rpm");
 	} else if (strncmp(type, "c++app", 6) == 0 ||
-			strncmp(type, "ospapp", 6) == 0) {
+			strncmp(type, "ospapp", 6) == 0 ||
+			strncmp(type, "jsapp", 5) == 0) {
 		return strdup("tpk");
 	} else if (strncmp(type, "webapp", 6) == 0) {
 		return strdup("wgt");
@@ -140,14 +141,15 @@ static int __appinfo_add_exec(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 
 static int __appinfo_add_type(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-	char *type = NULL;
+	char *apptype = NULL;
 
-	if (pkgmgrinfo_appinfo_get_apptype(handle, &type) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_get_apptype(handle, &apptype) != PMINFO_R_OK) {
 		_E("failed to get apptype");
 		return -1;
 	}
 
-	info->val[AIT_TYPE] = __convert_apptype(type);
+	info->val[AIT_TYPE] = __convert_pkgtype(apptype);
+	info->val[AIT_APP_TYPE] = strdup(apptype);
 
 	return 0;
 }
@@ -422,6 +424,7 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_EFFECTIVE_APPID] = __appinfo_add_effective_appid,
 	[AIT_TASKMANAGE] = __appinfo_add_taskmanage,
 	[AIT_VISIBILITY] = NULL,
+	[AIT_APP_TYPE] = NULL,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
@@ -459,8 +462,8 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 		}
 	}
 
-	SECURE_LOGD("%s : %s : %s", c->val[AIT_NAME], c->val[AIT_COMPTYPE],
-		c->val[AIT_TYPE]);
+	SECURE_LOGD("%s : %s : %s : %s", c->val[AIT_NAME], c->val[AIT_COMPTYPE],
+		c->val[AIT_TYPE], c->val[AIT_APP_TYPE]);
 
 	g_hash_table_insert(info->tbl, c->val[AIT_NAME], c);
 
