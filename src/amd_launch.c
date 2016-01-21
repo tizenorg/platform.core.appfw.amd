@@ -67,7 +67,8 @@
 
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
-#define PATH_GLOBAL_APP_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
+#define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
+#define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
 #define PATH_DATA "/data"
 #define SDK_CODE_COVERAGE "CODE_COVERAGE"
 #define SDK_DYNAMIC_ANALYSIS "DYNAMIC_ANALYSIS"
@@ -705,12 +706,17 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 
 	const char *global = appinfo_get_value(ai, AIT_GLOBAL);
 	const char *pkgid = appinfo_get_value(ai, AIT_PKGID);
+	const char *preload = appinfo_get_value(ai, AIT_PRELOAD);
 	installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
 
-	if (global && strcmp("true", global) == 0)
-		path_app_root = PATH_GLOBAL_APP_ROOT;
-	else
+	if (global && strcmp("true", global) == 0) {
+		if (preload && strcmp(preload, "true") == 0)
+			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
+		else
+			path_app_root = PATH_GLOBAL_APP_RW_ROOT;
+	} else {
 		path_app_root = PATH_APP_ROOT;
+	}
 
 	if (installed_storage != NULL) {
 		SECURE_LOGD("storage: %s", installed_storage);
