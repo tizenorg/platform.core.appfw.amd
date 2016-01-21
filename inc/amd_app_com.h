@@ -17,8 +17,8 @@
 #ifndef __AMD_APP_COM_H__
 #define __AMD_APP_COM_H__
 
-int app_com_broker_init();
-int app_com_broker_fini();
+int app_com_broker_init(void);
+int app_com_broker_fini(void);
 int app_com_client_remove(int cpid);
 int app_com_add_endpoint(const char *endpoint, unsigned int propagate, const char *assoc_priv);
 int app_com_remove_endpoint(const char *endpoint);

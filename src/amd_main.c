@@ -90,7 +90,8 @@ static bool __check_restart(const char *appid)
 		_D("ri (%x)", ri);
 		_D("appid (%s)", appid);
 
-		ri->timer = g_timeout_add(10 * 1000, __restart_timeout_handler, ri);
+		ri->timer = g_timeout_add(10 * 1000,
+					__restart_timeout_handler, ri);
 	} else {
 		ri->count++;
 		_D("count (%d)", ri->count);
@@ -308,16 +309,15 @@ static int __init(void)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
 	b = bundle_create();
-
 	if (b == NULL) {
 		_E("failed to make a bundle");
 		return -1;
 	}
 
-	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
-	if (r != 0) {
+	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, getuid(),
+					PAD_CMD_MAKE_DEFAULT_SLOTS, b);
+	if (r != 0)
 		 _E("failed to make default slots");
-	}
 
 	bundle_free(b);
 	return 0;
