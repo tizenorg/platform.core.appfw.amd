@@ -22,7 +22,7 @@
 enum appinfo_type {
 	AIT_NAME = AIT_START,
 	AIT_EXEC,
-	AIT_TYPE,
+	AIT_PKGTYPE,
 	AIT_ONBOOT, /* start on boot: boolean */
 	AIT_RESTART, /* auto restart: boolean */
 	AIT_MULTI,
@@ -41,6 +41,7 @@ enum appinfo_type {
 	AIT_EFFECTIVE_APPID,
 	AIT_TASKMANAGE,
 	AIT_VISIBILITY,
+	AIT_APPTYPE,
 	AIT_MAX
 };
 
