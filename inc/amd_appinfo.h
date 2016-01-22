@@ -22,7 +22,7 @@
 enum appinfo_type {
 	AIT_NAME = AIT_START,
 	AIT_EXEC,
-	AIT_TYPE,
+	AIT_APPTYPE,
 	AIT_ONBOOT, /* start on boot: boolean */
 	AIT_RESTART, /* auto restart: boolean */
 	AIT_MULTI,

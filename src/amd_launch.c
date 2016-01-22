@@ -1002,7 +1002,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	const char *status;
 	const char *multiple = NULL;
 	const char *app_path = NULL;
-	const char *pkg_type = NULL;
+	const char *app_type = NULL;
 	const char *pkg_id = NULL;
 	const char *component_type = NULL;
 	const char *process_pool = NULL;
@@ -1060,7 +1060,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	}
 
 	app_path = appinfo_get_value(ai, AIT_EXEC);
-	pkg_type = appinfo_get_value(ai, AIT_TYPE);
+	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 	pkg_id = appinfo_get_value(ai, AIT_PKGID);
 	process_pool = appinfo_get_value(ai, AIT_POOL);
 
@@ -1125,7 +1125,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		hwacc = appinfo_get_value(ai, AIT_HWACC);
 		bundle_add(kb, AUL_K_HWACC, hwacc);
 		bundle_add(kb, AUL_K_EXEC, app_path);
-		bundle_add(kb, AUL_K_PACKAGETYPE, pkg_type);
+		bundle_add(kb, AUL_K_APP_TYPE, app_type);
 		bundle_add(kb, AUL_K_PKGID, pkg_id);
 		bundle_add(kb, AUL_K_INTERNAL_POOL, process_pool);
 		bundle_add(kb, AUL_K_COMP_TYPE, component_type);

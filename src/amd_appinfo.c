@@ -79,20 +79,6 @@ static void __free_user_appinfo(gpointer data)
 	free(info);
 }
 
-static char *__convert_apptype(const char *type)
-{
-	if (strncmp(type, "capp", 4) == 0) {
-		return strdup("rpm");
-	} else if (strncmp(type, "c++app", 6) == 0 ||
-			strncmp(type, "ospapp", 6) == 0) {
-		return strdup("tpk");
-	} else if (strncmp(type, "webapp", 6) == 0) {
-		return strdup("wgt");
-	}
-
-	return NULL;
-}
-
 static int __read_background_category(const char *category_name, void *user_data)
 {
 	struct appinfo *c = user_data;
@@ -138,16 +124,16 @@ static int __appinfo_add_exec(const pkgmgrinfo_appinfo_h handle, struct appinfo 
 	return 0;
 }
 
-static int __appinfo_add_type(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+static int __appinfo_add_apptype(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-	char *type = NULL;
+	char *apptype = NULL;
 
-	if (pkgmgrinfo_appinfo_get_apptype(handle, &type) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_get_apptype(handle, &apptype) != PMINFO_R_OK) {
 		_E("failed to get apptype");
 		return -1;
 	}
 
-	info->val[AIT_TYPE] = __convert_apptype(type);
+	info->val[AIT_APPTYPE] = strdup(apptype);
 
 	return 0;
 }
@@ -403,7 +389,7 @@ static int __appinfo_add_taskmanage(const pkgmgrinfo_appinfo_h handle, struct ap
 static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_NAME] = NULL,
 	[AIT_EXEC] = __appinfo_add_exec,
-	[AIT_TYPE] = __appinfo_add_type,
+	[AIT_APPTYPE] = __appinfo_add_apptype,
 	[AIT_ONBOOT] = __appinfo_add_onboot,
 	[AIT_RESTART] = __appinfo_add_restart,
 	[AIT_MULTI] = __appinfo_add_multi,
@@ -460,7 +446,7 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 	}
 
 	SECURE_LOGD("%s : %s : %s", c->val[AIT_NAME], c->val[AIT_COMPTYPE],
-		c->val[AIT_TYPE]);
+		c->val[AIT_APPTYPE]);
 
 	g_hash_table_insert(info->tbl, c->val[AIT_NAME], c);
 
