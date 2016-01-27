@@ -1017,6 +1017,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	int pid = -1;
 	char tmpbuf[MAX_PID_STR_BUFSZ];
 	const char *hwacc;
+	const char *root_path;
 	char *caller_appid;
 	int lpid = -1;
 	int callee_status = -1;
@@ -1131,7 +1132,9 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		}
 
 		hwacc = appinfo_get_value(ai, AIT_HWACC);
+		root_path = appinfo_get_value(ai, AIT_ROOT_PATH);
 		bundle_add(kb, AUL_K_HWACC, hwacc);
+		bundle_add(kb, AUL_K_ROOT_PATH, root_path);
 		bundle_add(kb, AUL_K_EXEC, app_path);
 		bundle_add(kb, AUL_K_PACKAGETYPE, pkg_type);
 		bundle_add(kb, AUL_K_PKGID, pkg_id);

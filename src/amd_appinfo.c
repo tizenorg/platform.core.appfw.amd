@@ -400,6 +400,22 @@ static int __appinfo_add_apptype(const pkgmgrinfo_appinfo_h handle, struct appin
 	return 0;
 }
 
+static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	char *path = NULL;
+	struct user_appinfo *user_data = (struct user_appinfo *)data;
+
+	if (pkgmgrinfo_pkginfo_get_root_path((pkgmgrinfo_pkginfo_h)user_data->extra_data,
+						&path) != PMINFO_R_OK) {
+		_E("get pkginfo failed");
+		return -1;
+	}
+
+	info->val[AIT_ROOT_PATH] = path ? strdup(path) : NULL;
+
+	return 0;
+}
+
 static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_NAME] = NULL,
 	[AIT_EXEC] = __appinfo_add_exec,
@@ -423,6 +439,7 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_TASKMANAGE] = __appinfo_add_taskmanage,
 	[AIT_VISIBILITY] = NULL,
 	[AIT_APPTYPE] = __appinfo_add_apptype,
+	[AIT_ROOT_PATH] = __appinfo_add_root_path,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,

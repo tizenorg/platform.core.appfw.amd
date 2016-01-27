@@ -42,6 +42,7 @@ enum appinfo_type {
 	AIT_TASKMANAGE,
 	AIT_VISIBILITY,
 	AIT_APPTYPE,
+	AIT_ROOT_PATH,
 	AIT_MAX
 };
 
