@@ -168,7 +168,7 @@ static gboolean __hash_table_cb(gpointer key, gpointer value,
 		ac = (app_group_context_t *)itr->data;
 		if (ac && ac->pid == pid) {
 			free(ac);
-			list = g_list_remove_link(list, itr);
+			list = g_list_delete_link(list, itr);
 			if (g_list_length(list) == 0) {
 				g_list_free_full(list, __list_destroy_cb);
 				return TRUE;
@@ -449,7 +449,7 @@ static app_group_context_t* __detach_context_from_recycle_bin(int pid)
 	while (iter) {
 		ac = (app_group_context_t *)iter->data;
 		if (ac && ac->pid == pid) {
-			recycle_bin = g_list_remove_link(recycle_bin, iter);
+			recycle_bin = g_list_delete_link(recycle_bin, iter);
 			return ac;
 		}
 
@@ -1120,7 +1120,7 @@ void app_group_remove_leader_pid(int lpid)
 			ac = (app_group_context_t *)list->data;
 			if (ac)
 				free(ac);
-			list = g_list_remove_link(list, list);
+			list = g_list_delete_link(list, list);
 
 			ac = (app_group_context_t *)next->data;
 			g_hash_table_insert(app_group_hash, GINT_TO_POINTER(ac->pid), next);
