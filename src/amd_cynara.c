@@ -34,25 +34,19 @@
 
 static cynara *r_cynara;
 
-static const char *__convert_cmd_to_privilege(int cmd)
-{
-	switch (cmd) {
-	case APP_OPEN:
-	case APP_RESUME:
-	case APP_START:
-	case APP_START_RES:
-		return PRIVILEGE_APPMANAGER_LAUNCH;
-	case APP_TERM_BY_PID_WITHOUT_RESTART:
-	case APP_TERM_BY_PID_ASYNC:
-	case APP_TERM_BY_PID:
-	case APP_KILL_BY_PID:
-		return PRIVILEGE_APPMANAGER_KILL;
-	case APP_TERM_BGAPP_BY_PID:
-		return PRIVILEGE_APPMANAGER_KILL_BGAPP;
-	default:
-		return NULL;
-	}
-}
+struct caller_info {
+	char *user;
+	char *client;
+	char *session;
+};
+
+typedef int (*checker_func)(struct caller_info *info, const app_pkt_t *pkt, void *data);
+
+struct checker_info {
+	int cmd;
+	checker_func checker;
+	void *data;
+};
 
 static const char *__convert_operation_to_privilege(const char *operation)
 {
@@ -64,11 +58,28 @@ static const char *__convert_operation_to_privilege(const char *operation)
 		return NULL;
 }
 
-static int _get_caller_info_from_cynara(int sockfd, char **client, char **user, char **session)
+static void __destroy_caller_info(struct caller_info *info)
+{
+	if (info) {
+		if (info->client)
+			free(info->client);
+
+		if (info->session)
+			free(info->session);
+
+		if (info->user)
+			free(info->user);
+	}
+}
+
+static int __get_caller_info_from_cynara(int sockfd, struct caller_info *info)
 {
 	pid_t pid;
 	int r;
 	char buf[MAX_LOCAL_BUFSZ];
+
+	if (info == NULL)
+		return -1;
 
 	r = cynara_creds_socket_get_pid(sockfd, &pid);
 	if (r != CYNARA_API_SUCCESS) {
@@ -77,20 +88,20 @@ static int _get_caller_info_from_cynara(int sockfd, char **client, char **user, 
 		return -1;
 	}
 
-	*session = cynara_session_from_pid(pid);
-	if (*session == NULL) {
+	info->session = cynara_session_from_pid(pid);
+	if (info->session == NULL) {
 		_E("cynara_session_from_pid failed.");
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT, user);
+	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT, &(info->user));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_cred_socket_get_user failed.");
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT, client);
+	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT, &(info->client));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_creds_socket_get_client failed.");
@@ -100,19 +111,19 @@ static int _get_caller_info_from_cynara(int sockfd, char **client, char **user, 
 	return 0;
 }
 
-static int __check_privilege(const char *client, const char *session, const char *user, const char *privilege)
+static int __check_privilege(struct caller_info *info, const char *privilege)
 {
 	int ret;
 	char buf[MAX_LOCAL_BUFSZ];
 
-	ret = cynara_check(r_cynara, client, session, user, privilege);
+	ret = cynara_check(r_cynara, info->client, info->session, info->user, privilege);
 	switch (ret) {
 	case CYNARA_API_ACCESS_ALLOWED:
-		_D("%s(%s) from user %s privilege %s allowed.", client, session, user, privilege);
+		_D("%s(%s) from user %s privilege %s allowed.", info->client, info->session, info->user, privilege);
 		ret = 0;
 		break;
 	case CYNARA_API_ACCESS_DENIED:
-		_E("%s(%s) from user %s privilege %s denied.", client, session, user, privilege);
+		_E("%s(%s) from user %s privilege %s denied.", info->client, info->session, info->user, privilege);
 		ret = -1;
 		break;
 	default:
@@ -125,56 +136,105 @@ static int __check_privilege(const char *client, const char *session, const char
 	return ret;
 }
 
-int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt)
+static int __simple_checker(struct caller_info *info, const app_pkt_t *pkt, void *data)
 {
-	int r;
+	return __check_privilege(info, (const char *)data);
+}
+
+static int __appcontrol_checker(struct caller_info *info, const app_pkt_t *pkt, void *data)
+{
+	bundle *appcontrol;
+	const char *op_priv;
+	char *op;
 	int ret;
-	char *client = NULL;
-	char *session = NULL;
-	char *user = NULL;
-	bundle *kb = NULL;
-	const char *privilege;
-	char *operation;
 
-	privilege = __convert_cmd_to_privilege(pkt->cmd);
-	if (privilege == NULL)
-		return 0;
+	ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
 
-	r = _get_caller_info_from_cynara(sockfd, &client, &user, &session);
-	if (r < 0) {
-		ret = -1;
-		goto end;
-	}
-
-	ret = __check_privilege(client, session, user, privilege);
 	if (ret < 0)
+		return ret;
+
+	appcontrol = bundle_decode(pkt->data, pkt->len);
+	if (appcontrol == NULL)
 		goto end;
 
-	if (pkt->cmd == APP_START || pkt->cmd == APP_OPEN ||
-			pkt->cmd == APP_RESUME || pkt->cmd == APP_START_RES) {
-		kb = bundle_decode(pkt->data, pkt->len);
-		if (kb == NULL)
-			goto end;
-		if (bundle_get_str(kb, AUL_SVC_K_OPERATION, &operation))
-			goto end;
-		privilege = __convert_operation_to_privilege(operation);
-		if (privilege == NULL)
-			goto end;
-		ret = __check_privilege(client, session, user, privilege);
-	}
+	bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
+	if (op == NULL)
+		goto end;
+
+	op_priv = __convert_operation_to_privilege(op);
+	if (op_priv == NULL)
+		goto end;
+
+	ret = __check_privilege(info, op_priv);
 
 end:
-	if (user)
-		free(user);
-	if (session)
-		free(session);
-	if (client)
-		free(client);
-	if (kb)
-		bundle_free(kb);
+	if (appcontrol)
+		bundle_free(appcontrol);
 
 	return ret;
 }
+
+static struct checker_info checker_table[] = {
+	{APP_OPEN, __appcontrol_checker, NULL},
+	{APP_RESUME, __appcontrol_checker, NULL},
+	{APP_START, __appcontrol_checker, NULL},
+	{APP_START_RES, __appcontrol_checker, NULL},
+	{APP_TERM_BY_PID_WITHOUT_RESTART, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
+	{APP_TERM_BY_PID_ASYNC, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
+	{APP_TERM_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
+	{APP_KILL_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
+	{APP_TERM_BGAPP_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL_BGAPP},
+};
+
+static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
+
+static int __check_privilege_by_checker(int cmd, struct caller_info *info, const app_pkt_t *pkt)
+{
+	int i = 0;
+
+	for (i = 0; i < checker_len; i++) {
+		if (checker_table[i].cmd == cmd)
+			return checker_table[i].checker(info, pkt, checker_table[i].data);
+	}
+
+	return 0;
+}
+
+static int __check_command(int cmd)
+{
+	int i = 0;
+
+	for (i = 0; i < checker_len; i++) {
+		if (checker_table[i].cmd == cmd)
+			return 1;
+	}
+
+	return 0;
+}
+
+int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt)
+{
+	int r;
+	struct caller_info info = {NULL, NULL, NULL};
+
+	if (!__check_command(pkt->cmd))
+		return 0;
+
+	r = __get_caller_info_from_cynara(sockfd, &info);
+	if (r < 0) {
+		_E("failed to get caller info");
+		__destroy_caller_info(&info);
+		return -1;
+	}
+
+	r = __check_privilege_by_checker(pkt->cmd, &info, pkt);
+
+	__destroy_caller_info(&info);
+
+	return r;
+}
+
+
 
 int init_cynara(void)
 {
@@ -193,5 +253,6 @@ void finish_cynara(void)
 {
 	if (r_cynara)
 		cynara_finish(r_cynara);
+
 	r_cynara = NULL;
 }
