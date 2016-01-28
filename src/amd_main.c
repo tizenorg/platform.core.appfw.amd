@@ -31,6 +31,8 @@
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
+#include <Ecore.h>
+#include <Ecore_File.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -271,7 +273,10 @@ static int __syspopup_dbus_signal_handler_init(void)
 static int __init(void)
 {
 	int r;
-	bundle *b = NULL;
+	bundle *b;
+
+	ecore_init();
+	ecore_file_init();
 
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");
@@ -308,16 +313,14 @@ static int __init(void)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
 	b = bundle_create();
-
 	if (b == NULL) {
 		_E("failed to make a bundle");
 		return -1;
 	}
 
 	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
-	if (r != 0) {
+	if (r != 0)
 		 _E("failed to make default slots");
-	}
 
 	bundle_free(b);
 	return 0;
@@ -342,8 +345,6 @@ static void __ready(void)
 
 int main(int argc, char *argv[])
 {
-	GMainLoop *mainloop = NULL;
-
 	if (__init() != 0) {
 		_E("AMD Initialization failed!\n");
 		return -1;
@@ -351,13 +352,12 @@ int main(int argc, char *argv[])
 
 	__ready();
 
-	mainloop = g_main_loop_new(NULL, FALSE);
-	if (!mainloop) {
-		_E("failed to create glib main loop");
-		return -1;
-	}
-	g_main_loop_run(mainloop);
+	ecore_main_loop_glib_integrate();
+	ecore_main_loop_begin();
 
 	app_com_broker_fini();
+	ecore_file_shutdown();
+	ecore_shutdown();
+
 	return 0;
 }
