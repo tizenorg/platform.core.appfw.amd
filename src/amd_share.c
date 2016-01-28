@@ -252,7 +252,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 				paths[cnt++] = g_strdup(path_array[i]);
 		}
 
-		if (cnt > 0){
+		if (cnt > 0) {
 			paths[cnt] = NULL;
 			paths[cnt + 1] = NULL;
 			valid = true;
@@ -291,9 +291,11 @@ finally:
 			_E("security_server_perm_apply_sharing() returned an error %d",r);
 			_temporary_permission_destroy(h);
 			return NULL;
-		} else {*/
+		} else {
 			return h;
-		//}
+		}
+		*/
+		return h;
 	}
 
 	g_strfreev(paths);
@@ -329,11 +331,13 @@ int _temporary_permission_destroy(shared_info_h handle)
 			pkgid = appinfo_get_value(ai, AIT_PKGID);
 
 			_D("revoke permission %s : %s", owner_pkgid, pkgid);
-			//int r = security_server_perm_drop_sharing(NULL, (const char**)handle->shared_info->paths,
-			//		owner_pkgid, pkgid);
+			/*
+			int r = security_server_perm_drop_sharing(NULL, (const char**)handle->shared_info->paths,
+					owner_pkgid, pkgid);
 
-			//if (r != SECURITY_SERVER_API_SUCCESS)
-			//	_E("revoke error %d",r);
+			if (r != SECURITY_SERVER_API_SUCCESS)
+				_E("revoke error %d",r);
+			*/
 
 			free(handle->shared_info->owner_appid);
 			g_strfreev(handle->shared_info->paths);
@@ -370,11 +374,13 @@ int _temporary_permission_drop(int pid, uid_t uid)
 		pkgid = appinfo_get_value(ai, AIT_PKGID);
 
 		_D("revoke permission %s : %s", owner_pkgid, pkgid);
-		//int r = security_server_perm_drop_sharing(NULL, (const char**)sit->paths,
-		//		owner_pkgid, pkgid);
+		/*
+		int r = security_server_perm_drop_sharing(NULL, (const char**)sit->paths,
+				owner_pkgid, pkgid);
 
-		//if (r != SECURITY_SERVER_API_SUCCESS)
-		//	_E("revoke error %d",r);
+		if (r != SECURITY_SERVER_API_SUCCESS)
+			_E("revoke error %d",r);
+		*/
 
 		list = g_list_next(list);
 	}

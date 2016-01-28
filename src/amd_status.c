@@ -27,6 +27,8 @@
 #include <time.h>
 #include <aul_sock.h>
 #include <aul_proc.h>
+#include <Ecore.h>
+#include <Ecore_File.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
@@ -869,27 +871,22 @@ static void __vconf_cb(keynode_t *key, void *data)
 	const char *name;
 
 	name = vconf_keynode_get_name(key);
-	if (name == NULL) {
-		return;
-	} else if (strcmp(name, VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS) == 0) {
+	if (name && strcmp(name, VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS) == 0) {
 		limit_bg_uiapps = vconf_keynode_get_int(key);
 		if (limit_bg_uiapps > 0)
 			__check_running_uiapp_list();
 	}
 }
 
-static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
-		GFile *other_file, GFileMonitorEvent event_type,
-		gpointer user_data)
+static void __socket_monitor_cb(void *data, Ecore_File_Monitor *monitor,
+			Ecore_File_Event event_type, const char *path)
 {
-	char *path;
 	char *p;
 	int pid = 0;
 
-	if (event_type != G_FILE_MONITOR_EVENT_CREATED)
+	if (event_type != ECORE_FILE_EVENT_CREATED_FILE)
 		return;
 
-	path = g_file_get_path(file);
 	p = strrchr(path, '/');
 	if (p != NULL)
 		pid = atoi(p + 1);
@@ -897,30 +894,21 @@ static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
 	if (pid < 1)
 		return;
 
+	_D("socket path: %s", path);
 	_request_reply_for_pending_request(pid);
-
-	g_free(path);
 }
 
 int _status_init(void)
 {
 	char buf[PATH_MAX];
-	GFile *file;
-	GFileMonitor *monitor;
-	GError *err = NULL;
+	Ecore_File_Monitor *monitor;
 
 	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
-	file = g_file_new_for_path(buf);
-	if (file == NULL)
+	monitor = ecore_file_monitor_add(buf, __socket_monitor_cb, NULL);
+	if (monitor == NULL) {
+		_E("Failed to add file monitor");
 		return -1;
-
-	monitor = g_file_monitor_directory(file, G_FILE_MONITOR_NONE,
-			NULL, &err);
-	if (monitor == NULL)
-		return -1;
-
-	g_signal_connect(monitor, "changed", G_CALLBACK(__socket_monitor_cb),
-			NULL);
+	}
 
 	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_uiapps))
 		limit_bg_uiapps = 0;
