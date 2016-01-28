@@ -31,6 +31,7 @@
 #define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
 #define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
 #define PRIVILEGE_CALL "http://tizen.org/privilege/call"
+#define PRIVILEGE_APPMANAGER_ADMIN "http://tizen.org/privilege/packagemanager.info"
 
 static cynara *r_cynara;
 
@@ -184,6 +185,7 @@ static struct checker_info checker_table[] = {
 	{APP_TERM_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
 	{APP_KILL_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
 	{APP_TERM_BGAPP_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL_BGAPP},
+	{APP_ALL_RUNNING_INFO, __simple_checker, PRIVILEGE_APPMANAGER_ADMIN},
 };
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
