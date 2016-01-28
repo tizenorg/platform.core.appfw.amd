@@ -271,15 +271,14 @@ static void __remove_client(struct endpoint_info *info, int cpid)
 	client_head = info->clients;
 	while (client_head) {
 		client = (struct client_info *)client_head->data;
+		client_head = client_head->next;
 		if (client && client->pid == cpid) {
-			info->clients = g_list_remove_link(info->clients, client_head);
+			info->clients = g_list_remove(info->clients, client);
 			if (client->filter)
 				g_free(client->filter);
 
 			g_free(client);
 		}
-
-		client_head = client_head->next;
 	}
 
 	if (info->clients == NULL) {
