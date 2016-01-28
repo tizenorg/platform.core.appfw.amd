@@ -944,7 +944,13 @@ static int __dispatch_app_term(int clifd, const app_pkt_t *pkt, struct ucred *cr
 
 static int __dispatch_app_running_info(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-	_status_send_running_appinfo(clifd, cr->uid);
+	_status_send_running_appinfo(clifd, pkt->cmd, cr->uid);
+	return 0;
+}
+
+static int __dispatch_app_all_running_info(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+{
+	_status_send_running_appinfo(clifd, pkt->cmd, cr->uid);
 	return 0;
 }
 
@@ -1326,6 +1332,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_SEND] = __dispatch_app_com_send,
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
+	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 };
 
 static void __free_request(gpointer data)

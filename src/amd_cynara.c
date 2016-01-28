@@ -31,6 +31,7 @@
 #define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
 #define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
 #define PRIVILEGE_CALL "http://tizen.org/privilege/call"
+#define PRIVILEGE_APPMANAGER_ADMIN "http://tizen.org/privilege/packagemanager.info"
 
 static cynara *r_cynara;
 
@@ -49,6 +50,8 @@ static const char *__convert_cmd_to_privilege(int cmd)
 		return PRIVILEGE_APPMANAGER_KILL;
 	case APP_TERM_BGAPP_BY_PID:
 		return PRIVILEGE_APPMANAGER_KILL_BGAPP;
+	case APP_ALL_RUNNING_INFO:
+		return PRIVILEGE_APPMANAGER_ADMIN;
 	default:
 		return NULL;
 	}
