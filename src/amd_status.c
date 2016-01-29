@@ -27,6 +27,7 @@
 #include <time.h>
 #include <aul_sock.h>
 #include <aul_proc.h>
+#include <sys/inotify.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
@@ -36,6 +37,9 @@
 #include "amd_util.h"
 #include "menu_db_util.h"
 #include "amd_app_group.h"
+
+#define EVENT_SIZE (sizeof(struct inotify_event))
+#define INOTIFY_BUF (1024 * (EVENT_SIZE + 16))
 
 typedef struct _pkg_status_info_t {
 	char *pkgid;
@@ -878,49 +882,124 @@ static void __vconf_cb(keynode_t *key, void *data)
 	}
 }
 
-static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
-		GFile *other_file, GFileMonitorEvent event_type,
-		gpointer user_data)
+static gboolean __glib_check(GSource *src)
 {
-	char *path;
+	GSList *fd_list;
+	GPollFD *tmp;
+
+	fd_list = src->poll_fds;
+	do {
+		tmp = (GPollFD *)fd_list->data;
+		if ((tmp->revents & (G_IO_IN | G_IO_PRI)))
+			return TRUE;
+		fd_list = fd_list->next;
+	} while (fd_list);
+
+	return FALSE;
+}
+
+static gboolean __glib_dispatch(GSource *src,
+		GSourceFunc callback, gpointer data)
+{
+	callback(data);
+	return TRUE;
+}
+
+static gboolean __glib_prepare(GSource *src, gint *timeout)
+{
+	return FALSE;
+}
+
+static GSourceFuncs funcs = {
+	.prepare = __glib_prepare,
+	.check = __glib_check,
+	.dispatch = __glib_dispatch,
+	.finalize = NULL
+};
+
+static gboolean __socket_monitor_cb(gpointer data)
+{
+	char buf[INOTIFY_BUF];
+	ssize_t len = 0;
+	int i = 0;
+	struct inotify_event *event;
 	char *p;
-	int pid = 0;
+	int pid;
+	int fd = (int)(intptr_t)data;
 
-	if (event_type != G_FILE_MONITOR_EVENT_CREATED)
-		return;
+	len = read(fd, buf, sizeof(buf));
+	if (len < 0) {
+		_E("Failed to read");
+		return TRUE;
+	}
 
-	path = g_file_get_path(file);
-	p = strrchr(path, '/');
-	if (p != NULL)
-		pid = atoi(p + 1);
+	while (i < len) {
+		pid = -1;
+		event = (struct inotify_event *)&buf[i];
+		if (event->len) {
+			p = event->name;
+			if (p && isdigit(*p)) {
+				pid = atoi(p);
+				if (pid > 1) {
+					_D("socket: %d", pid);
+					_request_reply_for_pending_request(pid);
+				}
+			}
+		}
+		i += sizeof(struct inotify_event) + event->len;
+	}
 
-	if (pid < 1)
-		return;
-
-	_request_reply_for_pending_request(pid);
-
-	g_free(path);
+	return TRUE;
 }
 
 int _status_init(void)
 {
 	char buf[PATH_MAX];
-	GFile *file;
-	GFileMonitor *monitor;
-	GError *err = NULL;
+	int fd;
+	int wd;
+	GPollFD *gpollfd;
+	GSource *src;
+
+	fd = inotify_init();
+	if (fd < 0) {
+		_E("inotify_init() is failed.");
+		return -1;
+	}
+
+	src = g_source_new(&funcs, sizeof(GSource));
+	if (src == NULL) {
+		_E("g_source_new() is failed.");
+		close(fd);
+		return -1;
+	}
+
+	gpollfd = (GPollFD *)g_malloc(sizeof(GPollFD));
+	if (gpollfd == NULL) {
+		_E("out of memory");
+		g_source_unref(src);
+		close(fd);
+		return -1;
+	}
+
+	gpollfd->events = G_IO_IN;
+	gpollfd->fd = fd;
 
 	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
-	file = g_file_new_for_path(buf);
-	if (file == NULL)
+	wd = inotify_add_watch(fd, buf, IN_CREATE);
+	if (wd < 0) {
+		_E("inotify_add_watch() is failed.");
+		g_free(gpollfd);
+		g_source_unref(src);
+		inotify_rm_watch(fd, wd);
+		close(fd);
 		return -1;
+	}
 
-	monitor = g_file_monitor_directory(file, G_FILE_MONITOR_NONE,
-			NULL, &err);
-	if (monitor == NULL)
-		return -1;
-
-	g_signal_connect(monitor, "changed", G_CALLBACK(__socket_monitor_cb),
-			NULL);
+	g_source_add_poll(src, gpollfd);
+	g_source_set_callback(src, (GSourceFunc)__socket_monitor_cb,
+			(gpointer)(intptr_t)fd, NULL);
+	g_source_set_priority(src, G_PRIORITY_DEFAULT);
+	g_source_attach(src, NULL);
 
 	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_uiapps))
 		limit_bg_uiapps = 0;
