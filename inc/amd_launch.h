@@ -19,18 +19,19 @@
 #include <stdbool.h>
 
 #include <bundle.h>
+#include "amd_request.h"
 #include "amd_util.h"
 #include "amd_appinfo.h"
 
 int _send_to_sigkill(int pid);
-int _resume_app(int pid, int clifd);
-int _pause_app(int pid, int clifd);
-int _term_app(int pid, int clifd);
-int _term_req_app(int pid, int clifd);
-int _term_bgapp(int pid, int clifd);
+int _resume_app(int pid, request_h req);
+int _pause_app(int pid, request_h req);
+int _term_app(int pid, request_h req);
+int _term_req_app(int pid, request_h req);
+int _term_bgapp(int pid, request_h req);
 int _term_sub_app(int pid);
-int _fake_launch_app(int cmd, int pid, bundle * kb, int clifd);
-int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid, uid_t caller_uid, int fd, bool *pend);
+int _fake_launch_app(int cmd, int pid, bundle * kb, request_h req);
+int _start_app(const char* appid, bundle* kb, uid_t caller_uid, request_h req, bool *pend);
 int _start_app_local(uid_t uid, const char *appid);
 int _start_app_local_with_bundle(uid_t uid, const char *appid, bundle *kb);
 int _get_pid_of_last_launched_ui_app();

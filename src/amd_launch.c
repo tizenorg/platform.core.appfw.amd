@@ -94,8 +94,8 @@ struct fgmgr {
 	int pid;
 };
 
-static void __set_reply_handler(int fd, int pid, int clifd, int cmd);
-static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd);
+static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
+static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req);
 
 static void __set_stime(bundle *kb)
 {
@@ -110,10 +110,21 @@ static void __set_stime(bundle *kb)
 int _start_app_local_with_bundle(uid_t uid, const char *appid, bundle *kb)
 {
 	bool dummy;
+	request_h req;
+	int r = 0;
 
 	__set_stime(kb);
 	bundle_add(kb, AUL_K_APPID, appid);
-	return  _start_app(appid, kb, APP_START, getpid(), uid, -1, &dummy);
+	req = _request_create_local(APP_START, uid, getpid());
+	if (req == NULL) {
+		_E("out of memory");
+		return -1;
+	}
+
+	r = _start_app(appid, kb, uid, req, &dummy);
+	_request_free_local(req);
+
+	return r;
 }
 
 int _start_app_local(uid_t uid, const char *appid)
@@ -148,7 +159,7 @@ int _send_to_sigkill(int pid)
 	return 0;
 }
 
-int _resume_app(int pid, int clifd)
+int _resume_app(int pid, request_h req)
 {
 	int dummy;
 	int ret;
@@ -163,17 +174,17 @@ int _resume_app(int pid, int clifd)
 			_send_to_sigkill(pid);
 			ret = -1;
 		}
-		_send_result_to_client(clifd, ret);
+		_request_send_result(req, ret);
 	}
 	_D("resume done\n");
 
 	if (ret > 0)
-		__set_reply_handler(ret, pid, clifd, APP_RESUME_BY_PID);
+		__set_reply_handler(ret, pid, req, APP_RESUME_BY_PID);
 
 	return ret;
 }
 
-int _pause_app(int pid, int clifd)
+int _pause_app(int pid, request_h req)
 {
 	int dummy;
 	int ret;
@@ -188,12 +199,12 @@ int _pause_app(int pid, int clifd)
 			_send_to_sigkill(pid);
 			ret = -1;
 		}
-		close(clifd);
+		_request_send_result(req, ret);
 	}
 	_D("pause done");
 
 	if (ret > 0)
-		__set_reply_handler(ret, pid, clifd, APP_PAUSE_BY_PID);
+		__set_reply_handler(ret, pid, req, APP_PAUSE_BY_PID);
 
 	return ret;
 }
@@ -215,7 +226,7 @@ int _term_sub_app(int pid)
 	return 0;
 }
 
-int _term_app(int pid, int clifd)
+int _term_app(int pid, request_h req)
 {
 	int dummy;
 	int ret;
@@ -242,19 +253,19 @@ int _term_app(int pid, int clifd)
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
-			_send_result_to_client(clifd, -1);
+			_request_send_result(req, -1);
 			return -1;
 		}
-		_send_result_to_client(clifd, 0);
+		_request_send_result(req, 0);
 	}
 	_D("term done\n");
 	if (ret > 0)
-		__set_reply_handler(ret, pid, clifd, APP_TERM_BY_PID);
+		__set_reply_handler(ret, pid, req, APP_TERM_BY_PID);
 
 	return 0;
 }
 
-int _term_req_app(int pid, int clifd)
+int _term_req_app(int pid, request_h req)
 {
 	int dummy;
 	int ret;
@@ -262,16 +273,16 @@ int _term_req_app(int pid, int clifd)
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_REQ_BY_PID,
 			(unsigned char *)&dummy, 0, AUL_SOCK_NONE)) < 0) {
 		_D("terminate req send error");
-		_send_result_to_client(clifd, ret);
+		_request_send_result(req, ret);
 	}
 
 	if (ret > 0)
-		__set_reply_handler(ret, pid, clifd, APP_TERM_REQ_BY_PID);
+		__set_reply_handler(ret, pid, req, APP_TERM_REQ_BY_PID);
 
 	return 0;
 }
 
-int _term_bgapp(int pid, int clifd)
+int _term_bgapp(int pid, request_h req)
 {
 	int dummy;
 	int fd;
@@ -300,34 +311,30 @@ int _term_bgapp(int pid, int clifd)
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d", pid);
-			_send_result_to_client(clifd, -1);
+			_request_send_result(req, -1);
 			return -1;
 		}
-		_send_result_to_client(clifd, 0);
+		_request_send_result(req, 0);
 	}
 	_D("term_bgapp done");
 	if (fd > 0)
-		__set_reply_handler(fd, pid, clifd, APP_TERM_BGAPP_BY_PID);
+		__set_reply_handler(fd, pid, req, APP_TERM_BGAPP_BY_PID);
 
 	return 0;
 }
 
-int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
+int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 {
-	int datalen;
 	int ret;
-	bundle_raw *kb_data;
 
-	bundle_encode(kb, &kb_data, &datalen);
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data,
-			datalen, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_bundle_async(pid, getuid(), cmd, kb,
+			 AUL_SOCK_NONE)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
-		_send_result_to_client(clifd, ret);
+		_request_send_result(req, ret);
 	}
-	free(kb_data);
 
 	if (ret > 0)
-		__set_reply_handler(ret, pid, clifd, cmd);
+		__set_reply_handler(ret, pid, req, cmd);
 
 	return ret;
 }
@@ -495,7 +502,7 @@ static gboolean __recv_timeout_handler(gpointer data)
 	return FALSE;
 }
 
-static void __set_reply_handler(int fd, int pid, int clifd, int cmd)
+static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 {
 	GPollFD *gpollfd;
 	GSource *src;
@@ -515,7 +522,7 @@ static void __set_reply_handler(int fd, int pid, int clifd, int cmd)
 		return;
 	}
 
-	r_info->clifd = clifd;
+	r_info->clifd = _request_remove_fd(req);
 	r_info->pid = pid;
 	r_info->src = src;
 	r_info->gpollfd = gpollfd;
@@ -527,10 +534,10 @@ static void __set_reply_handler(int fd, int pid, int clifd, int cmd)
 	g_source_set_priority(src, G_PRIORITY_DEFAULT);
 	g_source_attach(src, NULL);
 
-	_D("listen fd : %d, send fd : %d", fd, clifd);
+	_D("listen fd : %d, send fd : %d", fd, r_info->clifd);
 }
 
-static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd)
+static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req)
 {
 	int ret;
 
@@ -538,7 +545,7 @@ static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd)
 	case APP_OPEN:
 	case APP_RESUME:
 		_D("resume app's pid : %d\n", pid);
-		if ((ret = _resume_app(pid, clifd)) < 0)
+		if ((ret = _resume_app(pid, req)) < 0)
 			_E("__resume_app failed. error code = %d", ret);
 		_D("resume app done");
 		break;
@@ -546,7 +553,7 @@ static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd)
 	case APP_START:
 	case APP_START_RES:
 		_D("fake launch pid : %d\n", pid);
-		if ((ret = _fake_launch_app(cmd, pid, kb, clifd)) < 0)
+		if ((ret = _fake_launch_app(cmd, pid, kb, req)) < 0)
 			_E("fake_launch failed. error code = %d", ret);
 		_D("fake launch done");
 		break;
@@ -1000,8 +1007,8 @@ int _get_pid_of_last_launched_ui_app()
 	return __pid_of_last_launched_ui_app;
 }
 
-int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
-		uid_t caller_uid, int fd, bool *pending)
+int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
+				request_h req, bool *pending)
 {
 	int ret;
 	const struct appinfo *ai;
@@ -1027,6 +1034,8 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	const char *pad_type = LAUNCHPAD_PROCESS_POOL_SOCK;
 	bool is_subapp = false;
 	shared_info_h share_handle;
+	int cmd = _request_get_cmd(req);
+	int caller_pid = _request_get_pid(req);
 
 	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
@@ -1051,19 +1060,19 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	ai = appinfo_find(caller_uid, appid);
 	if (ai == NULL) {
 		_D("cannot find appinfo of %s", appid);
-		_send_result_to_client(fd, -ENOENT);
+		_request_send_result(req, -ENOENT);
 		return -1;
 	}
 
 	status = appinfo_get_value(ai, AIT_STATUS);
 	if (status == NULL) {
-		_send_result_to_client(fd, -1);
+		_request_send_result(req, -1);
 		return -1;
 	}
 
 	if (!strcmp(status, "blocking")) {
 		_D("blocking");
-		_send_result_to_client(fd, -EREJECTED);
+		_request_send_result(req, -EREJECTED);
 		return -EREJECTED;
 	}
 
@@ -1073,7 +1082,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 	process_pool = appinfo_get_value(ai, AIT_POOL);
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 
-	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, fd)) != 0)
+	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0)
 		return ret;
 
 	multiple = appinfo_get_value(ai, AIT_MULTI);
@@ -1086,7 +1095,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		pid = __get_pid_for_app_group(appid, pid, caller_uid, kb,
 				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
-			_send_result_to_client(fd, pid);
+			_request_send_result(req, pid);
 			return pid;
 		}
 	} else if (component_type
@@ -1095,7 +1104,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 			ret = __check_execute_permission(pkg_id,
 					caller_appid, caller_uid, kb);
 			if (ret != 0) {
-				_send_result_to_client(fd, ret);
+				_request_send_result(req, ret);
 				return ret;
 			}
 		}
@@ -1116,12 +1125,12 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 		if (caller_pid == pid) {
 			SECURE_LOGD("caller process & callee process is same.[%s:%d]", appid, pid);
 			pid = -ELOCALLAUNCH_ID;
-			_send_result_to_client(fd, pid);
+			_request_send_result(req, pid);
 		} else {
 			aul_send_app_resume_request_signal(pid, appid, pkg_id, component_type);
-			if ((ret = __nofork_processing(cmd, pid, kb, fd)) < 0) {
+			if ((ret = __nofork_processing(cmd, pid, kb, req)) < 0) {
 				pid = ret;
-				_send_result_to_client(fd, pid);
+				_request_send_result(req, pid);
 			}
 		}
 	} else {
