@@ -51,6 +51,7 @@
 #include "amd_cynara.h"
 #include "amd_socket.h"
 #include "amd_share.h"
+#include "amd_app_com.h"
 
 #define DAC_ACTIVATE
 
@@ -96,6 +97,7 @@ struct fgmgr {
 
 static void __set_reply_handler(int fd, int pid, int clifd, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle * kb, int clifd);
+extern int _app_dead_handler(int pid, void *data);
 
 static void __set_stime(bundle *kb)
 {
@@ -1129,6 +1131,7 @@ int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
 			ret = kill(pid, SIGKILL);
 			if (ret == -1)
 				_W("send SIGKILL: %s", strerror(errno));
+			_app_dead_handler(pid, "SIGKILL");
 		}
 
 		hwacc = appinfo_get_value(ai, AIT_HWACC);
