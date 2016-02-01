@@ -16,7 +16,12 @@
 
 #pragma once
 
+typedef struct _request_s request_s;
+typedef request_s* request_h;
+
 int _request_init(void);
+int _request_send_result(request_h req, int res);
+int _request_send_raw(request_h req, int cmd, unsigned char *data, int len);
 int _request_reply_for_pending_request(int pid);
 int _request_flush_pending_request(int pid);
 

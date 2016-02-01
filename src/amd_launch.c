@@ -314,17 +314,13 @@ int _term_bgapp(int pid, int clifd)
 
 int _fake_launch_app(int cmd, int pid, bundle *kb, int clifd)
 {
-	int datalen;
 	int ret;
-	bundle_raw *kb_data;
 
-	bundle_encode(kb, &kb_data, &datalen);
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data,
-			datalen, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_bundle_async(pid, getuid(), cmd, kb,
+			 AUL_SOCK_NONE)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
 		_send_result_to_client(clifd, ret);
 	}
-	free(kb_data);
 
 	if (ret > 0)
 		__set_reply_handler(ret, pid, clifd, cmd);

@@ -162,8 +162,6 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
 {
 	int fd;
-	int datalen;
-	bundle_raw *kb_data;
 	int len;
 	int res;
 
@@ -171,11 +169,8 @@ int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
 	if (fd < 0)
 		return -1;
 
-	bundle_encode(kb, &kb_data, &datalen);
-	res = aul_sock_send_raw_async_with_fd(fd, cmd, kb_data, datalen,
-						AUL_SOCK_NONE);
+	res = aul_sock_send_bundle_async_with_fd(fd, cmd, kb, AUL_SOCK_NONE);
 	if (res < 0) {
-		free(kb_data);
 		close(fd);
 		return res;
 	}
@@ -195,7 +190,6 @@ retry_recv:
 		}
 	}
 
-	free(kb_data);
 	close(fd);
 
 	return res;
