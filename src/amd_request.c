@@ -68,10 +68,16 @@ struct pending_item {
 	GList *pending_list;
 };
 
-struct request {
+struct _request_s {
+	int cmd;
 	int clifd;
-	app_pkt_t *pkt;
-	struct ucred cr;
+	pid_t pid;
+	uid_t uid;
+	gid_t gid;
+	bundle *kb;
+	int len;
+	int opt;
+	unsigned char data[1];
 };
 
 typedef struct _rua_stat_pkt_t {
@@ -84,7 +90,7 @@ typedef struct _rua_stat_pkt_t {
 	int len;
 } rua_stat_pkt_t;
 
-typedef int (*app_cmd_dispatch_func)(int clifd, const app_pkt_t *pkt, struct ucred *cr);
+typedef int (*app_cmd_dispatch_func)(request_h req);
 static gboolean __timeout_pending_item(gpointer user_data);
 
 static int __send_message(int sock, const struct iovec *vec, int vec_size, const int *desc, int nr_desc)
@@ -165,51 +171,7 @@ end:
 	return pid;
 }
 
-static int __forward_cmd(int cmd, bundle *kb, int cr_pid, uid_t uid)
-{
-	int pid;
-	int pgid;
-	char tmp_pid[MAX_PID_STR_BUFSZ];
-	int datalen;
-	bundle_raw *kb_data;
-	int res;
-	shared_info_h si = NULL;
-	const char *appid;
-	int ret;
-
-	if ((pid = __get_caller_pid(kb)) < 0)
-			return AUL_R_ERROR;
-
-	pgid = getpgid(cr_pid);
-	if (pgid > 0) {
-		snprintf(tmp_pid, MAX_PID_STR_BUFSZ, "%d", pgid);
-		bundle_del(kb, AUL_K_CALLEE_PID);
-		bundle_add(kb, AUL_K_CALLEE_PID, tmp_pid);
-	}
-
-	appid = _status_app_get_appid_bypid(pgid);
-	if (appid != NULL) {
-		si = _temporary_permission_create(pgid, appid, kb, uid);
-		if (si == NULL)
-			_D("No sharable path : %d %s", pgid, appid);
-	}
-
-	bundle_encode(kb, &kb_data, &datalen);
-	if ((res = aul_sock_send_raw_async(pid, getuid(), cmd, kb_data, datalen, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0)
-		res = AUL_R_ERROR;
-
-	free(kb_data);
-	if (si) {
-		if (res >= 0 && (ret = _temporary_permission_apply(pid, uid, si)) != 0)
-			_D("Couldn't apply temporary permission: %d", ret);
-		_temporary_permission_destroy(si);
-	}
-
-	return res;
-}
-
-static int __app_process_by_pid(int cmd,
-	const char *pkg_name, struct ucred *cr, int clifd)
+static int __app_process_by_pid(request_h req, const char *pid_str)
 {
 	int pid;
 	int ret;
@@ -219,10 +181,10 @@ static int __app_process_by_pid(int cmd,
 	const char *type = NULL;
 	const struct appinfo *ai = NULL;
 
-	if (pkg_name == NULL)
+	if (pid_str == NULL)
 		return -1;
 
-	pid = atoi(pkg_name);
+	pid = atoi(pid_str);
 	if (pid <= 1) {
 		_E("invalid pid");
 		return -1;
@@ -231,54 +193,54 @@ static int __app_process_by_pid(int cmd,
 	appid = _status_app_get_appid_bypid(pid);
 	if (appid == NULL) {
 		_E("pid %d is not an app", pid);
-		_send_result_to_client(clifd, -1);
+		_request_send_result(req, -1);
 		return -1;
 	}
 
-	ai = appinfo_find(cr->uid, appid);
+	ai = appinfo_find(req->uid, appid);
 	if (ai) {
 		pkgid = appinfo_get_value(ai, AIT_PKGID);
 		type = appinfo_get_value(ai, AIT_COMPTYPE);
 	}
 
-	if (ai && (cmd == APP_RESUME_BY_PID || cmd == APP_PAUSE_BY_PID))
+	if (ai && (req->cmd == APP_RESUME_BY_PID || req->cmd == APP_PAUSE_BY_PID))
 		aul_send_app_resume_request_signal(pid, appid, pkgid, type);
 	else
 		aul_send_app_terminate_request_signal(pid, appid, pkgid, type);
 
-	switch (cmd) {
+	switch (req->cmd) {
 	case APP_RESUME_BY_PID:
-		ret = _resume_app(pid, clifd);
+		ret = _resume_app(pid, req);
 		break;
 	case APP_TERM_BY_PID:
 	case APP_TERM_BY_PID_WITHOUT_RESTART:
-		ret = _term_app(pid, clifd);
+		ret = _term_app(pid, req);
 		break;
 	case APP_TERM_BGAPP_BY_PID:
-		ret = _term_bgapp(pid, clifd);
+		ret = _term_bgapp(pid, req);
 		break;
 	case APP_KILL_BY_PID:
 		if ((ret = _send_to_sigkill(pid)) < 0)
 			_E("fail to killing - %d\n", pid);
-		_status_update_app_info_list(pid, STATUS_DYING, FALSE, cr->uid);
-		_send_result_to_client(clifd, ret);
+		_status_update_app_info_list(pid, STATUS_DYING, FALSE, req->uid);
+		_request_send_result(req, ret);
 		break;
 	case APP_TERM_REQ_BY_PID:
-		ret = _term_req_app(pid, clifd);
+		ret = _term_req_app(pid, req);
 		break;
 	case APP_TERM_BY_PID_ASYNC:
-		ret = aul_sock_send_raw_async(pid, getuid(), cmd,
+		ret = aul_sock_send_raw_async(pid, getuid(), req->cmd,
 				(unsigned char *)&dummy, sizeof(int), AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY);
 		if (ret < 0)
 			_D("terminate req packet send error");
 
-		_send_result_to_client(clifd, ret);
+		_request_send_result(req, ret);
 		break;
 	case APP_PAUSE_BY_PID:
-		ret = _pause_app(pid, clifd);
+		ret = _pause_app(pid, req);
 		break;
 	default:
-		_E("unknown command: %d", cmd);
+		_E("unknown command: %d", req->cmd);
 		ret = -1;
 	}
 
@@ -367,7 +329,7 @@ static gboolean __add_history_handler(gpointer user_data)
 	return FALSE;
 }
 
-static int __add_rua_info(const app_pkt_t *pkt, bundle *kb, uid_t uid, const char *appid)
+static int __add_rua_info(request_h req, bundle *kb, const char *appid)
 {
 	const char *stat_caller = NULL;
 	const char *stat_tag = NULL;
@@ -379,18 +341,18 @@ static int __add_rua_info(const app_pkt_t *pkt, bundle *kb, uid_t uid, const cha
 		goto error;
 	}
 
-	if (pkt->len > 0) {
-		rua_stat_item->data = (char *)calloc(pkt->len, sizeof(char));
+	if (req->len > 0) {
+		rua_stat_item->data = (char *)calloc(req->len, sizeof(char));
 		if (rua_stat_item->data == NULL) {
 			_E("out of memory");
 			goto error;
 		}
-		memcpy(rua_stat_item->data, pkt->data, pkt->len);
+		memcpy(rua_stat_item->data, req->data, req->len);
 	}
 	stat_caller = bundle_get_val(kb, AUL_SVC_K_RUA_STAT_CALLER);
 	stat_tag = bundle_get_val(kb, AUL_SVC_K_RUA_STAT_TAG);
 
-	rua_stat_item->len = pkt->len;
+	rua_stat_item->len = req->len;
 	if (stat_caller != NULL) {
 		rua_stat_item->stat_caller = strdup(stat_caller);
 		if (rua_stat_item->stat_caller == NULL) {
@@ -407,7 +369,7 @@ static int __add_rua_info(const app_pkt_t *pkt, bundle *kb, uid_t uid, const cha
 		}
 
 	}
-	rua_stat_item->uid = uid;
+	rua_stat_item->uid = req->uid;
 	rua_stat_item->is_group_app = app_group_is_group_app(kb);
 	strncpy(rua_stat_item->appid, appid, 511);
 
@@ -427,15 +389,15 @@ error:
 	return -1;
 }
 
-static void __handle_agent_dead_signal(struct ucred *pcr)
+static void __handle_agent_dead_signal(uid_t uid)
 {
 	/* TODO: check the credentials from the caller: must be the amd agent */
 
-	_D("AGENT_DEAD_SIGNAL : %d", pcr->uid);
-	__agent_dead_handler(pcr->uid);
+	_D("AGENT_DEAD_SIGNAL : %d", uid);
+	__agent_dead_handler(uid);
 }
 
-static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_get_mp_socket_pair(request_h req)
 {
 	int handles[2] = {0, 0};
 	struct iovec vec[3];
@@ -447,13 +409,13 @@ static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 		_E("error create socket pair");
-		_send_result_to_client(clifd, -1);
+		_request_send_result(req, -1);
 		return -1;
 	}
 
 	if (handles[0] == -1) {
 		_E("error socket open");
-		_send_result_to_client(clifd, -1);
+		_request_send_result(req, -1);
 		return -1;
 	}
 
@@ -464,10 +426,10 @@ static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct
 	vec[0].iov_base = buffer;
 	vec[0].iov_len = strlen(buffer) + 1;
 
-	msglen = __send_message(clifd, vec, 1, handles, 2);
+	msglen = __send_message(req->clifd, vec, 1, handles, 2);
 	if (msglen < 0) {
 		_E("Error[%d]: while sending message\n", -msglen);
-		_send_result_to_client(clifd, -1);
+		_request_send_result(req, -1);
 		ret = -1;
 	}
 
@@ -477,7 +439,7 @@ static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct
 	return ret;
 }
 
-static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_get_dc_socket_pair(request_h req)
 {
 	const char *caller;
 	const char *callee;
@@ -489,9 +451,8 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 	int msglen = 0;
 	char buffer[1024];
 	struct sockaddr_un saddr;
-	bundle *kb;
+	bundle *kb = req->kb;
 
-	kb = bundle_decode(pkt->data, pkt->len);
 	caller = bundle_get_val(kb, AUL_K_CALLER_APPID);
 	callee = bundle_get_val(kb, AUL_K_CALLEE_APPID);
 	datacontrol_type = bundle_get_val(kb, "DATA_CONTOL_TYPE");
@@ -517,7 +478,7 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 			_E("error create socket pair");
-			_send_result_to_client(clifd, -1);
+			_request_send_result(req, -1);
 
 			if (handles)
 				free(handles);
@@ -526,7 +487,7 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 
 		if (handles[0] == -1) {
 			_E("error socket open");
-			_send_result_to_client(clifd, -1);
+			_request_send_result(req, -1);
 
 			if (handles)
 				free(handles);
@@ -549,10 +510,10 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 	if (datacontrol_type != NULL) {
 		_D("datacontrol_type : %s", datacontrol_type);
 		if (strcmp(datacontrol_type, "consumer") == 0) {
-			msglen = __send_message(clifd, vec, 1, &handles[0], 1);
+			msglen = __send_message(req->clifd, vec, 1, &handles[0], 1);
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
-				_send_result_to_client(clifd, -1);
+				_request_send_result(req, -1);
 				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
@@ -564,10 +525,10 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 			}
 
 		} else {
-			msglen = __send_message(clifd, vec, 1, &handles[1], 1);
+			msglen = __send_message(req->clifd, vec, 1, &handles[1], 1);
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
-				_send_result_to_client(clifd, -1);
+				_request_send_result(req, -1);
 				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
@@ -582,112 +543,95 @@ static int __dispatch_get_dc_socket_pair(int clifd, const app_pkt_t *pkt, struct
 	SECURE_LOGD("send_message msglen : [%d]\n", msglen);
 	if (socket_pair_key)
 		free(socket_pair_key);
-	if (kb)
-		bundle_free(kb);
 
 	return 0;
 
 err_out:
 	if (socket_pair_key)
 		free(socket_pair_key);
-	if (kb)
-		bundle_free(kb);
 
 	return -1;
 }
 
-static int __dispatch_remove_history(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_remove_history(request_h req)
 {
 	int result = 0;
 	bundle *b = NULL;
-	b = bundle_decode(pkt->data, pkt->len);
+	/* b can be NULL */
+	b = bundle_decode(req->data, req->len);
 	result = rua_delete_history_from_db(b);
 	bundle_free(b);
 	_D("rua_delete_history_from_db result : %d", result);
 
-	_send_result_to_client(clifd, result);
+	_request_send_result(req, result);
 	return 0;
 }
 
-static int __dispatch_app_group_get_window(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_window(request_h req)
 {
-	bundle *b;
 	char *buf;
 	int pid;
 	int wid;
 
-	b = bundle_decode(pkt->data, pkt->len);
-	bundle_get_str(b, AUL_K_PID, &buf);
+	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	bundle_free(b);
 	wid = app_group_get_window(pid);
-	_send_result_to_client(clifd, wid);
+	_request_send_result(req, wid);
 
 	return 0;
 }
 
-static int __dispatch_app_group_set_window(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_set_window(request_h req)
 {
-	bundle *b;
 	char *buf;
 	int wid;
 	int ret;
 
-	b = bundle_decode(pkt->data, pkt->len);
-	bundle_get_str(b, AUL_K_WID, &buf);
+	bundle_get_str(req->kb, AUL_K_WID, &buf);
 	wid = atoi(buf);
-	bundle_free(b);
-	ret = app_group_set_window(cr->pid, wid);
-	_send_result_to_client(clifd, ret);
+	ret = app_group_set_window(req->pid, wid);
+	_request_send_result(req, ret);
 
 	return ret;
 }
 
-static int __dispatch_app_group_get_fg_flag(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_fg_flag(request_h req)
 {
-	bundle *b;
 	char *buf;
 	int pid;
 	int fg;
 
-	b = bundle_decode(pkt->data, pkt->len);
-	bundle_get_str(b, AUL_K_PID, &buf);
+	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	bundle_free(b);
 	fg = app_group_get_fg_flag(pid);
-	_send_result_to_client(clifd, fg);
+	_request_send_result(req, fg);
 
 	return 0;
 }
 
-static int __dispatch_app_group_clear_top(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_clear_top(request_h req)
 {
-	app_group_clear_top(cr->pid);
-	_send_result_to_client(clifd, 0);
+	app_group_clear_top(req->pid);
+	_request_send_result(req, 0);
 
 	return 0;
 }
 
-static int __dispatch_app_group_get_leader_pid(int clifd,
-		const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_leader_pid(request_h req)
 {
-	bundle *b;
 	char *buf;
 	int pid;
 	int lpid;
 
-	b = bundle_decode(pkt->data, pkt->len);
-	bundle_get_str(b, AUL_K_PID, &buf);
+	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	bundle_free(b);
 	lpid = app_group_get_leader_pid(pid);
-	_send_result_to_client(clifd, lpid);
+	_request_send_result(req, lpid);
 
 	return 0;
 }
 
-static int __dispatch_app_group_get_leader_pids(int clifd,
-		const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_leader_pids(request_h req)
 {
 	int cnt;
 	int *pids;
@@ -696,12 +640,10 @@ static int __dispatch_app_group_get_leader_pids(int clifd,
 	app_group_get_leader_pids(&cnt, &pids);
 
 	if (pids == NULL || cnt == 0)
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_LEADER_PIDS, empty, 0, AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_LEADER_PIDS, empty, 0);
 	else
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_LEADER_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_LEADER_PIDS, (unsigned char *)pids,
+				 cnt * sizeof(int));
 
 	if (pids != NULL)
 		free(pids);
@@ -709,8 +651,7 @@ static int __dispatch_app_group_get_leader_pids(int clifd,
 	return 0;
 }
 
-static int __dispatch_app_group_get_idle_pids(int clifd,
-		const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_idle_pids(request_h req)
 {
 	int cnt;
 	int *pids;
@@ -719,12 +660,10 @@ static int __dispatch_app_group_get_idle_pids(int clifd,
 	app_group_get_idle_pids(&cnt, &pids);
 
 	if (pids == NULL || cnt == 0)
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_IDLE_PIDS, empty, 0, AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_IDLE_PIDS, empty, 0);
 	else
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_IDLE_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_IDLE_PIDS,
+				(unsigned char *)pids, cnt * sizeof(int));
 
 	if (pids != NULL)
 		free(pids);
@@ -732,28 +671,23 @@ static int __dispatch_app_group_get_idle_pids(int clifd,
 	return 0;
 }
 
-static int __dispatch_app_group_get_group_pids(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_get_group_pids(request_h req)
 {
-	bundle *b;
 	char *buf;
 	int leader_pid;
 	int cnt;
 	int *pids;
 	unsigned char empty[1] = { 0 };
 
-	b = bundle_decode(pkt->data, pkt->len);
-	bundle_get_str(b, AUL_K_LEADER_PID, &buf);
+	bundle_get_str(req->kb, AUL_K_LEADER_PID, &buf);
 	leader_pid = atoi(buf);
-	bundle_free(b);
 
 	app_group_get_group_pids(leader_pid, &cnt, &pids);
 	if (pids == NULL || cnt == 0)
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_GROUP_PIDS, empty, 0, AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_GROUP_PIDS, empty, 0);
 	else
-		aul_sock_send_raw_async_with_fd(clifd,
-				APP_GROUP_GET_GROUP_PIDS,
-				(unsigned char *)pids, cnt * sizeof(int), AUL_SOCK_CLOSE);
+		_request_send_raw(req, APP_GROUP_GET_GROUP_PIDS, (unsigned char *)pids,
+					cnt * sizeof(int));
 
 	if (pids != NULL)
 		free(pids);
@@ -761,64 +695,59 @@ static int __dispatch_app_group_get_group_pids(int clifd, const app_pkt_t *pkt, 
 	return 0;
 }
 
-static int __dispatch_app_group_lower(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_group_lower(request_h req)
 {
 	int ret = 0;
 
-	app_group_lower(cr->pid, &ret);
-	_send_result_to_client(clifd, ret);
+	app_group_lower(req->pid, &ret);
+	_request_send_result(req, ret);
 
 	return ret;
 }
 
-static int __dispatch_app_start(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_start(request_h req)
 {
 	const char *appid;
 	const char *target_uid;
-	bundle *kb;
 	int ret = -1;
 	int t_uid;
 	char *state;
 	bool pending = false;
 	struct pending_item *pending_item;
+	bundle *kb;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
-	__set_effective_appid(cr->uid, kb);
+	__set_effective_appid(req->uid, kb);
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	if (cr->uid < REGULAR_UID_MIN) {
+	if (req->uid < REGULAR_UID_MIN) {
 		target_uid = bundle_get_val(kb, AUL_K_TARGET_UID);
 		if (target_uid != NULL) {
 			t_uid = atoi(target_uid);
 			sd_uid_get_state(t_uid, &state);
 			if (strcmp(state, "offline") &&
 			    strcmp(state, "closing")) {
-				ret = _start_app(appid, kb, pkt->cmd, cr->pid,
-						t_uid, clifd, &pending);
+				ret = _start_app(appid, kb, t_uid, req, &pending);
 			} else {
 				_E("uid:%d session is %s", t_uid, state);
-				_send_result_to_client(clifd, AUL_R_ERROR);
+				_request_send_result(req, AUL_R_ERROR);
 				goto error;
 			}
 		} else {
 			_E("request from root, treat as global user");
-			ret = _start_app(appid, kb, pkt->cmd, cr->pid,
-					GLOBAL_USER, clifd, &pending);
+			ret = _start_app(appid, kb, GLOBAL_USER, req, &pending);
 		}
 	} else {
-		ret = _start_app(appid, kb, pkt->cmd, cr->pid, cr->uid, clifd,
-				&pending);
+		ret = _start_app(appid, kb, req->uid, req, &pending);
 	}
 
 	/* add pending list to wait app launched successfully */
 	if (pending) {
 		pending_item = calloc(1, sizeof(struct pending_item));
-		pending_item->clifd = clifd;
+		pending_item->clifd = req->clifd;
 		pending_item->pid = ret;
 		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
 				__timeout_pending_item, (gpointer)pending_item);
@@ -826,135 +755,144 @@ static int __dispatch_app_start(int clifd, const app_pkt_t *pkt, struct ucred *c
 				pending_item);
 	}
 
-	if (ret > 0 && __add_rua_info(pkt, kb, cr->uid, appid) < 0)
+	if (ret > 0 && __add_rua_info(req, kb, appid) < 0)
 		goto error;
-	bundle_free(kb);
 	return 0;
 
 error:
-	if (kb)
-		bundle_free(kb);
 	return -1;
 }
 
-static int __dispatch_app_result(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_result(request_h req)
 {
 	bundle *kb;
+	int pid;
+	int pgid;
+	char tmp_pid[MAX_PID_STR_BUFSZ];
+	int res;
+	shared_info_h si = NULL;
+	const char *appid;
+	int ret;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
+
+	if ((pid = __get_caller_pid(kb)) < 0)
+			return AUL_R_ERROR;
+
+	pgid = getpgid(req->pid);
+	if (pgid > 0) {
+		snprintf(tmp_pid, MAX_PID_STR_BUFSZ, "%d", pgid);
+		bundle_del(kb, AUL_K_CALLEE_PID);
+		bundle_add(kb, AUL_K_CALLEE_PID, tmp_pid);
 	}
 
-	__forward_cmd(pkt->cmd, kb, cr->pid, cr->uid);
-	close(clifd);
-	bundle_free(kb);
+	appid = _status_app_get_appid_bypid(pgid);
+	if (appid != NULL) {
+		si = _temporary_permission_create(pgid, appid, kb, req->uid);
+		if (si == NULL)
+			_D("No sharable path : %d %s", pgid, appid);
+	}
+
+	if ((res = aul_sock_send_bundle_async(pid, getuid(), req->cmd, kb, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0)
+		res = AUL_R_ERROR;
+
+	if (si) {
+		if (res >= 0 && (ret = _temporary_permission_apply(pid, req->uid, si)) != 0)
+			_D("Couldn't apply temporary permission: %d", ret);
+		_temporary_permission_destroy(si);
+	}
 
 	return 0;
 }
 
-static int __dispatch_app_pause(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_pause(request_h req)
 {
 	char *appid;
 	bundle *kb;
 	int ret;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	appid = (char *)bundle_get_val(kb, AUL_K_APPID);
-	ret = _status_app_is_running_v2(appid, cr->uid);
+	ret = _status_app_is_running_v2(appid, req->uid);
 	if (ret > 0) {
-		ret = _pause_app(ret, clifd);
-	} else {
-		_E("%s is not running", appid);
-		close(clifd);
+		ret = _pause_app(ret, req);
 	}
-	bundle_free(kb);
+	else
+		_E("%s is not running", appid);
 
 	return 0;
 }
 
-static int __dispatch_app_process_by_pid(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_process_by_pid(request_h req)
 {
 	char *appid;
 	bundle *kb;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	appid = (char *)bundle_get_val(kb, AUL_K_APPID);
-	__app_process_by_pid(pkt->cmd, appid, cr, clifd);
-	bundle_free(kb);
+	__app_process_by_pid(req, appid);
 
 	return 0;
 }
 
-static int __dispatch_app_term_async(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_term_async(request_h req)
 {
 	char *appid;
 	bundle *kb;
 	char *term_pid;
 	struct appinfo *ai;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	term_pid = (char *)bundle_get_val(kb, AUL_K_APPID);
 	appid = _status_app_get_appid_bypid(atoi(term_pid));
-	ai = appinfo_find(cr->uid, appid);
+	ai = appinfo_find(req->uid, appid);
 	if (ai) {
 		appinfo_set_value(ai, AIT_STATUS, "norestart");
-		__app_process_by_pid(pkt->cmd, term_pid, cr, clifd);
-	} else {
-		close(clifd);
+		__app_process_by_pid(req, term_pid);
 	}
-	bundle_free(kb);
 
 	return 0;
 }
 
-static int __dispatch_app_term(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_term(request_h req)
 {
 	char *appid;
 	bundle *kb;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	appid = (char *)bundle_get_val(kb, AUL_K_APPID);
-	__app_process_by_pid(pkt->cmd, appid, cr, clifd);
-	bundle_free(kb);
+	__app_process_by_pid(req, appid);
 
 	return 0;
 }
 
-static int __dispatch_app_running_info(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_running_info(request_h req)
 {
-	_status_send_running_appinfo(clifd, pkt->cmd, cr->uid);
+	_status_send_running_appinfo(_request_remove_fd(req), req->cmd, req->uid);
 	return 0;
 }
 
-static int __dispatch_app_all_running_info(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_all_running_info(request_h req)
 {
-	_status_send_running_appinfo(clifd, pkt->cmd, cr->uid);
+	_status_send_running_appinfo(_request_remove_fd(req), req->cmd, req->uid);
 	return 0;
 }
 
-static int __dispatch_app_is_running(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_is_running(request_h req)
 {
 	char *appid = NULL;
 	int ret;
@@ -962,139 +900,135 @@ static int __dispatch_app_is_running(int clifd, const app_pkt_t *pkt, struct ucr
 	appid = malloc(MAX_PACKAGE_STR_SIZE);
 	if (appid == NULL) {
 		_E("out of memory");
-		_send_result_to_client(clifd, -1);
+		_request_send_result(req, -1);
 		return -1;
 	}
-	strncpy(appid, (const char*)pkt->data, MAX_PACKAGE_STR_SIZE-1);
-	ret = _status_app_is_running(appid, cr->uid);
+	strncpy(appid, (const char*)req->data, MAX_PACKAGE_STR_SIZE-1);
+	ret = _status_app_is_running(appid, req->uid);
 	SECURE_LOGD("APP_IS_RUNNING : %s : %d", appid, ret);
-	_send_result_to_client(clifd, ret);
+	_request_send_result(req, ret);
 	free(appid);
 
 	return 0;
 }
 
-static int __dispatch_app_get_appid_by_pid(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_get_appid_by_pid(request_h req)
 {
 	int pid;
 	int ret;
 
-	memcpy(&pid, pkt->data, pkt->len);
-	ret = _status_get_appid_bypid(clifd, pid);
+	memcpy(&pid, req->data, req->len);
+	ret = _status_get_appid_bypid(req->clifd, pid);
 	_D("app_get_appid_bypid : %d : %d", pid, ret);
+	req->clifd = 0;
+
 	return 0;
 }
 
-static int __dispatch_app_get_pkgid_by_pid(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_get_pkgid_by_pid(request_h req)
 {
 	int pid;
 	int ret;
 
-	memcpy(&pid, pkt->data, sizeof(int));
-	ret = _status_get_pkgid_bypid(clifd, pid);
+	memcpy(&pid, req->data, sizeof(int));
+	ret = _status_get_pkgid_bypid(_request_remove_fd(req), pid);
 	_D("APP_GET_PKGID_BYPID : %d : %d", pid, ret);
+
 	return 0;
 }
 
-static int __dispatch_legacy_command(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_legacy_command(request_h req)
 {
-	_send_result_to_client(clifd, 0);
+	_request_send_result(req, 0);
 	return 0;
 }
 
-static int __dispatch_app_status_update(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_status_update(request_h req)
 {
 	int *status;
 	char *appid;
 	struct appinfo *ai;
 
-	status = (int *)pkt->data;
+	status = (int *)req->data;
 	if (*status == STATUS_NORESTART) {
-		appid = _status_app_get_appid_bypid(cr->pid);
-		ai = appinfo_find(cr->uid, appid);
+		appid = _status_app_get_appid_bypid(req->pid);
+		ai = appinfo_find(req->uid, appid);
 		appinfo_set_value((struct appinfo *)ai, AIT_STATUS, "norestart");
 	} else {
-		if (*status == STATUS_VISIBLE && cr->pid == _get_pid_of_last_launched_ui_app())
-			_send_hint_for_visibility(cr->uid);
-		_status_update_app_info_list(cr->pid, *status, FALSE, cr->uid);
+		if (*status == STATUS_VISIBLE && req->pid == _get_pid_of_last_launched_ui_app())
+			_send_hint_for_visibility(req->uid);
+		_status_update_app_info_list(req->pid, *status, FALSE, req->uid);
 	}
-	close(clifd);
 
 	return 0;
 }
 
-static int __dispatch_app_get_status(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_get_status(request_h req)
 {
 	int pid;
 	int ret;
 
-	memcpy(&pid, pkt->data, sizeof(int));
+	memcpy(&pid, req->data, sizeof(int));
 	ret = _status_get_app_info_status(pid, 0);
-	_send_result_to_client(clifd, ret);
+	_request_send_result(req, ret);
 
 	return 0;
 }
 
-static int __dispatch_app_add_loader(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_add_loader(request_h req)
 {
 	bundle *kb;
 	int ret;
 	char tmpbuf[MAX_PID_STR_BUFSZ];
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "%d", getpgid(cr->pid));
+	snprintf(tmpbuf, sizeof(tmpbuf), "%d", getpgid(req->pid));
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
-	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, cr->uid,
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, req->uid,
 			PAD_CMD_ADD_LOADER, kb);
-	bundle_free(kb);
-	_send_result_to_client(clifd, ret);
+	_request_send_result(req, ret);
 
 	return ret;
 }
 
-static int __dispatch_app_remove_loader(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_remove_loader(request_h req)
 {
 	bundle *kb;
 	int ret;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
-	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, cr->uid,
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, req->uid,
 			PAD_CMD_REMOVE_LOADER, kb);
-	bundle_free(kb);
-	_send_result_to_client(clifd, ret);
+
+	_request_send_result(req, ret);
 
 	return ret;
 }
 
-static int __dispatch_agent_dead_signal(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_agent_dead_signal(request_h req)
 {
 	_D("AMD_AGENT_DEAD_SIGNAL");
-	__handle_agent_dead_signal(cr);
-	close(clifd);
+	__handle_agent_dead_signal(req->uid);
 
 	return 0;
 }
 
-static int __dispatch_amd_reload_appinfo(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_amd_reload_appinfo(request_h req)
 {
 	_D("AMD_RELOAD_APPINFO");
 	appinfo_reload();
-	_send_result_to_client(clifd, 0);
+	_request_send_result(req, 0);
 
 	return 0;
 }
 
-static int __dispatch_app_com_create(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_com_create(request_h req)
 {
 	bundle *kb;
 	int ret;
@@ -1103,16 +1037,13 @@ static int __dispatch_app_com_create(int clifd, const app_pkt_t *pkt, struct ucr
 	const char *privilege;
 	const char *endpoint;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
 	if (endpoint == NULL) {
-		bundle_free(kb);
-		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		_request_send_result(req, AUL_APP_COM_R_ERROR_FATAL_ERROR);
 		return 0;
 	}
 
@@ -1130,7 +1061,7 @@ static int __dispatch_app_com_create(int clifd, const app_pkt_t *pkt, struct ucr
 
 	ret = app_com_add_endpoint(endpoint, *propagate, privilege);
 	if (ret == AUL_APP_COM_R_ERROR_OK || ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
-		ret = app_com_join(endpoint, getpgid(cr->pid), clifd, NULL);
+		ret = app_com_join(endpoint, getpgid(req->pid), req->clifd, NULL);
 
 		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
 			_E("illegal access: remove endpoint");
@@ -1138,96 +1069,82 @@ static int __dispatch_app_com_create(int clifd, const app_pkt_t *pkt, struct ucr
 		}
 	}
 
-	bundle_free(kb);
-	_send_result_to_client(clifd, ret);
+	_request_send_result(req, ret);
 	return 0;
 }
 
-static int __dispatch_app_com_join(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_com_join(request_h req)
 {
 	bundle *kb;
 	int ret;
 	const char *endpoint;
 	const char *filter;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
 	if (endpoint == NULL) {
 		bundle_free(kb);
-		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		_request_send_result(req, AUL_APP_COM_R_ERROR_FATAL_ERROR);
 		return 0;
 	}
 
 	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
 
-	ret = app_com_join(endpoint, getpgid(cr->pid), clifd, filter);
+	ret = app_com_join(endpoint, getpgid(req->pid), req->clifd, filter);
 
-	bundle_free(kb);
-	_send_result_to_client(clifd, ret);
+	_request_send_result(req, ret);
 
 	return 0;
 }
 
-static int __dispatch_app_com_send(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_com_send(request_h req)
 {
 	bundle *kb;
 	int ret;
 	const char *endpoint;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
 	if (endpoint == NULL) {
-		bundle_free(kb);
-		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		_request_send_result(req, AUL_APP_COM_R_ERROR_FATAL_ERROR);
 		return 0;
 	}
 
-	ret = app_com_send(endpoint, getpgid(cr->pid), kb);
-	_send_result_to_client(clifd, ret);
-
-	bundle_free(kb);
+	ret = app_com_send(endpoint, getpgid(req->pid), kb);
+	_request_send_result(req, ret);
 
 	return 0;
 }
 
-static int __dispatch_app_com_leave(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_com_leave(request_h req)
 {
 	bundle *kb;
 	int ret;
 	const char *endpoint;
 
-	kb = bundle_decode(pkt->data, pkt->len);
-	if (kb == NULL) {
-		close(clifd);
+	kb = req->kb;
+	if (kb == NULL)
 		return -1;
-	}
 
 	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
 	if (endpoint == NULL) {
-		bundle_free(kb);
-		_send_result_to_client(clifd, AUL_APP_COM_R_ERROR_FATAL_ERROR);
+		_request_send_result(req, AUL_APP_COM_R_ERROR_FATAL_ERROR);
 		return 0;
 	}
 
-	ret = app_com_leave(endpoint, getpgid(cr->pid));
-	_send_result_to_client(clifd, ret);
-
-	bundle_free(kb);
+	ret = app_com_leave(endpoint, getpgid(req->pid));
+	_request_send_result(req, ret);
 
 	return 0;
 }
 
-static int __dispatch_app_register_pid(int clifd, const app_pkt_t *pkt, struct ucred *cr)
+static int __dispatch_app_register_pid(request_h req)
 {
 	bundle *kb;
 	const struct appinfo *ai;
@@ -1238,44 +1155,39 @@ static int __dispatch_app_register_pid(int clifd, const app_pkt_t *pkt, struct u
 	int pid;
 	int ret;
 
-	close(clifd);
-	kb = bundle_decode(pkt->data, pkt->len);
+	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
 	if (appid == NULL) {
-		bundle_free(kb);
 		return -1;
 	}
 
 	pid_str = bundle_get_val(kb, AUL_K_PID);
 	if (pid_str == NULL) {
-		bundle_free(kb);
 		return -1;
 	}
 
 	pid = atoi(pid_str);
-	ret = _status_app_is_running(appid, cr->uid);
+	ret = _status_app_is_running(appid, req->uid);
 	if (ret > 0) {
 		if (ret != pid)
 			kill(pid, SIGKILL);
 		_D("status info is already exist: %s", appid);
-		bundle_free(kb);
 		return 0;
 	}
 
 	_D("appid: %s, pid: %d", appid, pid);
 
-	ai = appinfo_find(cr->uid, appid);
+	ai = appinfo_find(req->uid, appid);
 	app_path = appinfo_get_value(ai, AIT_EXEC);
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0)
 		app_group_start_app(pid, kb, pid,
 				FALSE, APP_GROUP_LAUNCH_MODE_SINGLE);
 
-	_status_add_app_info_list(appid, app_path, pid, false, cr->uid);
-	bundle_free(kb);
+	_status_add_app_info_list(appid, app_path, pid, false, req->uid);
 
 	return 0;
 }
@@ -1337,9 +1249,12 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 
 static void __free_request(gpointer data)
 {
-	struct request *req = (struct request *)data;
+	request_h req = (request_h )data;
 
-	free(req->pkt);
+	if (req->kb)
+		bundle_free(req->kb);
+
+	free(req->data);
 	free(req);
 }
 
@@ -1353,16 +1268,21 @@ static void __free_pending_item(struct pending_item *item)
 
 static void __process_pending_request(gpointer data, gpointer user_data)
 {
-	struct request *req = (struct request *)data;
+	request_h req = (request_h )data;
 
-	dispatch_table[req->pkt->cmd](req->clifd, req->pkt, &req->cr);
+	dispatch_table[req->cmd](req);
+
+	if (req->clifd) {
+		close(req->clifd);
+		req->clifd = 0;
+	}
 }
 
 static void __timeout_pending_request(gpointer data, gpointer user_data)
 {
-	struct request *req = (struct request *)data;
+	request_h req = (request_h )data;
 
-	_send_result_to_client(req->clifd, -1);
+	_request_send_result(req, -1);
 }
 
 static gboolean __timeout_pending_item(gpointer user_data)
@@ -1410,41 +1330,48 @@ int _request_reply_for_pending_request(int pid)
 	return 0;
 }
 
-static struct request *__get_request(int clifd, app_pkt_t *pkt,
+static request_h __get_request(int clifd, app_pkt_t *pkt,
 		struct ucred cr)
 {
-	struct request *req;
+	request_s *req;
 
-	req = malloc(sizeof(struct request));
+	req = (request_s *)malloc(sizeof(request_s) + pkt->len + 1);
 	if (req == NULL)
 		return NULL;
 
 	req->clifd = clifd;
-	req->pkt = calloc(1, AUL_PKT_HEADER_SIZE + pkt->len + 1);
-	memcpy(req->pkt, pkt, AUL_PKT_HEADER_SIZE + pkt->len + 1);
-	memcpy(&req->cr, &cr, sizeof(struct ucred));
+	req->pid = cr.pid;
+	req->uid = cr.uid;
+	req->gid = cr.gid;
+	req->cmd = pkt->cmd;
+	req->len = pkt->len;
+	req->opt = pkt->opt;
+	memcpy(req->data, pkt->data, pkt->len + 1);
+
+	if (pkt->opt & AUL_SOCK_BUNDLE)
+		req->kb = bundle_decode(pkt->data, pkt->len);
+	else
+		req->kb = NULL;
 
 	return req;
 }
 
-static int __check_app_is_running(struct request *req)
+static int __check_app_is_running(request_h req)
 {
-	bundle *b;
+	bundle *b = req->kb;
 	char *str;
 	int pid;
 	int ret = 0;
 
-	b = bundle_decode(req->pkt->data, req->pkt->len);
 	if (b == NULL)
 		return -1;
 
 	if (bundle_get_str(b, AUL_K_APPID, &str)) {
 		_E("cannot get target pid");
-		bundle_free(b);
 		return -1;
 	}
 
-	switch (req->pkt->cmd) {
+	switch (req->cmd) {
 	case APP_RESUME_BY_PID:
 	case APP_TERM_BY_PID:
 	case APP_TERM_BY_PID_WITHOUT_RESTART:
@@ -1459,22 +1386,20 @@ static int __check_app_is_running(struct request *req)
 			ret = pid;
 		break;
 	default:
-		pid = _status_app_is_running(str, req->cr.uid);
+		pid = _status_app_is_running(str, req->uid);
 		if (pid > 0)
 			ret = pid;
 	}
 
-	bundle_free(b);
-
 	return ret;
 }
 
-static int __check_request(struct request *req)
+static int __check_request(request_h req)
 {
 	int pid;
 	struct pending_item *item;
 
-	if ((req->pkt->opt & AUL_SOCK_QUEUE) == 0)
+	if ((req->opt & AUL_SOCK_QUEUE) == 0)
 		return 0;
 
 	pid = __check_app_is_running(req);
@@ -1483,7 +1408,7 @@ static int __check_request(struct request *req)
 	else if (pid == 0)
 		return 0;
 
-	if (_status_get_app_info_status(pid, req->cr.uid) == STATUS_DYING)
+	if (_status_get_app_info_status(pid, req->uid) == STATUS_DYING)
 		return 0;
 
 	item = g_hash_table_lookup(pending_table, GINT_TO_POINTER(pid));
@@ -1503,7 +1428,7 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 	int ret;
 	int clifd;
 	struct ucred cr;
-	struct request *req;
+	request_h req;
 
 	if ((pkt = aul_sock_recv_pkt(fd, &clifd, &cr)) == NULL) {
 		_E("recv error");
@@ -1531,7 +1456,7 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 
 	ret = __check_request(req);
 	if (ret < 0) {
-		_send_result_to_client(clifd, ret);
+		_request_send_result(req, ret);
 		__free_request(req);
 		free(pkt);
 		return TRUE;
@@ -1541,16 +1466,84 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 	}
 
 	if (pkt->cmd >= 0 && pkt->cmd < APP_CMD_MAX && dispatch_table[pkt->cmd]) {
-		if (dispatch_table[pkt->cmd](clifd, pkt, &cr) != 0)
+		if (dispatch_table[pkt->cmd](req) != 0)
 			_E("callback returns FALSE : %d", pkt->cmd);
 	} else {
 		_E("Invalid packet or not supported command");
 		close(clifd);
+		req->clifd = 0;
 	}
+
+	if (req->clifd)
+		close(req->clifd);
+
 	__free_request(req);
 	free(pkt);
 
 	return TRUE;
+}
+
+int _request_get_fd(request_h req)
+{
+	return req->clifd;
+}
+
+int _request_get_pid(request_h req)
+{
+	return req->pid;
+}
+
+request_h _request_create_local(int cmd, int uid, int pid)
+{
+	request_s *req;
+
+	req = (request_s *)malloc(sizeof(request_s) + 1);
+	if (req == NULL)
+		return NULL;
+
+	req->clifd = -1;
+	req->pid = pid;
+	req->uid = uid;
+	req->gid = getpgid(uid);
+	req->cmd = cmd;
+	req->len = 0;
+	req->opt = AUL_SOCK_NONE;
+	req->kb = NULL;
+
+	return req;
+}
+
+void _request_free_local(request_h req)
+{
+	free(req);
+}
+
+int _request_get_cmd(request_h req)
+{
+	return req->cmd;
+}
+
+int _request_remove_fd(request_h req)
+{
+	int r = req->clifd;
+
+	req->clifd = 0;
+
+	return r;
+}
+
+int _request_send_raw(request_h req, int cmd, unsigned char *data, int len)
+{
+	aul_sock_send_raw_async_with_fd(req->clifd, cmd, data, len, AUL_SOCK_CLOSE);
+	req->clifd = 0;
+	return 0;
+} 
+
+int _request_send_result(request_h req, int res)
+{
+	_send_result_to_client(req->clifd, res);
+	req->clifd = 0;
+	return 0;
 }
 
 int _request_init(void)
