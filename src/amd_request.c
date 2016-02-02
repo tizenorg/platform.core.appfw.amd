@@ -141,9 +141,6 @@ static int __send_message(int sock, const struct iovec *vec, int vec_size, const
 		return sndret;
 }
 
-extern int __app_dead_handler(int pid, uid_t user);
-extern int __agent_dead_handler(uid_t user);
-
 static int __get_caller_pid(bundle *kb)
 {
 	const char *pid_str;
@@ -425,14 +422,6 @@ error:
 		free(rua_stat_item);
 	}
 	return -1;
-}
-
-static void __handle_agent_dead_signal(struct ucred *pcr)
-{
-	/* TODO: check the credentials from the caller: must be the amd agent */
-
-	_D("AGENT_DEAD_SIGNAL : %d", pcr->uid);
-	__agent_dead_handler(pcr->uid);
 }
 
 static int __dispatch_get_mp_socket_pair(int clifd, const app_pkt_t *pkt, struct ucred *cr)
@@ -1078,8 +1067,8 @@ static int __dispatch_app_remove_loader(int clifd, const app_pkt_t *pkt, struct 
 
 static int __dispatch_agent_dead_signal(int clifd, const app_pkt_t *pkt, struct ucred *cr)
 {
-	_D("AMD_AGENT_DEAD_SIGNAL");
-	__handle_agent_dead_signal(cr);
+	_D("AMD_AGENT_DEAD_SIGNAL: %d", cr->uid);
+	_status_remove_app_info_list_with_uid(cr->uid);
 	close(clifd);
 
 	return 0;

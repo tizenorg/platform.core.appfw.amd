@@ -36,7 +36,6 @@
 #include "amd_request.h"
 #include "amd_launch.h"
 #include "amd_util.h"
-#include "menu_db_util.h"
 #include "amd_app_group.h"
 
 #define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
@@ -748,8 +747,9 @@ int _status_get_appid_bypid(int fd, int pid)
 static int __get_pkgid_bypid(int pid, char *pkgid, int len)
 {
 	char *appid;
-	app_info_from_db *menu_info;
 	uid_t uid;
+	const struct appinfo *ai;
+
 	appid = aul_proc_get_appid_bypid(pid);
 	if (appid == NULL)
 		return -1;
@@ -760,15 +760,14 @@ static int __get_pkgid_bypid(int pid, char *pkgid, int len)
 		return -1;
 	}
 
-	if ((menu_info = _get_app_info_from_db_by_appid_user(appid, uid)) == NULL) {
+	ai = appinfo_find(uid, appid);
+	if (ai == NULL) {
 		free(appid);
 		return -1;
-	} else {
-		snprintf(pkgid, len, "%s", _get_pkgid(menu_info));
 	}
 
+	snprintf(pkgid, len, "%s", appinfo_get_value(ai, AIT_PKGID));
 	free(appid);
-	_free_app_info_from_db(menu_info);
 
 	return 0;
 }
