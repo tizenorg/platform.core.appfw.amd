@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -204,12 +204,6 @@ static int __app_dead_handler(int pid, void *data)
 	return 0;
 }
 
-int __agent_dead_handler(uid_t user)
-{
-	_status_remove_app_info_list_with_uid(user);
-	return 0;
-}
-
 static void __syspopup_signal_handler(GDBusConnection *conn,
 				const gchar *sender_name,
 				const gchar *object_path,
@@ -277,7 +271,7 @@ static int __syspopup_dbus_signal_handler_init(void)
 static int __init(void)
 {
 	int r;
-	bundle *b = NULL;
+	bundle *b;
 
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");
@@ -314,16 +308,15 @@ static int __init(void)
 		 _E("__syspopup_dbus_signal_handler_init failed");
 
 	b = bundle_create();
-
 	if (b == NULL) {
 		_E("failed to make a bundle");
 		return -1;
 	}
 
-	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
-	if (r != 0) {
+	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK,
+			getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
+	if (r != 0)
 		 _E("failed to make default slots");
-	}
 
 	bundle_free(b);
 	return 0;
