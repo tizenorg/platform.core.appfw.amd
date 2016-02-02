@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -206,9 +206,8 @@ int app_com_join(const char *endpoint, int cpid, int clifd, const char *filter)
 
 	_E("endpoint=%s cpid=%d clifd=%d filter=%s", endpoint, cpid, clifd, filter);
 
-	if (__add_client(info, filter, cpid) == NULL) {
+	if (__add_client(info, filter, cpid) == NULL)
 		return AUL_APP_COM_R_ERROR_OUT_OF_MEMORY;
-	}
 
 	return AUL_APP_COM_R_ERROR_OK;
 }
@@ -250,9 +249,8 @@ int app_com_send(const char *endpoint, int cpid, bundle *envelope)
 		if (client->pid == cpid)
 			continue;
 
-		if (client->filter && __check_filter(client->filter, cpid, client->pid, envelope) < 0) {
+		if (client->filter && __check_filter(client->filter, cpid, client->pid, envelope) < 0)
 			continue;
-		}
 
 		ret = app_send_cmd_with_noreply(client->pid, APP_COM_MESSAGE, envelope);
 		if (ret < 0)
