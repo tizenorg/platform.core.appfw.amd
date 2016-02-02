@@ -23,7 +23,9 @@
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
+#include <amd_app_com.h>
 #include <amd_request.h>
+#include <aul.h>
 
 #include "amd_util.h"
 
@@ -174,6 +176,35 @@ end:
 	return ret;
 }
 
+static int __com_create_checker(struct caller_info *info, request_h req, void *data)
+{
+	char *privilege = NULL;
+	bundle *kb = _request_get_bundle(req);
+
+	bundle_get_str(kb, AUL_K_COM_PRIVILEGE, &privilege);
+	if (!privilege)
+		return 0; /* non-privileged */
+
+	return  __check_privilege(info, privilege);
+}
+
+static int __com_join_checker(struct caller_info *info, request_h req, void *data)
+{
+	char *endpoint = NULL;
+	const char *privilege;
+	bundle *kb = _request_get_bundle(req);
+
+	bundle_get_str(kb, AUL_K_COM_ENDPOINT, &endpoint);
+	if (!endpoint)
+		return -1;
+
+	privilege = app_com_get_privilege(endpoint);
+	if (!privilege)
+		return 0; /* non-privileged */
+
+	return __check_privilege(info, privilege);
+}
+
 static struct checker_info checker_table[] = {
 	{APP_OPEN, __appcontrol_checker, NULL},
 	{APP_RESUME, __appcontrol_checker, NULL},
@@ -185,6 +216,8 @@ static struct checker_info checker_table[] = {
 	{APP_KILL_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
 	{APP_TERM_BGAPP_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL_BGAPP},
 	{APP_ALL_RUNNING_INFO, __simple_checker, PRIVILEGE_PACKAGEMANAGER_INFO},
+	{APP_COM_JOIN, __com_create_checker, NULL},
+	{APP_COM_CREATE, __com_join_checker, NULL},
 };
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
