@@ -194,7 +194,7 @@ static struct client_info *__add_client(struct endpoint_info *info, const char *
 	return c;
 }
 
-int app_com_join(const char *endpoint, int cpid, int clifd, const char *filter)
+int app_com_join(const char *endpoint, int cpid, const char *filter)
 {
 	struct endpoint_info *info;
 
@@ -204,13 +204,26 @@ int app_com_join(const char *endpoint, int cpid, int clifd, const char *filter)
 		return AUL_APP_COM_R_ERROR_UNKNOWN_ENDPOINT;
 	}
 
-	_E("endpoint=%s cpid=%d clifd=%d filter=%s", endpoint, cpid, clifd, filter);
+	_E("endpoint=%s cpid=%d filter=%s", endpoint, cpid, filter);
 
 	if (__add_client(info, filter, cpid) == NULL) {
 		return AUL_APP_COM_R_ERROR_OUT_OF_MEMORY;
 	}
 
 	return AUL_APP_COM_R_ERROR_OK;
+}
+
+const char *app_com_get_privilege(const char *endpoint)
+{
+	struct endpoint_info *info;
+
+	info = g_hash_table_lookup(endpoint_tbl, endpoint);
+	if (!info) {
+		_E("endpoint not exists: %s", endpoint);
+		return NULL;
+	}
+
+	return info->privilege;
 }
 
 static int __check_filter(const char *filter, int cpid, int rpid, bundle *b)
