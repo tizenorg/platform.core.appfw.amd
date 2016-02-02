@@ -31,6 +31,8 @@
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
+#include <Ecore.h>
+#include <Ecore_Wayland.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -279,6 +281,9 @@ static int __init(void)
 	int r;
 	bundle *b = NULL;
 
+	ecore_wl_init(NULL);
+	ecore_init();
+
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");
 		return -1;
@@ -348,8 +353,6 @@ static void __ready(void)
 
 int main(int argc, char *argv[])
 {
-	GMainLoop *mainloop = NULL;
-
 	if (__init() != 0) {
 		_E("AMD Initialization failed!\n");
 		return -1;
@@ -357,13 +360,7 @@ int main(int argc, char *argv[])
 
 	__ready();
 
-	mainloop = g_main_loop_new(NULL, FALSE);
-	if (!mainloop) {
-		_E("failed to create glib main loop");
-		return -1;
-	}
-	g_main_loop_run(mainloop);
-
+	ecore_main_loop_begin();
 	app_com_broker_fini();
 	return 0;
 }
