@@ -139,28 +139,12 @@ static bool __can_restart_app(const char *appid)
 	return false;
 }
 
-static int __app_dead_handler(int pid, void *data)
+void _cleanup_dead_info(int pid)
 {
-	bool restart;
-	char *appid = NULL;
-	const char *tmp_appid;
 	int caller_pid;
 
-	if (pid <= 0)
-		return 0;
-
-	_D("APP_DEAD_SIGNAL : %d", pid);
-
-	tmp_appid = _status_app_get_appid_bypid(pid);
-	if (tmp_appid == NULL)
-		return 0;
-
-	restart = __can_restart_app(tmp_appid);
-	if (restart)
-		appid = strdup(tmp_appid);
-
+	_D("pid: %d", pid);
 	app_com_client_remove(pid);
-
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
 		if (app_group_find_second_leader(pid) == -1) {
@@ -187,8 +171,30 @@ static int __app_dead_handler(int pid, void *data)
 
 	_temporary_permission_drop(pid, getuid());
 	_status_remove_app_info_list(pid, getuid());
-	_request_flush_pending_request(pid);
 	aul_send_app_terminated_signal(pid);
+}
+
+static int __app_dead_handler(int pid, void *data)
+{
+	bool restart = false;
+	char *appid = NULL;
+	const char *tmp_appid;
+
+	if (pid <= 0)
+		return 0;
+
+	_D("APP_DEAD_SIGNAL : %d", pid);
+
+	tmp_appid = _status_app_get_appid_bypid(pid);
+	if (tmp_appid == NULL)
+		return 0;
+
+	restart = __can_restart_app(tmp_appid);
+	if (restart)
+		appid = strdup(tmp_appid);
+
+	_cleanup_dead_info(pid);
+	_request_flush_pending_request(pid);
 
 	if (restart)
 		_start_app_local(getuid(), appid);

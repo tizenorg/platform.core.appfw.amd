@@ -27,6 +27,8 @@
 #include <time.h>
 #include <aul_sock.h>
 #include <aul_proc.h>
+#include <sys/inotify.h>
+#include <ctype.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
@@ -36,6 +38,8 @@
 #include "amd_util.h"
 #include "menu_db_util.h"
 #include "amd_app_group.h"
+
+#define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
 typedef struct _pkg_status_info_t {
 	char *pkgid;
@@ -64,6 +68,8 @@ static GSList *app_status_info_list = NULL;
 static GHashTable *pkg_status_info_table = NULL;
 static int limit_bg_uiapps = 0;
 static GSList *running_uiapp_list = NULL;
+static GIOChannel *socket_io;
+static guint socket_wid;
 
 static void __check_running_uiapp_list(void);
 
@@ -892,49 +898,69 @@ static void __vconf_cb(keynode_t *key, void *data)
 	}
 }
 
-static void __socket_monitor_cb(GFileMonitor *monitor, GFile *file,
-		GFile *other_file, GFileMonitorEvent event_type,
-		gpointer user_data)
+static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data)
 {
-	char *path;
+	char buf[INOTIFY_BUF];
+	ssize_t len = 0;
+	int i = 0;
+	struct inotify_event *event;
 	char *p;
-	int pid = 0;
+	int pid;
+	int fd = g_io_channel_unix_get_fd(io);
 
-	if (event_type != G_FILE_MONITOR_EVENT_CREATED)
-		return;
+	len = read(fd, buf, sizeof(buf));
+	if (len < 0) {
+		_E("Failed to read");
+		return TRUE;
+	}
 
-	path = g_file_get_path(file);
-	p = strrchr(path, '/');
-	if (p != NULL)
-		pid = atoi(p + 1);
+	while (i < len) {
+		pid = -1;
+		event = (struct inotify_event *)&buf[i];
+		if (event->len) {
+			p = event->name;
+			if (p && isdigit(*p)) {
+				pid = atoi(p);
+				if (pid > 1) {
+					_D("pid: %d", pid);
+					_request_reply_for_pending_request(pid);
+				}
+			}
+		}
+		i += sizeof(struct inotify_event) + event->len;
+	}
 
-	if (pid < 1)
-		return;
-
-	_request_reply_for_pending_request(pid);
-
-	g_free(path);
+	return TRUE;
 }
 
 int _status_init(void)
 {
 	char buf[PATH_MAX];
-	GFile *file;
-	GFileMonitor *monitor;
-	GError *err = NULL;
+	int fd;
+	int wd;
+
+	fd = inotify_init();
+	if (fd < 0) {
+		_E("inotify_init() is failed.");
+		return -1;
+	}
 
 	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
-	file = g_file_new_for_path(buf);
-	if (file == NULL)
+	wd = inotify_add_watch(fd, buf, IN_CREATE);
+	if (wd < 0) {
+		_E("inotify_add_watch() is failed.");
+		close(fd);
 		return -1;
+	}
 
-	monitor = g_file_monitor_directory(file, G_FILE_MONITOR_NONE,
-			NULL, &err);
-	if (monitor == NULL)
+	socket_io = g_io_channel_unix_new(fd);
+	if (socket_io == NULL) {
+		inotify_rm_watch(fd, wd);
+		close(fd);
 		return -1;
+	}
 
-	g_signal_connect(monitor, "changed", G_CALLBACK(__socket_monitor_cb),
-			NULL);
+	socket_wid = g_io_add_watch(socket_io, G_IO_IN, __socket_monitor_cb, NULL);
 
 	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_uiapps))
 		limit_bg_uiapps = 0;
