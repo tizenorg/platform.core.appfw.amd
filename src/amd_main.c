@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
+#include <Ecore_Wayland.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -278,6 +279,8 @@ static int __init(void)
 {
 	int r;
 	bundle *b = NULL;
+
+	ecore_wl_init(NULL);
 
 	if (appinfo_init()) {
 		_E("appinfo_init failed\n");

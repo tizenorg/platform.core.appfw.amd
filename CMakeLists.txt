@@ -50,6 +50,7 @@ ADD_EXECUTABLE(amd
 	src/amd_cynara.c
 	src/amd_socket.c
 	src/amd_share.c
+	src/amd_input.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")
