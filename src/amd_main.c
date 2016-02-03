@@ -297,12 +297,8 @@ static int __init(void)
 	r = rua_delete_history_from_db(NULL);
 	_D("rua_delete_history : %d", r);
 
+	_launch_init();
 	app_com_broker_init();
-	/*
-	 * TODO : After applying emit app status signal in enlightment,
-	 *        remove this comment.
-	 * _launch_init();
-	 */
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");

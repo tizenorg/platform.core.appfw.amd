@@ -40,6 +40,7 @@ BuildRequires:  pkgconfig(cert-svc-vcore)
 %if %{with wayland}
 BuildRequires:  pkgconfig(ecore-wayland)
 BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  pkgconfig(wayland-tbm-client)
 BuildRequires:  pkgconfig(tizen-extension-client)
 %endif
 
