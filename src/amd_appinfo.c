@@ -416,6 +416,48 @@ static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle, struct app
 	return 0;
 }
 
+static int __appinfo_add_indicator_display(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	bool indicator_display = true;
+
+	if (pkgmgrinfo_appinfo_is_indicator_display_allowed(handle, &indicator_display) < 0)
+		_W("Failed to get indicator display info");
+
+	info->val[AIT_INDICATOR_DISP] = strdup(indicator_display ? "true" : "false");
+
+	return 0;
+}
+
+static int __appinfo_add_effect_image(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	char *portrait_image = NULL;
+	char *landscape_image = NULL;
+
+	if (pkgmgrinfo_appinfo_get_effectimage(handle, &portrait_image, &landscape_image) < 0)
+		_W("Failed to get effectimage");
+
+	if (portrait_image)
+		info->val[AIT_EFFECT_IMAGE_PORT] = strdup(portrait_image);
+
+	if (landscape_image)
+		info->val[AIT_EFFECT_IMAGE_LAND] = strdup(landscape_image);
+
+	return 0;
+}
+
+static int __appinfo_add_effect_image_type(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	char *effect_type;
+
+	if (pkgmgrinfo_appinfo_get_effectimage_type(handle, &effect_type) < 0)
+		_W("Failed to get effectimage type");
+
+	if (effect_type)
+		info->val[AIT_EFFECT_TYPE] = strdup(effect_type);
+
+	return 0;
+}
+
 static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_NAME] = NULL,
 	[AIT_EXEC] = __appinfo_add_exec,
@@ -440,6 +482,10 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_VISIBILITY] = NULL,
 	[AIT_APPTYPE] = __appinfo_add_apptype,
 	[AIT_ROOT_PATH] = __appinfo_add_root_path,
+	[AIT_INDICATOR_DISP] = __appinfo_add_indicator_display,
+	[AIT_EFFECT_IMAGE_PORT] = __appinfo_add_effect_image,
+	[AIT_EFFECT_IMAGE_LAND] = NULL,
+	[AIT_EFFECT_TYPE] = __appinfo_add_effect_image_type,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
