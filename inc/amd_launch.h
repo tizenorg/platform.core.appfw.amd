@@ -33,8 +33,6 @@ int _fake_launch_app(int cmd, int pid, bundle * kb, int clifd);
 int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid, uid_t caller_uid, int fd, bool *pend);
 int _start_app_local(uid_t uid, const char *appid);
 int _start_app_local_with_bundle(uid_t uid, const char *appid, bundle *kb);
-int _get_pid_of_last_launched_ui_app();
-int _send_hint_for_visibility(uid_t uid);
 int _launch_init(void);
 
 
