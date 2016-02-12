@@ -941,6 +941,9 @@ static int __app_status_handler(int pid, int status, void *data)
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
 		/* _amd_suspend_remove_timer(pid); */
+
+		if (pid == _get_pid_of_last_launched_ui_app())
+			_send_hint_for_visibility(getuid());
 	} else if (status == PROC_STATUS_BG) {
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
 		/*
