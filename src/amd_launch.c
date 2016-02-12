@@ -923,6 +923,23 @@ static void __del_fgmgr_list(int pid)
 	}
 }
 
+static int __send_hint_for_visibility(uid_t uid)
+{
+	bundle *b = NULL;
+	int ret;
+
+	b = bundle_create();
+
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, uid,
+			PAD_CMD_VISIBILITY, b);
+
+	if (b)
+		bundle_free(b);
+	__pid_of_last_launched_ui_app = 0;
+
+	return ret;
+}
+
 static int __app_status_handler(int pid, int status, void *data)
 {
 	/* char *appid = NULL; */
@@ -941,6 +958,9 @@ static int __app_status_handler(int pid, int status, void *data)
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
 		/* _amd_suspend_remove_timer(pid); */
+
+		if (pid == __pid_of_last_launched_ui_app)
+			__send_hint_for_visibility(getuid());
 	} else if (status == PROC_STATUS_BG) {
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
 		/*
@@ -978,28 +998,6 @@ int _launch_init()
 	_D("ret : %d", ret);
 
 	return 0;
-}
-
-int _send_hint_for_visibility(uid_t uid)
-{
-	bundle *b = NULL;
-	int ret;
-
-	b = bundle_create();
-
-	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, uid,
-			PAD_CMD_VISIBILITY, b);
-
-	if (b)
-		bundle_free(b);
-	__pid_of_last_launched_ui_app = 0;
-
-	return ret;
-}
-
-int _get_pid_of_last_launched_ui_app()
-{
-	return __pid_of_last_launched_ui_app;
 }
 
 int _start_app(const char* appid, bundle* kb, int cmd, int caller_pid,
