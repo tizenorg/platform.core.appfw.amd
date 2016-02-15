@@ -43,11 +43,13 @@
 #include "amd_app_com.h"
 #include "amd_share.h"
 #include "amd_socket.h"
+#include "amd_wayland.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
 #define AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL "syspopup_launch_request"
+#define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
 struct restart_info {
 	char *appid;
@@ -291,6 +293,7 @@ static int __init(void)
 		return -1;
 	}
 
+	_wayland_init();
 	_request_init();
 	_status_init();
 	app_group_init();
