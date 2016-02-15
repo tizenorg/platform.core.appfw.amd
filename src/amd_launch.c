@@ -1145,13 +1145,29 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 		hwacc = appinfo_get_value(ai, AIT_HWACC);
 		root_path = appinfo_get_value(ai, AIT_ROOT_PATH);
+
+		bundle_del(kb, AUL_K_HWACC);
 		bundle_add(kb, AUL_K_HWACC, hwacc);
+
+		bundle_del(kb, AUL_K_ROOT_PATH);
 		bundle_add(kb, AUL_K_ROOT_PATH, root_path);
+
+		bundle_del(kb, AUL_K_EXEC);
 		bundle_add(kb, AUL_K_EXEC, app_path);
+
+		bundle_del(kb, AUL_K_PACKAGETYPE);
 		bundle_add(kb, AUL_K_PACKAGETYPE, pkg_type);
+
+		bundle_del(kb, AUL_K_PKGID);
 		bundle_add(kb, AUL_K_PKGID, pkg_id);
+
+		bundle_del(kb, AUL_K_INTERNAL_POOL);
 		bundle_add(kb, AUL_K_INTERNAL_POOL, process_pool);
+
+		bundle_del(kb, AUL_K_COMP_TYPE);
 		bundle_add(kb, AUL_K_COMP_TYPE, component_type);
+
+		bundle_del(kb, AUL_K_APP_TYPE);
 		bundle_add(kb, AUL_K_APP_TYPE, app_type);
 
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
