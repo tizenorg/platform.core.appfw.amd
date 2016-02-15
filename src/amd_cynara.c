@@ -153,7 +153,6 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	int ret;
 
 	ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
-
 	if (ret < 0)
 		return ret;
 
@@ -221,7 +220,7 @@ static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
 
 static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 {
-	int i = 0;
+	int i;
 
 	for (i = 0; i < checker_len; i++) {
 		if (checker_table[i].cmd == _request_get_cmd(req))
@@ -233,7 +232,7 @@ static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 
 static int __check_command(int cmd)
 {
-	int i = 0;
+	int i;
 
 	for (i = 0; i < checker_len; i++) {
 		if (checker_table[i].cmd == cmd)
@@ -264,8 +263,6 @@ int check_privilege_by_cynara(request_h req)
 
 	return r;
 }
-
-
 
 int init_cynara(void)
 {
