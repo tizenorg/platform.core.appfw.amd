@@ -36,10 +36,13 @@
 #include <cert-svc/ccert.h>
 #include <cert-svc/cinstance.h>
 #include <gio/gio.h>
-
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
+#include <wayland-client.h>
+#include <wayland-tbm-client.h>
+#include <tizen-extension-client-protocol.h>
+#include <vconf.h>
 
 #include "amd_config.h"
 #include "amd_launch.h"
@@ -77,27 +80,35 @@
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define PREFIX_EXTERNAL_STORAGE_PATH "/opt/storage/sdcard/"
 
-typedef struct {
-	char *pkg_name;     /* package */
-	char *app_path;     /* exec */
-	char *original_app_path;    /* exec */
-	int multiple;       /* x_slp_multiple */
-	char *pkg_type;
-} app_info_from_pkgmgr;
-
-static int __pid_of_last_launched_ui_app;
-
-static GDBusConnection *conn;
-static GList *_fgmgr_list;
-
+#if 0
 struct fgmgr {
 	guint tid;
 	int pid;
 };
 
+static GList *_fgmgr_list;
+#endif
+
+struct wl_splash_screen {
+	struct wl_display *display;
+	struct wl_registry *registry;
+	struct tizen_launchscreen *launch_screen;
+};
+
+struct wl_splash_image {
+	struct tizen_launch_image *image;
+	guint tid;
+};
+
+static int __pid_of_last_launched_ui_app;
+static GDBusConnection *conn;
+static struct wl_splash_screen *wl_ss;
+
 static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req);
 extern void _cleanup_dead_info(int pid);
+extern int _wl_is_initialized(void);
+static struct wl_splash_screen *__init_splash_screen(void);
 
 static void __set_stime(bundle *kb)
 {
@@ -882,6 +893,7 @@ static int __check_execute_permission(const char *callee_pkgid,
 	return 0;
 }
 
+#if 0
 static gboolean __fg_timeout_handler(gpointer data)
 {
 	struct fgmgr *fg = data;
@@ -897,7 +909,7 @@ static gboolean __fg_timeout_handler(gpointer data)
 	return FALSE;
 }
 
-/*static*/ void __add_fgmgr_list(int pid)
+static void __add_fgmgr_list(int pid)
 {
 	struct fgmgr *fg;
 
@@ -964,10 +976,303 @@ static int __app_status_handler(int pid, int status, void *data)
 
 	return 0;
 }
+#endif
+
+static int __invoke_dbus_method_call(const char *dest,
+		const char *path,
+		const char *interface,
+		const char *method,
+		GVariant *param)
+{
+	int ret = -1;
+	GError *err = NULL;
+	GDBusMessage *msg = NULL;
+	GDBusMessage *reply = NULL;
+	GVariant *body;
+
+	if (param == NULL)
+		return -1;
+
+	if (conn == NULL) {
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+		if (conn == NULL) {
+			_E("g_bus_get_sync() is failed. %s", err->message);
+			g_clear_error(&err);
+			return -1;
+		}
+	}
+
+	msg = g_dbus_message_new_method_call(dest,
+			path,
+			interface,
+			method);
+	if (msg == NULL) {
+		_E("g_dbus_message_new_method_call() is failed.");
+		return -1;
+	}
+
+	g_dbus_message_set_body(msg, param);
+
+	reply = g_dbus_connection_send_message_with_reply_sync(conn,
+			msg,
+			G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+			500,
+			NULL,
+			NULL,
+			&err);
+	if (reply == NULL) {
+		_E("g_dbus_connection_send_mesage_with_reply_sync() "
+				"is falied. %s", err->message);
+		goto out;
+	}
+
+	body = g_dbus_message_get_body(reply);
+	if (body == NULL) {
+		_E("g_dbus_message_get_body() is failed.");
+		goto out;
+	}
+
+	ret = (int)g_variant_get_int32(body);
+
+out:
+	if (msg)
+		g_object_unref(msg);
+	if (reply)
+		g_object_unref(reply);
+
+	g_clear_error(&err);
+
+	return ret;
+}
+
+static void __destroy_splash_image(struct wl_splash_image *wl_si)
+{
+	if (wl_si == NULL)
+		return;
+
+	if (wl_si->tid > 0)
+		g_source_remove(wl_si->tid);
+	if (wl_si->image)
+		tizen_launch_image_destroy(wl_si->image);
+	free(wl_si);
+}
+
+static gboolean __splash_image_timeout_handler(gpointer data)
+{
+	struct wl_splash_image *wl_si = (struct wl_splash_image *)data;
+
+	if (wl_si == NULL)
+		return FALSE;
+
+	__destroy_splash_image(wl_si);
+
+	return FALSE;
+}
+
+static int __app_can_launch_splash_image(const struct appinfo *ai, bundle *kb, int cmd)
+{
+	const char *fake_effect;
+	const char *component_type;
+	const char *operation;
+
+	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
+	if (component_type && strncmp(component_type, APP_TYPE_SERVICE,
+				strlen(APP_TYPE_SERVICE)) == 0) {
+		_D("component_type: %s", component_type);
+		return -1;
+	}
+
+	if (cmd == APP_OPEN)
+		return 0;
+
+	fake_effect = bundle_get_val(kb, "__FAKE_EFFECT__");
+	if (fake_effect == NULL) {
+		_D("fake_effect is NULL");
+		return -1;
+	}
+
+	if (strncmp(fake_effect, "OFF", strlen("OFF")) == 0) {
+		_D("fake effect off");
+		return -1;
+	}
+
+	operation = bundle_get_val(kb, AUL_SVC_OPERATION_MAIN);
+	if (operation == NULL) {
+		_D("operation is NULL");
+		return -1;
+	}
+
+	if (strncmp(operation, AUL_SVC_OPERATION_MAIN,
+				strlen(AUL_SVC_OPERATION_MAIN)) != 0) {
+		_D("operation is not %s", AUL_SVC_OPERATION_MAIN);
+		return -1;
+	}
+
+	return 0;
+}
+
+static struct appinfo_splash_screen *__get_splash_screen_info(
+		const struct appinfo *ai, int screen_mode)
+{
+	if (screen_mode == 0 || screen_mode == 2)
+		return (struct appinfo_splash_screen *)appinfo_get_value(ai,
+				AIT_PORTRAIT_SPLASH_SCREEN);
+	else if (screen_mode == 1 || screen_mode == 3)
+		return (struct appinfo_splash_screen *)appinfo_get_value(ai,
+				AIT_LANDSCAPE_SPLASH_SCREEN);
+
+	return NULL;
+}
+
+static struct wl_splash_image *__send_image_to_wm(const struct appinfo *ai,
+		bundle *kb, int cmd)
+{
+	struct wl_splash_image *wl_si;
+	struct wl_splash_screen *wl_ss;
+	struct appinfo_splash_screen *ai_ss;
+	int rots[] = {0, 90, 180, 270};
+	int screen_mode;
+	int rotate_allowed = 0;
+	int file_type = 1;
+	int indicator = 0;
+
+	wl_ss = __init_splash_screen();
+	if (wl_ss == NULL)
+		return NULL;
+
+	if (__app_can_launch_splash_image(ai, kb, cmd) < 0)
+		return NULL;
+
+	screen_mode = __invoke_dbus_method_call(ROTATION_BUS_NAME,
+						ROTATION_OBJECT_PATH,
+						ROTATION_INTERFACE_NAME,
+						ROTATION_METHOD_NAME,
+						g_variant_new("(i)", 0));
+	_D("screen_mode: %d", screen_mode);
+	if (screen_mode == -1)
+		screen_mode = 0;
+
+	vconf_get_bool(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
+						&rotate_allowed);
+	_D("rotate_allowed: %d", rotate_allowed);
+	if (rotate_allowed == 0)
+		screen_mode = 0;
+
+	ai_ss = __get_splash_screen_info(ai, screen_mode);
+	if (ai_ss == NULL)
+		return NULL;
+
+	if (strncmp(ai_ss->type, "img", strlen("img")) == 0)
+		file_type = 0;
+	if (strncmp(ai_ss->indicatordisplay, "on", strlen("on")) == 0)
+		indicator = 1;
+
+	wl_si = (struct wl_splash_image *)calloc(1,
+			sizeof(struct wl_splash_image));
+	if (wl_si == NULL) {
+		_E("out of memory");
+		return NULL;
+	}
+
+	wl_si->image = tizen_launchscreen_create_img(wl_ss->launch_screen);
+	if (wl_si->image == NULL) {
+		_E("Failed to get launch image");
+		free(wl_si);
+		return NULL;
+	}
+	wl_display_flush(wl_ss->display);
+
+	_D("src: %s, type: %s, indicator:%s, rotation: %d",
+		ai_ss->src, ai_ss->type,
+		ai_ss->indicatordisplay, rots[screen_mode]);
+	tizen_launch_image_launch(wl_si->image, ai_ss->src, file_type,
+			rots[screen_mode], indicator);
+	wl_display_flush(wl_ss->display);
+
+	wl_si->tid = g_timeout_add(3000, __splash_image_timeout_handler, wl_si);
+
+	return wl_si;
+}
+
+static void __send_pid_to_wm(struct wl_splash_image *wl_si, int pid)
+{
+	if (wl_si == NULL)
+		return;
+
+	tizen_launch_image_owner(wl_si->image, pid);
+}
+
+static void __wl_listener_cb(void *data, struct wl_registry *registry,
+		unsigned int id, const char *interface, unsigned int version)
+{
+	struct wl_splash_screen *wl_ss = (struct wl_splash_screen *)data;
+
+	if (wl_ss == NULL)
+		return;
+
+	if (interface && strncmp(interface, "tizen_launchscreen",
+				strlen("tizen_launchscreen")) == 0) {
+		_D("interface: %s", interface);
+		wl_ss->launch_screen = wl_registry_bind(registry, id,
+				&tizen_launchscreen_interface, 1);
+	}
+}
+
+static void __wl_listener_remove_cb(void *data,
+		struct wl_registry *registry, unsigned int id)
+{
+	(void)data;
+	(void)registry;
+	(void)id;
+}
+
+static const struct wl_registry_listener registry_listener = {
+	__wl_listener_cb,
+	__wl_listener_remove_cb,
+};
+
+static struct wl_splash_screen *__init_splash_screen(void)
+{
+	if (wl_ss)
+		return wl_ss;
+
+	if (_wl_is_initialized() == 0)
+		return NULL;
+
+	wl_ss = (struct wl_splash_screen *)calloc(1,
+			sizeof(struct wl_splash_screen));
+	if (wl_ss == NULL) {
+		_E("out of memory");
+		return NULL;
+	}
+
+	wl_ss->display = wl_display_connect(NULL);
+	if (wl_ss->display == NULL) {
+		_E("Failed to get display");
+		free(wl_ss);
+		return NULL;
+	}
+
+	wl_ss->registry = wl_display_get_registry(wl_ss->display);
+	if (wl_ss->registry == NULL) {
+		_E("Failed to get registry");
+		wl_display_disconnect(wl_ss->display);
+		free(wl_ss);
+		return NULL;
+	}
+
+	wl_registry_add_listener(wl_ss->registry, &registry_listener, NULL);
+	wl_display_dispatch(wl_ss->display);
+	wl_display_roundtrip(wl_ss->display);
+
+	return wl_ss;
+}
 
 int _launch_init()
 {
+#if 0
 	int ret;
+#endif
 	GError *err = NULL;
 
 	_D("_launch_init");
@@ -981,8 +1286,17 @@ int _launch_init()
 		}
 	}
 
+#if 0
+	/*
+	 * TODO: After applying emit app status signal in enlightenment,
+	 *	remove this comment
+	 */
 	ret = aul_listen_app_status_signal(__app_status_handler, NULL);
 	_D("ret : %d", ret);
+#endif
+
+	if (__init_splash_screen() == NULL)
+		_E("Failed to initialize splash screen");
 
 	return 0;
 }
@@ -1038,6 +1352,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	shared_info_h share_handle;
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
+	struct wl_splash_image *wl_si;
 
 	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
@@ -1157,10 +1472,15 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;
 
+		wl_si = __send_image_to_wm(ai, kb, cmd);
+
 		pid = _send_cmd_to_launchpad(pad_type, caller_uid, PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
+			__send_pid_to_wm(wl_si, pid);
 			aul_send_app_launch_request_signal(pid, appid, pkg_id, component_type);
+		} else {
+			__destroy_splash_image(wl_si);
 		}
 	}
 
