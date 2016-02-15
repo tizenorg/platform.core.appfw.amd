@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
+#include <sys/inotify.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -48,6 +49,7 @@
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
 #define AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL "syspopup_launch_request"
+#define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
 struct restart_info {
 	char *appid;
@@ -55,7 +57,15 @@ struct restart_info {
 	guint timer;
 };
 
+struct wl_watch {
+	int fd;
+	int wd;
+	GIOChannel *io;
+	guint wid;
+};
+
 static GHashTable *restart_tbl;
+static int wl_initialized = 0;
 
 static gboolean __restart_timeout_handler(void *data)
 {
@@ -268,6 +278,82 @@ static int __syspopup_dbus_signal_handler_init(void)
 	return 0;
 }
 
+int _wl_is_initialized(void)
+{
+	return wl_initialized;
+}
+
+static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data)
+{
+	char buf[INOTIFY_BUF];
+	ssize_t len = 0;
+	int i = 0;
+	struct inotify_event *event;
+	char *p;
+	int fd = g_io_channel_unix_get_fd(io);
+
+	len = read(fd, buf, sizeof(buf));
+	if (len < 0) {
+		_E("Failed to read");
+		return TRUE;
+	}
+
+	while (i < len) {
+		event = (struct inotify_event *)&buf[i];
+		if (event->len) {
+			p = event->name;
+			if (p && !strncmp(p, "wayland-0", strlen("wayland-0"))) {
+				_D("%s exists", p);
+				wl_initialized = 1;
+				return TRUE;
+			}
+		}
+		i += sizeof(struct inotify_event) + event->len;
+	}
+
+	return TRUE;
+}
+
+static void __wl_destroy_cb(gpointer data)
+{
+	struct wl_watch *watch = (struct wl_watch *)data;
+
+	if (watch == NULL)
+		return;
+
+	g_io_channel_unref(watch->io);
+	inotify_rm_watch(watch->fd, watch->wd);
+	close(watch->fd);
+	free(watch);
+}
+
+static void __wl_init(void)
+{
+	char buf[PATH_MAX];
+	struct wl_watch *watch;
+
+	snprintf(buf, sizeof(buf), "/run/user/%d/wayland-0", getuid());
+	if (access(buf, F_OK) == 0) {
+		_D("%s exists", buf);
+		wl_initialized = 1;
+		return;
+	}
+
+	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
+
+	watch = (struct wl_watch *)calloc(1, sizeof(struct wl_watch));
+	if (watch == NULL) {
+		_E("out of memory");
+		return;
+	}
+
+	watch->fd = inotify_init();
+	watch->wd = inotify_add_watch(watch->fd, buf, IN_CREATE);
+	watch->io = g_io_channel_unix_new(watch->fd);
+	watch->wid = g_io_add_watch_full(watch->io, G_PRIORITY_DEFAULT,
+			G_IO_IN, __wl_monitor_cb, watch, __wl_destroy_cb);
+}
+
 static int __init(void)
 {
 	int r;
@@ -293,16 +379,13 @@ static int __init(void)
 
 	_request_init();
 	_status_init();
+	__wl_init();
 	app_group_init();
 	r = rua_delete_history_from_db(NULL);
 	_D("rua_delete_history : %d", r);
 
 	app_com_broker_init();
-	/*
-	 * TODO : After applying emit app status signal in enlightment,
-	 *        remove this comment.
-	 * _launch_init();
-	 */
+	_launch_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
