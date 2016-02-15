@@ -16,7 +16,7 @@ INCLUDE(FindPkgConfig)
 
 SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore libtzplatform-config)
 IF (with_wayland)
-	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} wayland-client tizen-extension-client ecore-wayland )
+	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} wayland-client tizen-extension-client ecore-wayland wayland-tbm-client)
 ENDIF (with_wayland)
 IF (with_x11)
 	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} )
@@ -50,6 +50,7 @@ ADD_EXECUTABLE(amd
 	src/amd_cynara.c
 	src/amd_socket.c
 	src/amd_share.c
+	src/amd_splash_screen.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")

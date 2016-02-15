@@ -808,9 +808,8 @@ static int __dispatch_app_pause(request_h req)
 
 	appid = (char *)bundle_get_val(kb, AUL_K_APPID);
 	ret = _status_app_is_running_v2(appid, req->uid);
-	if (ret > 0) {
+	if (ret > 0)
 		ret = _pause_app(ret, req);
-	}
 	else
 		_E("%s is not running", appid);
 
@@ -1146,14 +1145,12 @@ static int __dispatch_app_register_pid(request_h req)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	if (appid == NULL) {
+	if (appid == NULL)
 		return -1;
-	}
 
 	pid_str = bundle_get_val(kb, AUL_K_PID);
-	if (pid_str == NULL) {
+	if (pid_str == NULL)
 		return -1;
-	}
 
 	pid = atoi(pid_str);
 	ret = _status_app_is_running(appid, req->uid);
@@ -1235,7 +1232,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 
 static void __free_request(gpointer data)
 {
-	request_h req = (request_h )data;
+	request_h req = (request_h)data;
 
 	if (req->kb)
 		bundle_free(req->kb);
@@ -1253,7 +1250,7 @@ static void __free_pending_item(struct pending_item *item)
 
 static void __process_pending_request(gpointer data, gpointer user_data)
 {
-	request_h req = (request_h )data;
+	request_h req = (request_h)data;
 
 	dispatch_table[req->cmd](req);
 
@@ -1263,7 +1260,7 @@ static void __process_pending_request(gpointer data, gpointer user_data)
 
 static void __timeout_pending_request(gpointer data, gpointer user_data)
 {
-	request_h req = (request_h )data;
+	request_h req = (request_h)data;
 
 	_request_send_result(req, -1);
 }
