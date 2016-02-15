@@ -36,7 +36,6 @@
 #include <cert-svc/ccert.h>
 #include <cert-svc/cinstance.h>
 #include <gio/gio.h>
-
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
@@ -52,6 +51,7 @@
 #include "amd_socket.h"
 #include "amd_share.h"
 #include "amd_app_com.h"
+#include "amd_splash_screen.h"
 
 #define DAC_ACTIVATE
 
@@ -77,23 +77,14 @@
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define PREFIX_EXTERNAL_STORAGE_PATH "/opt/storage/sdcard/"
 
-typedef struct {
-	char *pkg_name;     /* package */
-	char *app_path;     /* exec */
-	char *original_app_path;    /* exec */
-	int multiple;       /* x_slp_multiple */
-	char *pkg_type;
-} app_info_from_pkgmgr;
-
-static int __pid_of_last_launched_ui_app;
-
-static GDBusConnection *conn;
-static GList *_fgmgr_list;
-
 struct fgmgr {
 	guint tid;
 	int pid;
 };
+
+static GList *_fgmgr_list;
+static int __pid_of_last_launched_ui_app;
+static GDBusConnection *conn;
 
 static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req);
@@ -897,7 +888,7 @@ static gboolean __fg_timeout_handler(gpointer data)
 	return FALSE;
 }
 
-/*static*/ void __add_fgmgr_list(int pid)
+static void __add_fgmgr_list(int pid)
 {
 	struct fgmgr *fg;
 
@@ -1036,6 +1027,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	shared_info_h share_handle;
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
+	splash_image_h si;
 
 	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
@@ -1171,10 +1163,16 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;
 
+		si = _splash_screen_create_image(ai, kb, cmd);
+		_splash_screen_send_image(si);
+
 		pid = _send_cmd_to_launchpad(pad_type, caller_uid, PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
+			_splash_screen_send_pid(si, pid);
 			aul_send_app_launch_request_signal(pid, appid, pkg_id, component_type);
+		} else {
+			_splash_screen_destroy_image(si);
 		}
 	}
 
@@ -1185,7 +1183,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 				_D("add app group info");
 				__pid_of_last_launched_ui_app = pid;
 				app_group_start_app(pid, kb, lpid, can_attach, launch_mode);
-				/* __add_fgmgr_list(pid); */
+				__add_fgmgr_list(pid);
 			} else {
 				app_group_restart_app(pid, kb);
 			}
