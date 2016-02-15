@@ -43,11 +43,19 @@ enum appinfo_type {
 	AIT_VISIBILITY,
 	AIT_APPTYPE,
 	AIT_ROOT_PATH,
+	AIT_PORTRAIT_SPLASH_SCREEN,
+	AIT_LANDSCAPE_SPLASH_SCREEN,
 	AIT_MAX
 };
 
 struct appinfo {
 	char *val[AIT_MAX];
+};
+
+struct appinfo_splash_screen {
+	char *src;
+	char *type;
+	char *indicatordisplay;
 };
 
 #define APP_TYPE_SERVICE	"svcapp"

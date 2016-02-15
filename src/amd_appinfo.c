@@ -55,6 +55,21 @@ enum _background_category {
 
 static int gles = 1;
 
+static void __free_appinfo_splash_screen(
+		struct appinfo_splash_screen *splashscreen)
+{
+	if (splashscreen == NULL)
+		return;
+
+	if (splashscreen->indicatordisplay)
+		free(splashscreen->indicatordisplay);
+	if (splashscreen->type)
+		free(splashscreen->type);
+	if (splashscreen->src)
+		free(splashscreen->src);
+	free(splashscreen);
+}
+
 static void __free_appinfo(gpointer data)
 {
 	struct appinfo *c = data;
@@ -64,7 +79,10 @@ static void __free_appinfo(gpointer data)
 		return;
 
 	for (i = AIT_START; i < AIT_MAX; i++) {
-		if (i != AIT_BG_CATEGORY && c->val[i] != NULL)
+		if (i == AIT_PORTRAIT_SPLASH_SCREEN
+				|| i == AIT_LANDSCAPE_SPLASH_SCREEN)
+			__free_appinfo_splash_screen((struct appinfo_splash_screen *)c->val[i]);
+		else if (i != AIT_BG_CATEGORY && c->val[i] != NULL)
 			free(c->val[i]);
 	}
 
@@ -416,6 +434,46 @@ static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle, struct app
 	return 0;
 }
 
+static int __add_splash_screen_list_cb(const char *src, const char *type,
+		const char *orientation, const char *indicatordisplay,
+		void *user_data)
+{
+	struct appinfo *info = (struct appinfo *)user_data;
+	struct appinfo_splash_screen *splashscreen;
+
+	splashscreen = (struct appinfo_splash_screen *)calloc(1,
+			sizeof(struct appinfo_splash_screen));
+	if (splashscreen == NULL) {
+		_E("out of memory");
+		return -1;
+	}
+
+	splashscreen->src = strdup(src);
+	splashscreen->type = strdup(type);
+	splashscreen->indicatordisplay = strdup(indicatordisplay);
+
+	if (strncmp(orientation, "portrait", strlen("portrait")) == 0)
+		info->val[AIT_PORTRAIT_SPLASH_SCREEN] = (char *)splashscreen;
+	else if (strncmp(orientation, "landscape", strlen("landscape")) == 0)
+		info->val[AIT_LANDSCAPE_SPLASH_SCREEN] = (char *)splashscreen;
+	else
+		__free_appinfo_splash_screen(splashscreen);
+
+	return 0;
+}
+
+static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+
+	if (pkgmgrinfo_appinfo_foreach_splash_screen(handle,
+				__add_splash_screen_list_cb, info) < 0) {
+		_E("Failed to get splash screen");
+		return -1;
+	}
+
+	return 0;
+}
+
 static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_NAME] = NULL,
 	[AIT_EXEC] = __appinfo_add_exec,
@@ -440,6 +498,8 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_VISIBILITY] = NULL,
 	[AIT_APPTYPE] = __appinfo_add_apptype,
 	[AIT_ROOT_PATH] = __appinfo_add_root_path,
+	[AIT_PORTRAIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
+	[AIT_LANDSCAPE_SPLASH_SCREEN] = NULL,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
