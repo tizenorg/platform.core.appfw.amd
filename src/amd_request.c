@@ -736,7 +736,7 @@ static int __dispatch_app_start(request_h req)
 	/* add pending list to wait app launched successfully */
 	if (pending) {
 		pending_item = calloc(1, sizeof(struct pending_item));
-		pending_item->clifd = req->clifd;
+		pending_item->clifd = _request_remove_fd(req);
 		pending_item->pid = ret;
 		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
 				__timeout_pending_item, (gpointer)pending_item);
