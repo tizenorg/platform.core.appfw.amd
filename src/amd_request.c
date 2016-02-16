@@ -942,9 +942,7 @@ static int __dispatch_app_status_update(request_h req)
 		appid = _status_app_get_appid_bypid(req->pid);
 		ai = appinfo_find(req->uid, appid);
 		appinfo_set_value((struct appinfo *)ai, AIT_STATUS, "norestart");
-	} else {
-		if (*status == STATUS_VISIBLE && req->pid == _get_pid_of_last_launched_ui_app())
-			_send_hint_for_visibility(req->uid);
+	} else if (*status != STATUS_VISIBLE && *status != STATUS_BG) {
 		_status_update_app_info_list(req->pid, *status, FALSE, req->uid);
 	}
 
