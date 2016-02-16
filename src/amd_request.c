@@ -1426,7 +1426,7 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 	}
 
 	if (cr.uid >= REGULAR_UID_MIN) {
-		ret = check_privilege_by_cynara(clifd, pkt);
+		ret = check_privilege_by_cynara(req);
 		if (ret < 0) {
 			_E("request has been denied by smack");
 			ret = -EILLEGALACCESS;
@@ -1474,6 +1474,11 @@ int _request_get_fd(request_h req)
 int _request_get_pid(request_h req)
 {
 	return req->pid;
+}
+
+bundle *_request_get_bundle(request_h req)
+{
+	return req->kb;
 }
 
 request_h _request_create_local(int cmd, int uid, int pid)

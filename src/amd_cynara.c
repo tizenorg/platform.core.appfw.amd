@@ -23,6 +23,7 @@
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
+#include <amd_request.h>
 
 #include "amd_util.h"
 
@@ -41,7 +42,7 @@ struct caller_info {
 	char *session;
 };
 
-typedef int (*checker_func)(struct caller_info *info, const app_pkt_t *pkt, void *data);
+typedef int (*checker_func)(struct caller_info *info, request_h req, void *data);
 
 struct checker_info {
 	int cmd;
@@ -137,12 +138,12 @@ static int __check_privilege(struct caller_info *info, const char *privilege)
 	return ret;
 }
 
-static int __simple_checker(struct caller_info *info, const app_pkt_t *pkt, void *data)
+static int __simple_checker(struct caller_info *info, request_h req, void *data)
 {
 	return __check_privilege(info, (const char *)data);
 }
 
-static int __appcontrol_checker(struct caller_info *info, const app_pkt_t *pkt, void *data)
+static int __appcontrol_checker(struct caller_info *info, request_h req, void *data)
 {
 	bundle *appcontrol;
 	const char *op_priv;
@@ -154,7 +155,7 @@ static int __appcontrol_checker(struct caller_info *info, const app_pkt_t *pkt, 
 	if (ret < 0)
 		return ret;
 
-	appcontrol = bundle_decode(pkt->data, pkt->len);
+	appcontrol = _request_get_bundle(req);
 	if (appcontrol == NULL)
 		goto end;
 
@@ -169,8 +170,6 @@ static int __appcontrol_checker(struct caller_info *info, const app_pkt_t *pkt, 
 	ret = __check_privilege(info, op_priv);
 
 end:
-	if (appcontrol)
-		bundle_free(appcontrol);
 
 	return ret;
 }
@@ -190,13 +189,13 @@ static struct checker_info checker_table[] = {
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
 
-static int __check_privilege_by_checker(int cmd, struct caller_info *info, const app_pkt_t *pkt)
+static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 {
 	int i = 0;
 
 	for (i = 0; i < checker_len; i++) {
-		if (checker_table[i].cmd == cmd)
-			return checker_table[i].checker(info, pkt, checker_table[i].data);
+		if (checker_table[i].cmd == _request_get_cmd(req))
+			return checker_table[i].checker(info, req, checker_table[i].data);
 	}
 
 	return 0;
@@ -214,22 +213,22 @@ static int __check_command(int cmd)
 	return 0;
 }
 
-int check_privilege_by_cynara(int sockfd, const app_pkt_t *pkt)
+int check_privilege_by_cynara(request_h req)
 {
 	int r;
 	struct caller_info info = {NULL, NULL, NULL};
 
-	if (!__check_command(pkt->cmd))
+	if (!__check_command(_request_get_cmd(req)))
 		return 0;
 
-	r = __get_caller_info_from_cynara(sockfd, &info);
+	r = __get_caller_info_from_cynara(_request_get_fd(req), &info);
 	if (r < 0) {
 		_E("failed to get caller info");
 		__destroy_caller_info(&info);
 		return -1;
 	}
 
-	r = __check_privilege_by_checker(pkt->cmd, &info, pkt);
+	r = __check_privilege_by_checker(req, &info);
 
 	__destroy_caller_info(&info);
 

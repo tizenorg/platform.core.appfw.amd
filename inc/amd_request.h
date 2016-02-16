@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <bundle.h>
 typedef struct request_s* request_h;
 
 int _request_init(void);
@@ -24,6 +25,7 @@ int _request_send_raw(request_h req, int cmd, unsigned char *data, int len);
 int _request_get_fd(request_h req);
 int _request_get_pid(request_h req);
 int _request_get_cmd(request_h req);
+bundle *_request_get_bundle(request_h req);
 request_h _request_create_local(int cmd, int uid, int pid);
 void _request_free_local(request_h req);
 int _request_remove_fd(request_h req);
