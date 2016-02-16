@@ -1047,7 +1047,7 @@ static int __dispatch_app_com_create(request_h req)
 
 	ret = app_com_add_endpoint(endpoint, *propagate, privilege);
 	if (ret == AUL_APP_COM_R_ERROR_OK || ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
-		ret = app_com_join(endpoint, getpgid(req->pid), req->clifd, NULL);
+		ret = app_com_join(endpoint, getpgid(req->pid), NULL);
 
 		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
 			_E("illegal access: remove endpoint");
@@ -1079,7 +1079,7 @@ static int __dispatch_app_com_join(request_h req)
 
 	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
 
-	ret = app_com_join(endpoint, getpgid(req->pid), req->clifd, filter);
+	ret = app_com_join(endpoint, getpgid(req->pid), filter);
 
 	_request_send_result(req, ret);
 
