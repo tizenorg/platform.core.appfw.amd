@@ -161,8 +161,8 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	if (appcontrol == NULL)
 		goto end;
 
-	bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
-	if (op == NULL)
+	ret = bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
+	if (ret != BUNDLE_ERROR_NONE)
 		goto end;
 
 	op_priv = __convert_operation_to_privilege(op);
