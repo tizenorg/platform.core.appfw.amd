@@ -149,7 +149,7 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 {
 	bundle *appcontrol;
 	const char *op_priv;
-	char *op;
+	char *op = NULL;
 	int ret;
 
 	ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
@@ -161,8 +161,8 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	if (appcontrol == NULL)
 		goto end;
 
-	bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
-	if (op == NULL)
+	ret = bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
+	if (op == NULL || ret < 0)
 		goto end;
 
 	op_priv = __convert_operation_to_privilege(op);
