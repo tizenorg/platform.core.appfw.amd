@@ -159,19 +159,16 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 
 	appcontrol = _request_get_bundle(req);
 	if (appcontrol == NULL)
-		goto end;
+		return 0;
 
-	ret = bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
-	if (ret != BUNDLE_ERROR_NONE)
-		goto end;
+	if (BUNDLE_ERROR_NONE != bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op))
+		return 0;
 
 	op_priv = __convert_operation_to_privilege(op);
 	if (op_priv == NULL)
-		goto end;
+		return 0;
 
 	ret = __check_privilege(info, op_priv);
-
-end:
 
 	return ret;
 }
