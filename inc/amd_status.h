@@ -21,10 +21,11 @@
 #include <glib.h>
 #include <stdbool.h>
 #include <aul.h>
+#include <security-manager.h>
 
 typedef struct _shared_info_t {
 	char *owner_appid;
-	char **paths;
+	private_sharing_req *handle;
 } shared_info_t;
 
 

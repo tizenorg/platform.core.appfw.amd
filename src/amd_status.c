@@ -235,7 +235,6 @@ static void __remove_all_shared_info(app_status_info_t *info_t)
 		if (sit) {
 			if (sit->owner_appid)
 				free(sit->owner_appid);
-			g_strfreev(sit->paths);
 			free(sit);
 		}
 		list = g_list_next(list);

@@ -14,7 +14,7 @@ ENDIF (with_x11)
 # Set required packages
 INCLUDE(FindPkgConfig)
 
-SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore libtzplatform-config xkbcommon)
+SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore libtzplatform-config xkbcommon security-manager)
 IF (with_wayland)
 	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} wayland-client tizen-extension-client ecore-wayland wayland-tbm-client)
 ENDIF (with_wayland)
