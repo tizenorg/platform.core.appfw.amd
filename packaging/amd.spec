@@ -11,6 +11,7 @@ Source0:    %{name}-%{version}.tar.gz
 Source100:  ac.conf
 Source101:  ac.service
 Source102:  ac.socket
+Source103:  ac.path
 Source1001: %{name}.manifest
 
 Requires(post):   /sbin/ldconfig
@@ -79,7 +80,8 @@ mkdir -p %{buildroot}%{_unitdir_user}/sockets.target.wants
 install -m 0644 %SOURCE100 %{buildroot}%{_tmpfilesdir}/ac.conf
 install -m 0644 %SOURCE101 %{buildroot}%{_unitdir_user}/ac.service
 install -m 0644 %SOURCE102 %{buildroot}%{_unitdir_user}/ac.socket
-ln -sf ../ac.service %{buildroot}%{_unitdir_user}/default.target.wants/ac.service
+install -m 0644 %SOURCE103 %{buildroot}%{_unitdir_user}/ac.path
+ln -sf ../ac.path %{buildroot}%{_unitdir_user}/default.target.wants/ac.path
 ln -sf ../ac.socket %{buildroot}%{_unitdir_user}/sockets.target.wants/ac.socket
 
 %preun
@@ -105,7 +107,8 @@ systemctl daemon-reload
 %manifest %{name}.manifest
 %{_tmpfilesdir}/ac.conf
 %{_unitdir_user}/ac.service
-%{_unitdir_user}/default.target.wants/ac.service
+%{_unitdir_user}/ac.path
+%{_unitdir_user}/default.target.wants/ac.path
 %{_unitdir_user}/ac.socket
 %{_unitdir_user}/sockets.target.wants/ac.socket
 %{_bindir}/amd
