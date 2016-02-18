@@ -37,6 +37,7 @@
 #include "amd_launch.h"
 #include "amd_util.h"
 #include "amd_app_group.h"
+#include "amd_input.h"
 
 #define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
@@ -383,6 +384,7 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 	app_status_info_t *info_t = NULL;
 
 	_D("pid(%d) status(%d)", pid, status);
+	_input_unlock();
 	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
 		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {

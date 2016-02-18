@@ -48,6 +48,7 @@
 #include "amd_socket.h"
 #include "amd_app_com.h"
 #include "amd_share.h"
+#include "amd_input.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -732,6 +733,9 @@ static int __dispatch_app_start(request_h req)
 	} else {
 		ret = _start_app(appid, kb, req->uid, req, &pending);
 	}
+
+	if (ret > 0 && app_group_get_window(getpgid(req->pid)) > 0)
+		_input_lock();
 
 	/* add pending list to wait app launched successfully */
 	if (pending) {

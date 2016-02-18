@@ -32,6 +32,7 @@
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
 #include <sys/inotify.h>
+#include <Ecore_Wayland.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -45,6 +46,7 @@
 #include "amd_share.h"
 #include "amd_socket.h"
 #include "amd_splash_screen.h"
+#include "amd_input.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
@@ -382,7 +384,7 @@ static int __init(void)
 	bundle *b;
 
 	if (appinfo_init()) {
-		_E("appinfo_init failed\n");
+		_E("appinfo_init failed");
 		return -1;
 	}
 
@@ -409,6 +411,7 @@ static int __init(void)
 	app_com_broker_init();
 	_launch_init();
 	_splash_screen_init();
+	_input_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");
@@ -464,5 +467,6 @@ int main(int argc, char *argv[])
 	g_main_loop_run(mainloop);
 
 	app_com_broker_fini();
+	_input_fini();
 	return 0;
 }
