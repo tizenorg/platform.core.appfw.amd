@@ -22,7 +22,7 @@
 
 #include "amd_appinfo.h"
 
-typedef struct splash_image* splash_image_h;
+typedef struct splash_image_s *splash_image_h;
 
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 				bundle *kb, int cmd);

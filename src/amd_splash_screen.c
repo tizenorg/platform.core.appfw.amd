@@ -21,19 +21,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <glib.h>
-#include <gio/gio.h>
 #include <aul_cmd.h>
 #include <aul_svc_priv_key.h>
 #include <wayland-client.h>
 #include <wayland-tbm-client.h>
 #include <tizen-extension-client-protocol.h>
 #include <vconf.h>
+#include <sensor_internal.h>
 
-#include "app_signal.h"
 #include "amd_config.h"
 #include "amd_appinfo.h"
 #include "amd_util.h"
@@ -42,13 +38,13 @@
 #define K_FAKE_EFFECT "__FAKE_EFFECT__"
 #define APP_CONTROL_OPERATION_MAIN "http://tizen.org/appcontrol/operation/main"
 
-struct splash_screen {
+struct splash_screen_s {
 	struct wl_display *display;
 	struct wl_registry *registry;
 	struct tizen_launchscreen *screen;
 };
 
-struct splash_image {
+struct splash_image_s {
 	struct tizen_launch_image *image;
 	char *src;
 	int type;
@@ -57,85 +53,23 @@ struct splash_image {
 	guint tid;
 };
 
-static GDBusConnection *conn;
-static struct splash_screen *splash_s = NULL;
-static int rotate_allowed = 0;
+struct rotation_s {
+	int handle;
+	int angle;
+	int auto_rotate;
+};
+
+static struct splash_screen_s splash_screen;
+static int splash_screen_initialized = 0;
+static struct rotation_s rotation;
+static int rotation_initialized = 0;
 
 extern int _wl_is_initialized(void);
-static struct splash_screen *__init_splash_screen(void);
-static struct splash_screen *__get_splash_screen(void);
-
-static int __invoke_dbus_method_call(const char *dest,
-		const char *path,
-		const char *interface,
-		const char *method,
-		GVariant *param)
-{
-	int ret = -1;
-	GError *err = NULL;
-	GDBusMessage *msg = NULL;
-	GDBusMessage *reply = NULL;
-	GVariant *body;
-
-	if (param == NULL)
-		return -1;
-
-	if (conn == NULL) {
-		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-		if (conn == NULL) {
-			_E("g_bus_get_sync() is failed. %s", err->message);
-			g_clear_error(&err);
-			return -1;
-		}
-	}
-
-	msg = g_dbus_message_new_method_call(dest,
-			path,
-			interface,
-			method);
-	if (msg == NULL) {
-		_E("g_dbus_message_new_method_call() is failed.");
-		return -1;
-	}
-
-	g_dbus_message_set_body(msg, param);
-
-	reply = g_dbus_connection_send_message_with_reply_sync(conn,
-			msg,
-			G_DBUS_SEND_MESSAGE_FLAGS_NONE,
-			500,
-			NULL,
-			NULL,
-			&err);
-	if (reply == NULL) {
-		_E("g_dbus_connection_send_mesage_with_reply_sync() "
-				"is falied. %s", err->message);
-		goto out;
-	}
-
-	body = g_dbus_message_get_body(reply);
-	if (body == NULL) {
-		_E("g_dbus_message_get_body() is failed.");
-		goto out;
-	}
-
-	ret = (int)g_variant_get_int32(body);
-
-out:
-	if (msg)
-		g_object_unref(msg);
-	if (reply)
-		g_object_unref(reply);
-
-	g_clear_error(&err);
-
-	return ret;
-}
+static int __init_splash_screen(void);
+static int __init_rotation(void);
 
 void _splash_screen_destroy_image(splash_image_h si)
 {
-	struct splash_screen *ss;
-
 	if (si == NULL)
 		return;
 
@@ -144,9 +78,8 @@ void _splash_screen_destroy_image(splash_image_h si)
 	if (si->tid > 0)
 		g_source_remove(si->tid);
 	if (si->image) {
-		ss = __get_splash_screen();
 		tizen_launch_image_destroy(si->image);
-		wl_display_flush(ss->display);
+		wl_display_flush(splash_screen.display);
 	}
 	free(si);
 }
@@ -204,11 +137,11 @@ static int __app_can_launch_splash_image(const struct appinfo *ai,
 }
 
 static struct appinfo_splash_screen *__get_splash_screen_info(
-		const struct appinfo *ai, int screen_mode)
+		const struct appinfo *ai, int angle)
 {
-	if ((screen_mode == 2 || screen_mode == 4) && rotate_allowed == true)
+	if ((angle == 90 || angle == 270) && rotation.auto_rotate == true)
 		return (struct appinfo_splash_screen *)appinfo_get_value(ai,
-						AIT_LANDSCAPE_SPLASH_SCREEN);
+				AIT_LANDSCAPE_SPLASH_SCREEN);
 
 	return (struct appinfo_splash_screen *)appinfo_get_value(ai,
 			AIT_PORTRAIT_SPLASH_SCREEN);
@@ -217,33 +150,26 @@ static struct appinfo_splash_screen *__get_splash_screen_info(
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 		bundle *kb, int cmd)
 {
-	struct splash_image *si;
-	struct splash_screen *ss;
+	struct splash_image_s *si;
 	struct appinfo_splash_screen *ai_ss;
-	int rots[] = {0, 90, 180, 270};
-	int screen_mode;
 	int file_type = 0;
 	int indicator = 1;
 
-	ss = __get_splash_screen();
-	if (ss == NULL || ss->screen == NULL)
-		return NULL;
+	if (!splash_screen_initialized) {
+		if (__init_splash_screen() < 0)
+			return NULL;
+	}
 
 	if (__app_can_launch_splash_image(ai, kb, cmd) < 0)
 		return NULL;
 
-	screen_mode = __invoke_dbus_method_call(ROTATION_BUS_NAME,
-						ROTATION_OBJECT_PATH,
-						ROTATION_INTERFACE_NAME,
-						ROTATION_METHOD_NAME,
-						g_variant_new("(i)", 0));
-	if (screen_mode < 1)
-		screen_mode = 1;
-	if (rotate_allowed == false)
-		screen_mode = 1;
-	_D("screen_mode: %d", screen_mode);
+	if (!rotation_initialized) {
+		if (__init_rotation() < 0)
+			_E("Failed to initialize rotation");
+	}
+	_D("angle: %d", rotation.angle);
 
-	ai_ss = __get_splash_screen_info(ai, screen_mode);
+	ai_ss = __get_splash_screen_info(ai, rotation.angle);
 	if (ai_ss == NULL)
 		return NULL;
 	if (access(ai_ss->src, F_OK) != 0)
@@ -253,19 +179,19 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	if (strncmp(ai_ss->indicatordisplay, "false", strlen("false")) == 0)
 		indicator = 0;
 
-	si = (struct splash_image *)calloc(1, sizeof(struct splash_image));
+	si = (struct splash_image_s *)calloc(1, sizeof(struct splash_image_s));
 	if (si == NULL) {
 		_E("out of memory");
 		return NULL;
 	}
 
-	si->image = tizen_launchscreen_create_img(ss->screen);
+	si->image = tizen_launchscreen_create_img(splash_screen.screen);
 	if (si->image == NULL) {
 		_E("Failed to get launch image");
 		free(si);
 		return NULL;
 	}
-	wl_display_flush(ss->display);
+	wl_display_flush(splash_screen.display);
 
 	si->src = strdup(ai_ss->src);
 	if (si->src == NULL) {
@@ -275,7 +201,7 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	}
 
 	si->type = file_type;
-	si->rotation = rots[screen_mode - 1];
+	si->rotation = rotation.angle;
 	si->indicator = indicator;
 	si->tid = g_timeout_add(3000, __splash_image_timeout_handler, si);
 
@@ -284,49 +210,30 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 
 void _splash_screen_send_image(splash_image_h si)
 {
-	struct splash_screen *ss;
-
 	if (si == NULL)
 		return;
 
-	ss = __get_splash_screen();
 	tizen_launch_image_launch(si->image, si->src, si->type,
 			si->rotation, si->indicator);
-	wl_display_flush(ss->display);
+	wl_display_flush(splash_screen.display);
 }
 
 void _splash_screen_send_pid(splash_image_h si, int pid)
 {
-	struct splash_screen *ss;
-
 	if (si == NULL)
 		return;
 
-	ss = __get_splash_screen();
 	tizen_launch_image_owner(si->image, pid);
-	wl_display_flush(ss->display);
-}
-
-static struct splash_screen *__get_splash_screen(void)
-{
-	if (splash_s)
-		return splash_s;
-
-	return __init_splash_screen();
+	wl_display_flush(splash_screen.display);
 }
 
 static void __wl_listener_cb(void *data, struct wl_registry *registry,
 		unsigned int id, const char *interface, unsigned int version)
 {
-	struct splash_screen *ss = (struct splash_screen *)data;
-
-	if (ss == NULL)
-		return;
-
 	if (interface && strncmp(interface, "tizen_launchscreen",
 				strlen("tizen_launchscreen")) == 0) {
 		_D("interface: %s", interface);
-		ss->screen = wl_registry_bind(registry, id,
+		splash_screen.screen = wl_registry_bind(registry, id,
 				&tizen_launchscreen_interface, 1);
 	}
 }
@@ -344,76 +251,132 @@ static const struct wl_registry_listener registry_listener = {
 	__wl_listener_remove_cb,
 };
 
-static struct splash_screen *__init_splash_screen(void)
+static int __init_splash_screen(void)
 {
 	if (!_wl_is_initialized())
-		return NULL;
+		return -1;
 
-	splash_s = (struct splash_screen *)calloc(1,
-			sizeof(struct splash_screen));
-	if (splash_s == NULL) {
-		_E("out of memory");
-		return NULL;
-	}
-
-	splash_s->display = wl_display_connect(NULL);
-	if (splash_s->display == NULL) {
+	splash_screen.display = wl_display_connect(NULL);
+	if (splash_screen.display == NULL) {
 		_E("Failed to get display");
-		free(splash_s);
-		return NULL;
+		return -1;
 	}
 
-	splash_s->registry = wl_display_get_registry(splash_s->display);
-	if (splash_s->registry == NULL) {
+	splash_screen.registry = wl_display_get_registry(splash_screen.display);
+	if (splash_screen.registry == NULL) {
 		_E("Failed to get registry");
-		wl_display_disconnect(splash_s->display);
-		free(splash_s);
-		return NULL;
+		wl_display_disconnect(splash_screen.display);
+		return -1;
 	}
 
-	wl_registry_add_listener(splash_s->registry,
-				&registry_listener, splash_s);
-	wl_display_dispatch(splash_s->display);
-	wl_display_roundtrip(splash_s->display);
+	wl_registry_add_listener(splash_screen.registry,
+			&registry_listener, NULL);
+	wl_display_dispatch(splash_screen.display);
+	wl_display_roundtrip(splash_screen.display);
 
-	return splash_s;
+	if (splash_screen.screen == NULL) {
+		_E("Failed to bind screen");
+		wl_display_disconnect(splash_screen.display);
+		return -1;
+	}
+
+	splash_screen_initialized = 1;
+
+	return 0;
 }
 
-static void __vconf_cb(keynode_t *key, void *data)
+static void __rotation_changed_cb(sensor_t sensor, unsigned int event_type,
+		sensor_data_t *data, void *user_data)
 {
-	const char *name;
+	int event;
 
-	name = vconf_keynode_get_name(key);
-	if (name == NULL)
+	if (event_type != AUTO_ROTATION_CHANGE_STATE_EVENT)
 		return;
-	else if (strcmp(name, VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL) == 0)
-		rotate_allowed = vconf_keynode_get_bool(key);
+
+	event = (int)data->values[0];
+	switch (event) {
+	case AUTO_ROTATION_DEGREE_0:
+		rotation.angle = 0;
+		break;
+	case AUTO_ROTATION_DEGREE_90:
+		rotation.angle = 90;
+		break;
+	case AUTO_ROTATION_DEGREE_180:
+		rotation.angle = 180;
+		break;
+	case AUTO_ROTATION_DEGREE_270:
+		rotation.angle = 270;
+		break;
+	default:
+		break;
+	}
+
+	_D("angle: %d", rotation.angle);
+}
+
+static void __auto_rotate_screen_cb(keynode_t *key, void *data)
+{
+	rotation.auto_rotate = vconf_keynode_get_bool(key);
+	if (!rotation.auto_rotate)
+		_D("auto_rotate: %d, angle: %d",
+				rotation.auto_rotate, rotation.angle);
+}
+
+static int __init_rotation(void)
+{
+	bool r;
+	sensor_t sensor = sensord_get_sensor(AUTO_ROTATION_SENSOR);
+
+	rotation.angle = 0;
+	rotation.handle = sensord_connect(sensor);
+	if (rotation.handle < 0) {
+		_E("Failed to connect sensord");
+		return -1;
+	}
+
+	r = sensord_register_event(rotation.handle,
+			AUTO_ROTATION_CHANGE_STATE_EVENT,
+			SENSOR_INTERVAL_NORMAL,
+			0,
+			__rotation_changed_cb,
+			NULL);
+	if (!r) {
+		_E("Failed to register event");
+		sensord_disconnect(rotation.handle);
+		return -1;
+	}
+
+	r = sensord_start(rotation.handle, 0);
+	if (!r) {
+		_E("Failed to start sensord");
+		sensord_unregister_event(rotation.handle,
+				AUTO_ROTATION_CHANGE_STATE_EVENT);
+		sensord_disconnect(rotation.handle);
+		return -1;
+	}
+
+	if (vconf_get_bool(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
+				&rotation.auto_rotate))
+		rotation.auto_rotate = false;
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
+				__auto_rotate_screen_cb, NULL) != 0)
+		_E("Failed to register callback for %s",
+				VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL);
+
+	rotation_initialized = 1;
+
+	return 0;
 }
 
 int _splash_screen_init(void)
 {
-	GError *err = NULL;
+	_D("init splash screen");
 
-	_D("init wayland");
-
-	if (!conn) {
-		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-		if (!conn) {
-			_E("g_bus_get_sync() is failed: %s", err->message);
-			g_error_free(err);
-			return -1;
-		}
-	}
-
-	if (!__init_splash_screen())
+	if (__init_splash_screen() < 0)
 		_E("Failed to initialize splash screen");
 
-	vconf_get_bool(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
-						&rotate_allowed);
-	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
-				__vconf_cb, NULL) != 0)
-		_E("Failed to register callback for %s",
-				VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL);
+	if (__init_rotation() < 0)
+		_E("Failed to initialize rotation");
 
 	return 0;
 }
