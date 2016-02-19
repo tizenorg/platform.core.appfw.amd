@@ -35,6 +35,7 @@
 #define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
 #define PRIVILEGE_CALL "http://tizen.org/privilege/call"
 #define PRIVILEGE_PACKAGEMANAGER_INFO "http://tizen.org/privilege/packagemanager.info"
+#define PRIVILEGE_SYSTEM_SETTING "http://tizen.org/privilege/systemsettings.admin"
 
 static cynara *r_cynara;
 
@@ -214,6 +215,8 @@ static struct checker_info checker_table[] = {
 	{APP_ALL_RUNNING_INFO, __simple_checker, PRIVILEGE_PACKAGEMANAGER_INFO},
 	{APP_COM_JOIN, __com_create_checker, NULL},
 	{APP_COM_CREATE, __com_join_checker, NULL},
+	{APP_SET_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
+	{APP_UNSET_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
 };
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);

@@ -35,6 +35,7 @@
 #include <tzplatform_config.h>
 #include <systemd/sd-login.h>
 #include <aul_sock.h>
+#include <aul_svc.h>
 #include <aul_app_com.h>
 
 #include "amd_config.h"
@@ -1179,6 +1180,77 @@ static int __dispatch_app_register_pid(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_set_default_app(request_h req)
+{
+	bundle *b = NULL;
+	const char *op;
+	const char *mime_type;
+	const char *uri;
+	const char *appid;
+
+	int ret;
+
+	b = bundle_decode(req->data, req->len);
+	if (b == NULL) {
+		_E("Error bundle_decode");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	op = aul_svc_get_operation(b);
+	appid = aul_svc_get_appid(b);
+	if (op == NULL || appid == NULL) {
+		_E("Invalid operation, appid");
+		_request_send_result(req, -1);
+		bundle_free(b);
+		return -1;
+	}
+
+	mime_type = aul_svc_get_mime(b);
+	uri = aul_svc_get_uri(b);
+
+	ret = aul_svc_set_defapp(op, mime_type, uri, appid);
+	if (ret < 0) {
+		_E("Error[%d], aul_svc_set_defapp", ret);
+		_request_send_result(req, -1);
+		bundle_free(b);
+		return -1;
+	}
+
+	_request_send_result(req, 0);
+
+	bundle_free(b);
+	return 0;
+}
+
+static int __dispatch_app_unset_default_app(request_h req)
+{
+	char *appid = NULL;
+	int ret;
+
+	appid = malloc(MAX_PACKAGE_STR_SIZE);
+	if (appid == NULL) {
+		_E("out of memory");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	strncpy(appid, (const char*)req->data, MAX_PACKAGE_STR_SIZE-1);
+
+	ret = aul_svc_unset_defapp(appid);
+	if (ret < 0) {
+		_E("Error[%d], aul_svc_unset_defapp", ret);
+		_request_send_result(req, -1);
+		free(appid);
+		return -1;
+	}
+
+	_request_send_result(req, 0);
+
+	free(appid);
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1232,6 +1304,8 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
+	[APP_SET_DEFAULT_APP] = __dispatch_app_set_default_app,
+	[APP_UNSET_DEFAULT_APP] = __dispatch_app_unset_default_app,
 };
 
 static void __free_request(gpointer data)
