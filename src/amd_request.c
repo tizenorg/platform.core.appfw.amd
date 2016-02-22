@@ -781,7 +781,8 @@ static int __dispatch_app_result(request_h req)
 		bundle_add(kb, AUL_K_CALLEE_PID, tmp_pid);
 	}
 
-	appid = _status_app_get_appid_bypid(pgid);
+	appid = _status_app_get_appid_bypid(pid);
+
 	if (appid != NULL) {
 		si = _temporary_permission_create(pgid, appid, kb, req->uid);
 		if (si == NULL)
