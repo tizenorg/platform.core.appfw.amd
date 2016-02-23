@@ -40,6 +40,7 @@ BuildRequires:  pkgconfig(cynara-session)
 BuildRequires:  pkgconfig(cert-svc-vcore)
 BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(sensor)
+BuildRequires:  pkgconfig(ttrace)
 %if %{with wayland}
 BuildRequires:  pkgconfig(ecore-wayland)
 BuildRequires:  pkgconfig(wayland-client)
