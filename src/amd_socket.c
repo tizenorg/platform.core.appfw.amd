@@ -197,6 +197,9 @@ retry_recv:
 
 void _send_result_to_client(int fd, int res)
 {
+	if (fd < 3)
+		return;
+
 	if (send(fd, &res, sizeof(int), MSG_NOSIGNAL) < 0) {
 		if (errno == EPIPE)
 			_E("send failed due to EPIPE.");
