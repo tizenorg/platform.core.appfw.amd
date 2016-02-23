@@ -35,6 +35,7 @@
 #include <tzplatform_config.h>
 #include <systemd/sd-login.h>
 #include <aul_sock.h>
+#include <aul_svc.h>
 #include <aul_app_com.h>
 
 #include "amd_config.h"
@@ -1179,6 +1180,61 @@ static int __dispatch_app_register_pid(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_set_app_control_default_app(request_h req)
+{
+	bundle *kb = NULL;
+	const char *op;
+	const char *mime_type;
+	const char *uri;
+	const char *appid;
+	int ret;
+
+	kb= req->kb;
+	if (kb == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	op = aul_svc_get_operation(kb);
+	appid = aul_svc_get_appid(kb);
+	if (op == NULL || appid == NULL) {
+		_E("Invalid operation, appid");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	mime_type = aul_svc_get_mime(kb);
+	uri = aul_svc_get_uri(kb);
+
+	ret = aul_svc_set_defapp_for_uid(op, mime_type, uri, appid, req->uid);
+	if (ret < 0) {
+		_E("Error[%d], aul_svc_set_defapp", ret);
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	_request_send_result(req, 0);
+	return 0;
+}
+
+static int __dispatch_app_unset_app_control_default_app(request_h req)
+{
+	char appid[MAX_PACKAGE_STR_SIZE];
+	int ret;
+
+	snprintf(appid, MAX_PACKAGE_STR_SIZE - 1, "%s", (const char*)req->data);
+
+	ret = aul_svc_unset_defapp_for_uid(appid, req->uid);
+	if (ret < 0) {
+		_E("Error[%d], aul_svc_unset_defapp", ret);
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	_request_send_result(req, 0);
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1232,6 +1288,8 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
+	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
+	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
 };
 
 static void __free_request(gpointer data)
