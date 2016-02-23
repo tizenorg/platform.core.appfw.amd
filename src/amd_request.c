@@ -1233,6 +1233,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
+	[APP_START_ASYNC] = __dispatch_app_start,
 };
 
 static void __free_request(gpointer data)
@@ -1383,6 +1384,9 @@ static int __check_request(request_h req)
 {
 	int pid;
 	struct pending_item *item;
+
+	if (req->cmd == APP_START_ASYNC)
+		_request_send_result(req, 0);
 
 	if ((req->opt & AUL_SOCK_QUEUE) == 0)
 		return 0;
