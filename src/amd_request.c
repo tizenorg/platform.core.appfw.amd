@@ -1291,6 +1291,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
+	[APP_START_ASYNC] = __dispatch_app_start,
 };
 
 static void __free_request(gpointer data)
@@ -1485,12 +1486,15 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 		return TRUE;
 	}
 
+	if (req->cmd == APP_START_ASYNC)
+		close(_request_remove_fd(req));
+
 	if (cr.uid >= REGULAR_UID_MIN) {
 		ret = check_privilege_by_cynara(req);
 		if (ret < 0) {
 			_E("request has been denied by smack");
 			ret = -EILLEGALACCESS;
-			_send_result_to_client(clifd, ret);
+			_request_send_result(req, ret);
 			__free_request(req);
 			free(pkt);
 			return TRUE;
@@ -1513,7 +1517,8 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 			_E("callback returns FALSE : %d", pkt->cmd);
 	} else {
 		_E("Invalid packet or not supported command");
-		close(clifd);
+		if (req->clifd)
+			close(req->clifd);
 		req->clifd = 0;
 	}
 
