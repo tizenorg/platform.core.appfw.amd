@@ -39,6 +39,7 @@
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
+#include <ttrace.h>
 
 #include "amd_config.h"
 #include "amd_launch.h"
@@ -1029,6 +1030,8 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	int caller_pid = _request_get_pid(req);
 	splash_image_h si;
 
+	traceBegin(TTRACE_TAG_APPLICATION_MANAGER, "AMD:START_APP");
+
 	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
 
@@ -1053,18 +1056,21 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	if (ai == NULL) {
 		_D("cannot find appinfo of %s", appid);
 		_request_send_result(req, -ENOENT);
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return -1;
 	}
 
 	status = appinfo_get_value(ai, AIT_STATUS);
 	if (status == NULL) {
 		_request_send_result(req, -1);
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return -1;
 	}
 
 	if (!strcmp(status, "blocking")) {
 		_D("blocking");
 		_request_send_result(req, -EREJECTED);
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return -EREJECTED;
 	}
 
@@ -1074,8 +1080,10 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	process_pool = appinfo_get_value(ai, AIT_POOL);
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 
-	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0)
+	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0) {
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return ret;
+	}
 
 	multiple = appinfo_get_value(ai, AIT_MULTI);
 	if (!multiple || strncmp(multiple, "false", 5) == 0)
@@ -1088,6 +1096,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
 			_request_send_result(req, pid);
+			traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 			return pid;
 		}
 	} else if (component_type
@@ -1097,6 +1106,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 					caller_appid, caller_uid, kb);
 			if (ret != 0) {
 				_request_send_result(req, ret);
+				traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 				return ret;
 			}
 		}
@@ -1197,5 +1207,6 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		_temporary_permission_destroy(share_handle);
 	}
 
+	traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 	return pid;
 }
