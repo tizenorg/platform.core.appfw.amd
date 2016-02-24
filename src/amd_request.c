@@ -1024,7 +1024,7 @@ static int __dispatch_app_com_create(request_h req)
 	bundle *kb;
 	int ret;
 	size_t propagate_size;
-	unsigned int *propagate;
+	unsigned int propagate[1];
 	const char *privilege;
 	const char *endpoint;
 
@@ -1046,14 +1046,13 @@ static int __dispatch_app_com_create(request_h req)
 
 	ret = bundle_get_byte(kb, AUL_K_COM_PROPAGATE, (void **)&propagate, &propagate_size);
 	if (ret < 0)
-		propagate = 0;
+		*propagate = 0;
 
 	_D("endpoint: %s propagate: %x privilege: %s", endpoint, *propagate, privilege);
 
 	ret = app_com_add_endpoint(endpoint, *propagate, privilege);
 	if (ret == AUL_APP_COM_R_ERROR_OK || ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
 		ret = app_com_join(endpoint, getpgid(req->pid), NULL);
-
 		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
 			_E("illegal access: remove endpoint");
 			app_com_remove_endpoint(endpoint);
@@ -1291,6 +1290,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
+	[APP_START_ASYNC] = __dispatch_app_start,
 };
 
 static void __free_request(gpointer data)
@@ -1332,7 +1332,8 @@ static gboolean __timeout_pending_item(gpointer user_data)
 {
 	struct pending_item *item = (struct pending_item *)user_data;
 
-	_send_result_to_client(item->clifd, item->pid);
+	if (item->clifd)
+		_send_result_to_client(item->clifd, item->pid);
 	g_list_foreach(item->pending_list, __timeout_pending_request, NULL);
 
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(item->pid));
@@ -1364,7 +1365,8 @@ int _request_reply_for_pending_request(int pid)
 	if (item == NULL)
 		return -1;
 
-	_send_result_to_client(item->clifd, pid);
+	if (item->clifd)
+		_send_result_to_client(item->clifd, pid);
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(pid));
 	g_list_foreach(item->pending_list, __process_pending_request, NULL);
 
@@ -1442,6 +1444,9 @@ static int __check_request(request_h req)
 	int pid;
 	struct pending_item *item;
 
+	if (req->opt & AUL_SOCK_NOREPLY)
+		close(_request_remove_fd(req));
+
 	if ((req->opt & AUL_SOCK_QUEUE) == 0)
 		return 0;
 
@@ -1490,7 +1495,7 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 		if (ret < 0) {
 			_E("request has been denied by smack");
 			ret = -EILLEGALACCESS;
-			_send_result_to_client(clifd, ret);
+			_request_send_result(req, ret);
 			__free_request(req);
 			free(pkt);
 			return TRUE;
@@ -1513,7 +1518,8 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 			_E("callback returns FALSE : %d", pkt->cmd);
 	} else {
 		_E("Invalid packet or not supported command");
-		close(clifd);
+		if (req->clifd)
+			close(req->clifd);
 		req->clifd = 0;
 	}
 
@@ -1587,7 +1593,10 @@ int _request_send_raw(request_h req, int cmd, unsigned char *data, int len)
 
 int _request_send_result(request_h req, int res)
 {
-	_send_result_to_client(_request_remove_fd(req), res);
+	if (req->clifd && (req->opt & AUL_SOCK_NOREPLY))
+		close(_request_remove_fd(req));
+	else if (req->clifd)
+		_send_result_to_client(_request_remove_fd(req), res);
 	return 0;
 }
 
