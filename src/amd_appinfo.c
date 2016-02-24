@@ -55,19 +55,33 @@ enum _background_category {
 
 static int gles = 1;
 
-static void __free_appinfo_splash_screen(
-		struct appinfo_splash_screen *splashscreen)
+static void __free_appinfo_splash_image(gpointer data)
 {
-	if (splashscreen == NULL)
+	struct appinfo_splash_image *splash_image = data;
+
+	if (splash_image == NULL)
 		return;
 
-	if (splashscreen->indicatordisplay)
-		free(splashscreen->indicatordisplay);
-	if (splashscreen->type)
-		free(splashscreen->type);
-	if (splashscreen->src)
-		free(splashscreen->src);
-	free(splashscreen);
+	if (splash_image->indicatordisplay)
+		free(splash_image->indicatordisplay);
+	if (splash_image->type)
+		free(splash_image->type);
+	if (splash_image->src)
+		free(splash_image->src);
+	free(splash_image);
+}
+
+static void __free_appinfo_splash_screen(
+		struct appinfo_splash_screen *splash_screen)
+{
+	if (splash_screen == NULL)
+		return;
+
+	if (splash_screen->portrait)
+		g_hash_table_destroy(splash_screen->portrait);
+	if (splash_screen->landscape)
+		g_hash_table_destroy(splash_screen->landscape);
+	free(splash_screen);
 }
 
 static void __free_appinfo(gpointer data)
@@ -79,9 +93,9 @@ static void __free_appinfo(gpointer data)
 		return;
 
 	for (i = AIT_START; i < AIT_MAX; i++) {
-		if (i == AIT_PORTRAIT_SPLASH_SCREEN
-				|| i == AIT_LANDSCAPE_SPLASH_SCREEN)
-			__free_appinfo_splash_screen((struct appinfo_splash_screen *)c->val[i]);
+		if (i == AIT_SPLASH_SCREEN)
+			__free_appinfo_splash_screen(
+				(struct appinfo_splash_screen *)c->val[i]);
 		else if (i != AIT_BG_CATEGORY && c->val[i] != NULL)
 			free(c->val[i]);
 	}
@@ -436,35 +450,65 @@ static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle, struct app
 
 static int __add_splash_screen_list_cb(const char *src, const char *type,
 		const char *orientation, const char *indicatordisplay,
-		void *user_data)
+		const char *operation, void *user_data)
 {
 	struct appinfo *info = (struct appinfo *)user_data;
-	struct appinfo_splash_screen *splashscreen;
+	struct appinfo_splash_screen *splash_screen;
+	struct appinfo_splash_image *splash_image;
+	char *key;
 
-	splashscreen = (struct appinfo_splash_screen *)calloc(1,
-			sizeof(struct appinfo_splash_screen));
-	if (splashscreen == NULL) {
+	splash_image = (struct appinfo_splash_image *)calloc(1,
+			sizeof(struct appinfo_splash_image));
+	if (splash_image == NULL) {
 		_E("out of memory");
 		return -1;
 	}
 
-	splashscreen->src = strdup(src);
-	splashscreen->type = strdup(type);
-	splashscreen->indicatordisplay = strdup(indicatordisplay);
-
-	if (strncmp(orientation, "portrait", strlen("portrait")) == 0)
-		info->val[AIT_PORTRAIT_SPLASH_SCREEN] = (char *)splashscreen;
-	else if (strncmp(orientation, "landscape", strlen("landscape")) == 0)
-		info->val[AIT_LANDSCAPE_SPLASH_SCREEN] = (char *)splashscreen;
+	splash_image->src = strdup(src);
+	splash_image->type = strdup(type);
+	splash_image->indicatordisplay = strdup(indicatordisplay);
+	if (*operation == '\0')
+		key = strdup("launch-effect");
 	else
-		__free_appinfo_splash_screen(splashscreen);
+		key = strdup(operation);
+
+	splash_screen = (struct appinfo_splash_screen *)info->val[AIT_SPLASH_SCREEN];
+	if (splash_screen == NULL) {
+		splash_screen = (struct appinfo_splash_screen *)calloc(1,
+				sizeof(struct appinfo_splash_screen));
+		if (splash_screen == NULL) {
+			_E("out of memory");
+			__free_appinfo_splash_image(splash_image);
+			free(key);
+			return -1;
+		}
+		info->val[AIT_SPLASH_SCREEN] = (char *)splash_screen;
+	}
+
+	if (strncasecmp(orientation, "portrait", strlen("portrait")) == 0) {
+		if (splash_screen->portrait == NULL)
+			splash_screen->portrait = g_hash_table_new_full(g_str_hash,
+						g_str_equal,
+						g_free,
+						__free_appinfo_splash_image);
+		g_hash_table_insert(splash_screen->portrait, key, splash_image);
+	} else if (strncasecmp(orientation, "landscape", strlen("landscape")) == 0) {
+		if (splash_screen->landscape == NULL)
+			splash_screen->landscape = g_hash_table_new_full(g_str_hash,
+						g_str_equal,
+						g_free,
+						__free_appinfo_splash_image);
+		g_hash_table_insert(splash_screen->landscape, key, splash_image);
+	} else {
+		__free_appinfo_splash_image(splash_image);
+		free(key);
+	}
 
 	return 0;
 }
 
 static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-
 	if (pkgmgrinfo_appinfo_foreach_splash_screen(handle,
 				__add_splash_screen_list_cb, info) < 0) {
 		_E("Failed to get splash screen");
@@ -498,8 +542,7 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_VISIBILITY] = NULL,
 	[AIT_APPTYPE] = __appinfo_add_apptype,
 	[AIT_ROOT_PATH] = __appinfo_add_root_path,
-	[AIT_PORTRAIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
-	[AIT_LANDSCAPE_SPLASH_SCREEN] = NULL,
+	[AIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,

@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <aul_cmd.h>
+#include <aul_svc.h>
 #include <aul_svc_priv_key.h>
 #include <wayland-client.h>
 #include <wayland-tbm-client.h>
@@ -94,64 +95,68 @@ static gboolean __splash_image_timeout_handler(gpointer data)
 }
 
 static int __app_can_launch_splash_image(const struct appinfo *ai,
-		bundle *kb, int cmd)
+					bundle *kb)
 {
-	const char *fake_effect;
 	const char *component_type;
-	const char *operation;
+	const char *fake_effect;
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type && strncmp(component_type, APP_TYPE_UI,
-				strlen(APP_TYPE_UI)) != 0) {
+	if (component_type && strncmp(component_type, APP_TYPE_SERVICE,
+				strlen(APP_TYPE_SERVICE)) == 0) {
 		_D("component_type: %s", component_type);
 		return -1;
 	}
 
-	if (cmd == APP_OPEN)
-		return 0;
-
 	fake_effect = bundle_get_val(kb, K_FAKE_EFFECT);
-	if (fake_effect == NULL) {
-		_D("fake_effect is NULL");
+	if (fake_effect && strncmp(fake_effect, "OFF", strlen("OFF")) == 0)
 		return -1;
-	}
-
-	if (strncmp(fake_effect, "OFF", strlen("OFF")) == 0) {
-		_D("fake effect off");
-		return -1;
-	}
-
-	operation = bundle_get_val(kb, AUL_SVC_K_OPERATION);
-	if (operation == NULL) {
-		_D("operation is NULL");
-		return -1;
-	}
-
-	if (strncmp(operation, APP_CONTROL_OPERATION_MAIN,
-				strlen(APP_CONTROL_OPERATION_MAIN)) != 0) {
-		_D("operation is not %s", APP_CONTROL_OPERATION_MAIN);
-		return -1;
-	}
 
 	return 0;
 }
 
-static struct appinfo_splash_screen *__get_splash_screen_info(
-		const struct appinfo *ai, int angle)
+static struct appinfo_splash_image *__get_splash_image_info(
+		const struct appinfo *ai, bundle *kb, int cmd)
 {
-	if ((angle == 90 || angle == 270) && rotation.auto_rotate == true)
-		return (struct appinfo_splash_screen *)appinfo_get_value(ai,
-				AIT_LANDSCAPE_SPLASH_SCREEN);
+	struct appinfo_splash_screen *ai_ss;
+	const char *operation;
+	GHashTable *tbl;
 
-	return (struct appinfo_splash_screen *)appinfo_get_value(ai,
-			AIT_PORTRAIT_SPLASH_SCREEN);
+	ai_ss = (struct appinfo_splash_screen *)appinfo_get_value(ai,
+					AIT_SPLASH_SCREEN);
+	if (ai_ss == NULL)
+		return NULL;
+
+	if ((rotation.angle == 90 || rotation.angle == 270)
+				&& rotation.auto_rotate == true)
+		tbl = ai_ss->landscape;
+	else
+		tbl = ai_ss->portrait;
+
+	if (tbl == NULL)
+		return NULL;
+
+	if (cmd == APP_OPEN)
+		return (struct appinfo_splash_image *)g_hash_table_lookup(
+				tbl, "launch-effect");
+
+	operation = bundle_get_val(kb, AUL_SVC_K_OPERATION);
+	if (operation == NULL)
+		return NULL;
+
+	if ((strcmp(operation, APP_CONTROL_OPERATION_MAIN) == 0)
+		|| (strcmp(operation, AUL_SVC_OPERATION_DEFAULT) == 0))
+		return (struct appinfo_splash_image *)g_hash_table_lookup(
+				tbl, "launch-effect");
+
+	return (struct appinfo_splash_image *)g_hash_table_lookup(
+				tbl, operation);
 }
 
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 		bundle *kb, int cmd)
 {
 	struct splash_image_s *si;
-	struct appinfo_splash_screen *ai_ss;
+	struct appinfo_splash_image *ai_si;
 	int file_type = 0;
 	int indicator = 1;
 
@@ -160,7 +165,7 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 			return NULL;
 	}
 
-	if (__app_can_launch_splash_image(ai, kb, cmd) < 0)
+	if (__app_can_launch_splash_image(ai, kb) < 0)
 		return NULL;
 
 	if (!rotation_initialized) {
@@ -169,14 +174,14 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	}
 	_D("angle: %d", rotation.angle);
 
-	ai_ss = __get_splash_screen_info(ai, rotation.angle);
-	if (ai_ss == NULL)
+	ai_si = __get_splash_image_info(ai, kb, cmd);
+	if (ai_si == NULL)
 		return NULL;
-	if (access(ai_ss->src, F_OK) != 0)
+	if (access(ai_si->src, F_OK) != 0)
 		return NULL;
-	if (strncmp(ai_ss->type, "edj", strlen("edj")) == 0)
+	if (strncasecmp(ai_si->type, "edj", strlen("edj")) == 0)
 		file_type = 1;
-	if (strncmp(ai_ss->indicatordisplay, "false", strlen("false")) == 0)
+	if (strncmp(ai_si->indicatordisplay, "false", strlen("false")) == 0)
 		indicator = 0;
 
 	si = (struct splash_image_s *)calloc(1, sizeof(struct splash_image_s));
@@ -193,7 +198,7 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	}
 	wl_display_flush(splash_screen.display);
 
-	si->src = strdup(ai_ss->src);
+	si->src = strdup(ai_si->src);
 	if (si->src == NULL) {
 		_E("out of memory");
 		_splash_screen_destroy_image(si);
