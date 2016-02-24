@@ -1013,6 +1013,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	const char *process_pool = NULL;
 	const char *tep_name = NULL;
 	const char *app_type = NULL;
+	const char *api_version = NULL;
 	int pid = -1;
 	char tmpbuf[MAX_PID_STR_BUFSZ];
 	const char *hwacc;
@@ -1079,6 +1080,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	pkg_id = appinfo_get_value(ai, AIT_PKGID);
 	process_pool = appinfo_get_value(ai, AIT_POOL);
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
+	api_version = appinfo_get_value(ai, AIT_API_VERSION);
 
 	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0) {
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
@@ -1169,6 +1171,9 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 		bundle_del(kb, AUL_K_APP_TYPE);
 		bundle_add(kb, AUL_K_APP_TYPE, app_type);
+
+		bundle_del(kb, AUL_K_API_VERSION);
+		bundle_add(kb, AUL_K_API_VERSION, api_version);
 
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;

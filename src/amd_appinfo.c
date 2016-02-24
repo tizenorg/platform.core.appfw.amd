@@ -474,6 +474,23 @@ static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struc
 	return 0;
 }
 
+static int __appinfo_add_api_version(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	char *api_version = NULL;
+	struct user_appinfo *user_data = (struct user_appinfo *)data;
+	pkgmgrinfo_pkginfo_h pkginfo_handle = (pkgmgrinfo_pkginfo_h)user_data->extra_data;
+
+	if (pkgmgrinfo_pkginfo_get_api_version(pkginfo_handle,
+				&api_version) != PMINFO_R_OK) {
+		_E("Failed to get api version");
+		return -1;
+	}
+
+	info->val[AIT_API_VERSION] = strdup(api_version);
+
+	return 0;
+}
+
 static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_NAME] = NULL,
 	[AIT_EXEC] = __appinfo_add_exec,
@@ -500,6 +517,7 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_ROOT_PATH] = __appinfo_add_root_path,
 	[AIT_PORTRAIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
 	[AIT_LANDSCAPE_SPLASH_SCREEN] = NULL,
+	[AIT_API_VERSION] = __appinfo_add_api_version,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
