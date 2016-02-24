@@ -470,6 +470,7 @@ static gboolean __recv_timeout_handler(gpointer data)
 	case APP_RESUME:
 	case APP_START:
 	case APP_START_RES:
+	case APP_START_ASYNC:
 		appid = _status_app_get_appid_bypid(r_info->pid);
 		if (appid == NULL)
 			break;
@@ -546,6 +547,7 @@ static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req)
 
 	case APP_START:
 	case APP_START_RES:
+	case APP_START_ASYNC:
 		_D("fake launch pid : %d\n", pid);
 		if ((ret = _fake_launch_app(cmd, pid, kb, req)) < 0)
 			_E("fake_launch failed. error code = %d", ret);
@@ -570,7 +572,9 @@ static int __compare_signature(const struct appinfo *ai, int cmd,
 
 	permission = appinfo_get_value(ai, AIT_PERM);
 	if (permission && strncmp(permission, "signature", 9) == 0) {
-		if (caller_uid != 0 && (cmd == APP_START || cmd == APP_START_RES)) {
+		if (caller_uid != 0 && (cmd == APP_START
+					|| cmd == APP_START_RES
+					|| cmd == APP_START_ASYNC)) {
 			caller_ai = appinfo_find(caller_uid, caller_appid);
 			preload = appinfo_get_value(caller_ai, AIT_PRELOAD);
 			if (preload && strncmp(preload, "true", 4) != 0) {
@@ -1081,6 +1085,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 
 	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0) {
+		_request_send_result(req, ret);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return ret;
 	}
