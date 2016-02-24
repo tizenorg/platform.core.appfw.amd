@@ -76,7 +76,7 @@
 #define SDK_DYNAMIC_ANALYSIS "DYNAMIC_ANALYSIS"
 #define PATH_DA_SO "/home/developer/sdk_tools/da/da_probe.so"
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
-#define PREFIX_EXTERNAL_STORAGE_PATH "/opt/storage/sdcard/"
+#define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
 
 struct fgmgr {
 	guint tid;
@@ -729,10 +729,10 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 					path_app_root, pkgid);
 			mnt_path[0] = strdup(tep_path);
 		} else if (strncmp(installed_storage, "external", 8) == 0) {
-			snprintf(tep_path, PATH_MAX, "%step/%s",
+			snprintf(tep_path, PATH_MAX, "%s/tep/%s",
 					PREFIX_EXTERNAL_STORAGE_PATH, tep_name);
 			mnt_path[1] = strdup(tep_path);
-			snprintf(tep_path, PATH_MAX, "%step/tep-access",
+			snprintf(tep_path, PATH_MAX, "%s/tep/tep-access",
 					PREFIX_EXTERNAL_STORAGE_PATH); /* TODO : keeping tep/tep-access for now for external storage */
 			mnt_path[0] = strdup(tep_path);
 		}
