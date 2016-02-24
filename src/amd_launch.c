@@ -999,6 +999,38 @@ int _launch_init()
 	return 0;
 }
 
+static void __set_pkg_api_version(struct appinfo *ai, bundle *kb)
+{
+	int ret;
+	char *api_version;
+	pkgmgrinfo_pkginfo_h handle;
+	const char *pkgid;
+
+	api_version = (char *)appinfo_get_value(ai, AIT_API_VERSION);
+	if (api_version) {
+		bundle_del(kb, AUL_K_API_VERSION);
+		bundle_add(kb, AUL_K_API_VERSION, api_version);
+		return;
+	}
+
+	pkgid = appinfo_get_value(ai, AIT_PKGID);
+	ret = pkgmgrinfo_pkginfo_get_pkginfo(pkgid, &handle);
+	if (ret != PMINFO_R_OK)
+		return;
+
+	ret = pkgmgrinfo_pkginfo_get_api_version(handle, &api_version);
+	if (ret != PMINFO_R_OK) {
+		pkgmgrinfo_pkginfo_destroy_pkginfo(handle);
+		return;
+	}
+
+	_D("pkg api_version: %s", api_version);
+	bundle_del(kb, AUL_K_API_VERSION);
+	bundle_add(kb, AUL_K_API_VERSION, api_version);
+	appinfo_set_value(ai, AIT_API_VERSION, api_version);
+	pkgmgrinfo_pkginfo_destroy_pkginfo(handle);
+}
+
 int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 				request_h req, bool *pending)
 {
@@ -1169,6 +1201,8 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 		bundle_del(kb, AUL_K_APP_TYPE);
 		bundle_add(kb, AUL_K_APP_TYPE, app_type);
+
+		__set_pkg_api_version(ai, kb);
 
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;

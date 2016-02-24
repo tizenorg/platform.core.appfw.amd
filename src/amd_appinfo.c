@@ -500,6 +500,7 @@ static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
 	[AIT_ROOT_PATH] = __appinfo_add_root_path,
 	[AIT_PORTRAIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
 	[AIT_LANDSCAPE_SPLASH_SCREEN] = NULL,
+	[AIT_API_VERSION] = NULL,
 };
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
