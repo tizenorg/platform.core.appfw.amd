@@ -17,6 +17,7 @@
 #pragma once
 
 #include <sys/types.h>
+#include <glib.h>
 
 #define AIT_START 0
 enum appinfo_type {
@@ -43,8 +44,7 @@ enum appinfo_type {
 	AIT_VISIBILITY,
 	AIT_APPTYPE,
 	AIT_ROOT_PATH,
-	AIT_PORTRAIT_SPLASH_SCREEN,
-	AIT_LANDSCAPE_SPLASH_SCREEN,
+	AIT_SPLASH_SCREEN,
 	AIT_API_VERSION,
 	AIT_MAX
 };
@@ -54,6 +54,11 @@ struct appinfo {
 };
 
 struct appinfo_splash_screen {
+	GHashTable *portrait;
+	GHashTable *landscape;
+};
+
+struct appinfo_splash_image {
 	char *src;
 	char *type;
 	char *indicatordisplay;
