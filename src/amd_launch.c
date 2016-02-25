@@ -159,8 +159,8 @@ int _resume_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_RESUME_BY_PID,
-			(unsigned char *)&dummy, 0, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_raw(pid, getuid(), APP_RESUME_BY_PID,
+			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		if (ret == -EAGAIN)
 			_E("resume packet timeout error");
 		else {
@@ -184,8 +184,8 @@ int _pause_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_PAUSE_BY_PID,
-			(unsigned char *)&dummy, 0, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_raw(pid, getuid(), APP_PAUSE_BY_PID,
+			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		if (ret == -EAGAIN)
 			_E("pause packet timeout error");
 		else {
@@ -209,9 +209,8 @@ int _term_sub_app(int pid)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID_ASYNC,
-			(unsigned char *)&dummy, 0,
-			AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0) {
+	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID_ASYNC,
+			(unsigned char *)&dummy, 0, AUL_SOCK_NOREPLY)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
@@ -244,8 +243,8 @@ int _term_app(int pid, request_h req)
 		}
 	}
 
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID,
-			(unsigned char *)&dummy, 0, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID,
+			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
@@ -266,8 +265,8 @@ int _term_req_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_REQ_BY_PID,
-			(unsigned char *)&dummy, 0, AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_REQ_BY_PID,
+			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate req send error");
 		_request_send_result(req, ret);
 	}
@@ -302,8 +301,8 @@ int _term_bgapp(int pid, request_h req)
 		free(pids);
 	}
 
-	if ((fd = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BGAPP_BY_PID,
-		(unsigned char *)&dummy, sizeof(int), AUL_SOCK_NONE)) < 0) {
+	if ((fd = aul_sock_send_raw(pid, getuid(), APP_TERM_BGAPP_BY_PID,
+		(unsigned char *)&dummy, sizeof(int), AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d", pid);
@@ -323,8 +322,8 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 {
 	int ret;
 
-	if ((ret = aul_sock_send_bundle_async(pid, getuid(), cmd, kb,
-			 AUL_SOCK_NONE)) < 0) {
+	if ((ret = aul_sock_send_bundle(pid, getuid(), cmd, kb,
+			 AUL_SOCK_ASYNC)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
 		_request_send_result(req, ret);
 	}
