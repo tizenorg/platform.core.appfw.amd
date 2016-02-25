@@ -658,8 +658,8 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 		strncat(buf, ";", sizeof(buf) - strlen(buf) - 1);
 	}
 
-	aul_sock_send_raw_async_with_fd(fd, APP_RUNNING_INFO_RESULT,
-			(unsigned char *)buf, strlen(buf), AUL_SOCK_CLOSE);
+	aul_sock_send_raw_with_fd(fd, APP_RUNNING_INFO_RESULT,
+			(unsigned char *)buf, strlen(buf), AUL_SOCK_NOREPLY);
 
 	return 0;
 }
@@ -739,8 +739,8 @@ int _status_get_appid_bypid(int fd, int pid)
 	}
 
  out:
-	aul_sock_send_raw_async_with_fd(fd, cmd,
-			(unsigned char *)appid, len, AUL_SOCK_CLOSE);
+	aul_sock_send_raw_with_fd(fd, cmd,
+			(unsigned char *)appid, len, AUL_SOCK_NOREPLY);
 
 	return 0;
 }
@@ -803,8 +803,8 @@ int _status_get_pkgid_bypid(int fd, int pid)
 	}
 
  out:
-	aul_sock_send_raw_async_with_fd(fd, cmd,
-			(unsigned char *)pkgid, len, AUL_SOCK_CLOSE);
+	aul_sock_send_raw_with_fd(fd, cmd,
+			(unsigned char *)pkgid, len, AUL_SOCK_NOREPLY);
 
 	return 0;
 }

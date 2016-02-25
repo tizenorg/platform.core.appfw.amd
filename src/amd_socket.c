@@ -169,7 +169,7 @@ int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
 	if (fd < 0)
 		return -1;
 
-	res = aul_sock_send_bundle_async_with_fd(fd, cmd, kb, AUL_SOCK_NONE);
+	res = aul_sock_send_bundle_with_fd(fd, cmd, kb, AUL_SOCK_ASYNC);
 	if (res < 0) {
 		close(fd);
 		return res;

@@ -228,8 +228,8 @@ static int __app_process_by_pid(request_h req, const char *pid_str)
 		ret = _term_req_app(pid, req);
 		break;
 	case APP_TERM_BY_PID_ASYNC:
-		ret = aul_sock_send_raw_async(pid, getuid(), req->cmd,
-				(unsigned char *)&dummy, sizeof(int), AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY);
+		ret = aul_sock_send_raw(pid, getuid(), req->cmd,
+				(unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
 		if (ret < 0)
 			_D("terminate req packet send error");
 
@@ -790,7 +790,7 @@ static int __dispatch_app_result(request_h req)
 			_D("No sharable path : %d %s", pgid, appid);
 	}
 
-	if ((res = aul_sock_send_bundle_async(pid, getuid(), req->cmd, kb, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0)
+	if ((res = aul_sock_send_bundle(pid, getuid(), req->cmd, kb, AUL_SOCK_NOREPLY)) < 0)
 		res = AUL_R_ERROR;
 
 	if (si) {
@@ -1332,7 +1332,9 @@ static gboolean __timeout_pending_item(gpointer user_data)
 {
 	struct pending_item *item = (struct pending_item *)user_data;
 
-	_send_result_to_client(item->clifd, item->pid);
+	if (item->clifd)
+		_send_result_to_client(item->clifd, item->pid);
+
 	g_list_foreach(item->pending_list, __timeout_pending_request, NULL);
 
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(item->pid));
@@ -1364,7 +1366,9 @@ int _request_reply_for_pending_request(int pid)
 	if (item == NULL)
 		return -1;
 
-	_send_result_to_client(item->clifd, pid);
+	if (item->clifd)
+		_send_result_to_client(item->clifd, pid);
+
 	g_hash_table_remove(pending_table, GINT_TO_POINTER(pid));
 	g_list_foreach(item->pending_list, __process_pending_request, NULL);
 
@@ -1497,6 +1501,11 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 		}
 	}
 
+	if (pkt->opt & AUL_SOCK_NOREPLY) {
+		close(request_remove_fd(req));
+		clifd = 0;
+	}
+
 	ret = __check_request(req);
 	if (ret < 0) {
 		_request_send_result(req, ret);
@@ -1513,7 +1522,8 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 			_E("callback returns FALSE : %d", pkt->cmd);
 	} else {
 		_E("Invalid packet or not supported command");
-		close(clifd);
+		if (clifd)
+			close(clifd);
 		req->clifd = 0;
 	}
 
@@ -1581,13 +1591,15 @@ int _request_remove_fd(request_h req)
 }
 
 int _request_send_raw(request_h req, int cmd, unsigned char *data, int len)
-{
-	return aul_sock_send_raw_async_with_fd(_request_remove_fd(req), cmd, data, len, AUL_SOCK_CLOSE);
+{_
+	return aul_sock_send_raw_with_fd(_request_remove_fd(req), cmd, data, len, AUL_SOCK_NOREPLY);
 }
 
 int _request_send_result(request_h req, int res)
 {
-	_send_result_to_client(_request_remove_fd(req), res);
+	if (req->clifd)
+		_send_result_to_client(_request_remove_fd(req), res);
+
 	return 0;
 }
 
