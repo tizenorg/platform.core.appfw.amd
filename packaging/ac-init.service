@@ -1,0 +1,10 @@
+[Unit]
+Description=Initialize for running amd
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mkdir -p /run/amd/
+ExecStart=/bin/chmod go+w /run/amd/
+
+[Install]
+WantedBy=default.target

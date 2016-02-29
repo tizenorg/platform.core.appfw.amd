@@ -1609,7 +1609,7 @@ int _request_init(void)
 	amd_fd = _create_sock_activation();
 	if (amd_fd == -1) {
 		_D("Create server socket without socket activation");
-		amd_fd = aul_sock_create_server(AUL_UTIL_PID, getuid());
+		amd_fd = _create_server_sock();
 		if (amd_fd == -1) {
 			g_hash_table_destroy(pending_table);
 			g_hash_table_destroy(__dc_socket_pair_hash);
