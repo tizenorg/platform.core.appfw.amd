@@ -32,5 +32,6 @@
 #define PAD_CMD_MAKE_DEFAULT_SLOTS	13
 
 int _create_sock_activation(void);
+int _create_server_sock(void);
 int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb);
 void _send_result_to_client(int fd, int res);

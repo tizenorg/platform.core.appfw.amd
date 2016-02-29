@@ -57,6 +57,46 @@ static inline void __set_sock_option(int fd, int cli)
 		setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
 
+int _create_server_sock(void)
+{
+	int fd;
+	struct sockaddr_un addr;
+
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0) {
+		_E("create socket error: %d", errno);
+		return -1;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "/run/amd/%d",
+				getuid());
+	unlink(addr.sun_path);
+
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
+		_E("bind error: %d", errno);
+		close(fd);
+		return -1;
+	}
+
+	if (chmod(addr.sun_path, (S_IRWXU | S_IRWXG | S_IRWXO)) < 0) {
+		_E("change mode error: %d", errno);
+		close(fd);
+		return -1;
+	}
+
+	__set_sock_option(fd, 0);
+
+	if (listen(fd, 128) == -1) {
+		_E("listen error: %d", errno);
+		close(fd);
+		return -1;
+	}
+
+	return fd;
+}
+
 static int __connect_client_sock(int fd, const struct sockaddr *saptr, socklen_t salen,
 		   int nsec)
 {
