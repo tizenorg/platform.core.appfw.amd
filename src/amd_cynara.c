@@ -218,6 +218,7 @@ static struct checker_info checker_table[] = {
 	{APP_SET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
 	{APP_UNSET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
 	{APP_START_ASYNC, __appcontrol_checker, NULL},
+	{APP_CONTEXT_SET_EVENT_CB, __simple_checker, PRIVILEGE_PACKAGEMANAGER_INFO}
 };
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);

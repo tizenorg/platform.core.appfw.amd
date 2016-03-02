@@ -1236,6 +1236,12 @@ static int __dispatch_app_unset_app_control_default_app(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_context_set_event_cb(request_h req)
+{
+	_request_send_result(req, 0);
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1292,6 +1298,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
 	[APP_START_ASYNC] = __dispatch_app_start,
+	[APP_CONTEXT_SET_EVENT_CB] = __dispatch_app_context_set_event_cb,
 };
 
 static void __free_request(gpointer data)
