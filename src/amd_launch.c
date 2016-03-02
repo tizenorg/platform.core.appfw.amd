@@ -53,6 +53,7 @@
 #include "amd_share.h"
 #include "amd_app_com.h"
 #include "amd_splash_screen.h"
+#include "amd_input.h"
 
 #define DAC_ACTIVATE
 
@@ -1106,6 +1107,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 			traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 			return pid;
 		}
+		_input_lock();
 	} else if (component_type
 			&& strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0) {
 		if (caller_appid) {
