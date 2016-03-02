@@ -1,0 +1,37 @@
+diff --git a/src/amd_cynara.c b/src/amd_cynara.c
+index f7ba6ad..9fe82db 100644
+--- a/src/amd_cynara.c
++++ b/src/amd_cynara.c
+@@ -218,6 +218,7 @@ static struct checker_info checker_table[] = {
+ 	{APP_SET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
+ 	{APP_UNSET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
+ 	{APP_START_ASYNC, __appcontrol_checker, NULL},
++	{APP_SET_EVENT_CB, __simple_checker, PRIVILEGE_PACKAGEMANAGER_INFO}
+ };
+ 
+ static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
+diff --git a/src/amd_request.c b/src/amd_request.c
+index 852b8cc..0b428e0 100644
+--- a/src/amd_request.c
++++ b/src/amd_request.c
+@@ -1236,6 +1236,12 @@ static int __dispatch_app_unset_app_control_default_app(request_h req)
+ 	return 0;
+ }
+ 
++static int __dispatch_app_set_event_cb(request_h req)
++{
++	_request_send_result(req, 0);
++	return 0;
++}
++
+ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
+ 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
+ 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
+@@ -1292,6 +1298,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
+ 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
+ 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
+ 	[APP_START_ASYNC] = __dispatch_app_start,
++	[APP_SET_EVENT_CB] = __dispatch_app_set_event_cb,
+ };
+ 
+ static void __free_request(gpointer data)
