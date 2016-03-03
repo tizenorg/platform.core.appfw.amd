@@ -23,6 +23,7 @@
 #include <sys/xattr.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/limits.h>
 #include <bundle.h>
 #include <systemd/sd-daemon.h>
 #include <aul_sock.h>
@@ -32,10 +33,16 @@
 int _create_sock_activation(void)
 {
 	int fds;
+	char sock_path[PATH_MAX];
 
 	fds = sd_listen_fds(0);
-	if (fds == 1)
+	if (fds == 1) {
+		snprintf(sock_path, sizeof(sock_path), "/run/amd/%d",
+				getuid());
+		if (chmod(sock_path, (S_IRWXU | S_IRWXG | S_IRWXO)) < 0)
+			_E("change mode error: %d", errno);
 		return SD_LISTEN_FDS_START;
+	}
 
 	if (fds > 1)
 		_E("Too many file descriptors received.\n");
