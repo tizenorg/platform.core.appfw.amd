@@ -311,7 +311,7 @@ static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data
 				return FALSE;
 			}
 		}
-		i += sizeof(struct inotify_event) + event->len;
+		i += offsetof(struct inotify_event, name) + event->len;
 	}
 
 	return TRUE;
