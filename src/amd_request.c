@@ -1190,7 +1190,7 @@ static int __dispatch_app_set_app_control_default_app(request_h req)
 	const char *appid;
 	int ret;
 
-	kb= req->kb;
+	kb = req->kb;
 	if (kb == NULL) {
 		_request_send_result(req, -1);
 		return -1;

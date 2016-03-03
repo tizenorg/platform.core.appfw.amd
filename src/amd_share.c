@@ -117,7 +117,7 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 	return h;
 }
 
-static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char **paths,
+static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char ***paths,
 		int *owner_pid, uid_t uid)
 {
 	char *path = NULL;
@@ -152,20 +152,20 @@ static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char 
 			return false;
 		}
 
-		if (!paths) {
-			paths = (char**)g_malloc(sizeof(char*) * 2);
-			if (!paths) {
+		if (!*paths) {
+			*paths = (char**)g_malloc(sizeof(char*) * 2);
+			if (!*paths) {
 				_E("Out of memory");
 				return false;
 			}
 
-			paths[0] = g_strdup(path);
-			paths[1] = NULL;
+			(*paths)[0] = g_strdup(path);
+			(*paths)[1] = NULL;
 		} else {
 			int i = 0;
 			while (1) {
-				if (paths[i] == NULL) {
-					paths[i] = g_strdup(path);
+				if ((*paths)[i] == NULL) {
+					(*paths)[i] = g_strdup(path);
 					break;
 				}
 				i++;
@@ -199,7 +199,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		bundle_get_str(kb, AUL_SVC_DATA_PATH, &path);
 		if (!path) {
 			_E("path was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
 			owner_appid = _status_app_get_appid_bypid(owner_pid);
 			goto finally;
 		}
@@ -213,7 +213,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 
 		if (__can_share(path, pkgid, uid) != 0) {
 			_E("__can_share() returned an error");
-			valid = __has_valid_uri(caller_pid, appid, kb, paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
 			goto finally;
 
 		}
@@ -234,7 +234,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
 		if (!path_array || len <= 0) {
 			_E("path_array was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
 			owner_appid = _status_app_get_appid_bypid(owner_pid);
 			goto finally;
 
@@ -268,7 +268,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		break;
 	}
 
-	if (__has_valid_uri(caller_pid, appid, kb, paths, &owner_pid, uid))
+	if (__has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid))
 		valid = true;
 finally:
 	if (valid && owner_appid && paths) {
@@ -300,7 +300,7 @@ finally:
 		r = security_manager_private_sharing_apply(h->shared_info->handle);
 		_D("security_manager_private_sharing_apply --");
 		if (r != SECURITY_MANAGER_SUCCESS) {
-			_E("security_manager_private_sharing_apply() returned an error %d",r);
+			_E("security_manager_private_sharing_apply() returned an error %d", r);
 			_temporary_permission_destroy(h);
 			return NULL;
 		}
@@ -336,7 +336,7 @@ int _temporary_permission_destroy(shared_info_h handle)
 			_D("revoke permission %s : %s",  handle->shared_info->owner_appid, handle->appid);
 			r = security_manager_private_sharing_drop(handle->shared_info->handle);
 			if (r != SECURITY_MANAGER_SUCCESS)
-				_E("revoke error %d",r);
+				_E("revoke error %d", r);
 
 			security_manager_private_sharing_req_free(handle->shared_info->handle);
 			free(handle->shared_info->owner_appid);
@@ -366,7 +366,7 @@ int _temporary_permission_drop(int pid, uid_t uid)
 		_D("revoke permission %s : %d", sit->owner_appid, pid);
 		r = security_manager_private_sharing_drop(sit->handle);
 		if (r != SECURITY_MANAGER_SUCCESS)
-			_E("revoke error %d",r);
+			_E("revoke error %d", r);
 		security_manager_private_sharing_req_free(sit->handle);
 		list = g_list_next(list);
 	}

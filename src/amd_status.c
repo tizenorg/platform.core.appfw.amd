@@ -927,7 +927,7 @@ static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer 
 				}
 			}
 		}
-		i += sizeof(struct inotify_event) + event->len;
+		i += offsetof(struct inotify_event, name) + event->len;
 	}
 
 	return TRUE;
