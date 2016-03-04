@@ -311,7 +311,7 @@ int _input_init(void)
 
 	registry = wl_display_get_registry(display);
 	wl_registry_add_listener(registry, &registry_listener, NULL);
-	wl_display_dispatch(display);
+	wl_display_flush(display);
 	wl_display_roundtrip(display);
 
 	if (input_devmgr == NULL) {
@@ -328,8 +328,9 @@ int _input_init(void)
 		&input_devmgr_listener, NULL) < 0) {
 		_E("Failed to add listener");
 	}
-	wl_display_dispatch(display);
+	wl_display_flush(display);
 	wl_display_roundtrip(display);
+
 	init_done = true;
 
 	return 0;

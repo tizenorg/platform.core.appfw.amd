@@ -276,7 +276,7 @@ static int __init_splash_screen(void)
 
 	wl_registry_add_listener(splash_screen.registry,
 			&registry_listener, NULL);
-	wl_display_dispatch(splash_screen.display);
+	wl_display_flush(splash_screen.display);
 	wl_display_roundtrip(splash_screen.display);
 
 	if (splash_screen.screen == NULL) {
