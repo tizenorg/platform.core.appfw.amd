@@ -41,7 +41,13 @@ struct user_appinfo {
 	void *extra_data;
 };
 
-typedef int (*appinfo_handler_cb)(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data);
+typedef int (*appinfo_handler_add_cb)(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data);
+typedef void (*appinfo_handler_remove_cb)(void *data);
+
+typedef struct _appinfo_vft {
+	appinfo_handler_add_cb constructor;
+	appinfo_handler_remove_cb destructor;
+} appinfo_vft;
 
 enum _background_category {
 	_BACKGROUND_CATEGORY_MEDIA = 0x01,
@@ -69,38 +75,6 @@ static void __free_appinfo_splash_image(gpointer data)
 	if (splash_image->src)
 		free(splash_image->src);
 	free(splash_image);
-}
-
-static void __free_appinfo_splash_screen(
-		struct appinfo_splash_screen *splash_screen)
-{
-	if (splash_screen == NULL)
-		return;
-
-	if (splash_screen->portrait)
-		g_hash_table_destroy(splash_screen->portrait);
-	if (splash_screen->landscape)
-		g_hash_table_destroy(splash_screen->landscape);
-	free(splash_screen);
-}
-
-static void __free_appinfo(gpointer data)
-{
-	struct appinfo *c = data;
-	int i;
-
-	if (!c)
-		return;
-
-	for (i = AIT_START; i < AIT_MAX; i++) {
-		if (i == AIT_SPLASH_SCREEN)
-			__free_appinfo_splash_screen(
-				(struct appinfo_splash_screen *)c->val[i]);
-		else if (i != AIT_BG_CATEGORY && c->val[i] != NULL)
-			free(c->val[i]);
-	}
-
-	free(c);
 }
 
 static void __free_user_appinfo(gpointer data)
@@ -140,6 +114,20 @@ static int __read_background_category(const char *category_name, void *user_data
 		c->val[AIT_BG_CATEGORY] = (char *)((intptr_t)(category | _BACKGROUND_CATEGORY_SYSTEM));
 
 	return 0;
+}
+
+static void __appinfo_remove_splash_screen(void *data)
+{
+	if (data == NULL)
+		return;
+
+	struct appinfo_splash_screen *splash_screen = (struct appinfo_splash_screen *)data;
+
+	if (splash_screen->portrait)
+		g_hash_table_destroy(splash_screen->portrait);
+	if (splash_screen->landscape)
+		g_hash_table_destroy(splash_screen->landscape);
+	free(splash_screen);
 }
 
 static int __appinfo_add_exec(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
@@ -535,33 +523,48 @@ static int __appinfo_add_api_version(const pkgmgrinfo_appinfo_h handle, struct a
 	return 0;
 }
 
-static appinfo_handler_cb appinfo_add_table[AIT_MAX] = {
-	[AIT_NAME] = NULL,
-	[AIT_EXEC] = __appinfo_add_exec,
-	[AIT_PKGTYPE] = __appinfo_add_pkgtype,
-	[AIT_ONBOOT] = __appinfo_add_onboot,
-	[AIT_RESTART] = __appinfo_add_restart,
-	[AIT_MULTI] = __appinfo_add_multi,
-	[AIT_HWACC] = __appinfo_add_hwacc,
-	[AIT_PERM] = __appinfo_add_perm,
-	[AIT_PKGID] = __appinfo_add_pkgid,
-	[AIT_PRELOAD] = __appinfo_add_preload,
-	[AIT_STATUS] = __appinfo_add_status,
-	[AIT_POOL] = __appinfo_add_pool,
-	[AIT_COMPTYPE] = __appinfo_add_comptype,
-	[AIT_TEP] = __appinfo_add_tep,
-	[AIT_STORAGE_TYPE] = __appinfo_add_storage_type,
-	[AIT_BG_CATEGORY] = __appinfo_add_bg_category,
-	[AIT_LAUNCH_MODE] = __appinfo_add_launch_mode,
-	[AIT_GLOBAL] = __appinfo_add_global,
-	[AIT_EFFECTIVE_APPID] = __appinfo_add_effective_appid,
-	[AIT_TASKMANAGE] = __appinfo_add_taskmanage,
-	[AIT_VISIBILITY] = NULL,
-	[AIT_APPTYPE] = __appinfo_add_apptype,
-	[AIT_ROOT_PATH] = __appinfo_add_root_path,
-	[AIT_SPLASH_SCREEN] = __appinfo_add_splash_screens,
-	[AIT_API_VERSION] = __appinfo_add_api_version,
+static  appinfo_vft appinfo_table[AIT_MAX] = {
+	[AIT_NAME] = { NULL, NULL },
+	[AIT_EXEC] = { __appinfo_add_exec, free },
+	[AIT_PKGTYPE] = { __appinfo_add_pkgtype, free },
+	[AIT_ONBOOT] = { __appinfo_add_onboot, free },
+	[AIT_RESTART] = { __appinfo_add_restart, free },
+	[AIT_MULTI] = { __appinfo_add_multi, free },
+	[AIT_HWACC] = { __appinfo_add_hwacc, free },
+	[AIT_PERM] = { __appinfo_add_perm, free },
+	[AIT_PKGID] = { __appinfo_add_pkgid, free },
+	[AIT_PRELOAD] = { __appinfo_add_preload, free },
+	[AIT_STATUS] = { __appinfo_add_status, free },
+	[AIT_POOL] = { __appinfo_add_pool, free },
+	[AIT_COMPTYPE] = { __appinfo_add_comptype, free },
+	[AIT_TEP] = { __appinfo_add_tep, free},
+	[AIT_STORAGE_TYPE] = { __appinfo_add_storage_type, free },
+	[AIT_BG_CATEGORY] = { __appinfo_add_bg_category, NULL },
+	[AIT_LAUNCH_MODE] = { __appinfo_add_launch_mode, free },
+	[AIT_GLOBAL] = { __appinfo_add_global, free },
+	[AIT_EFFECTIVE_APPID] = { __appinfo_add_effective_appid, free },
+	[AIT_TASKMANAGE] = { __appinfo_add_taskmanage, free },
+	[AIT_VISIBILITY] = { NULL, free },
+	[AIT_APPTYPE] = { __appinfo_add_apptype, free },
+	[AIT_ROOT_PATH] = { __appinfo_add_root_path, free },
+	[AIT_SPLASH_SCREEN] = { __appinfo_add_splash_screens, __appinfo_remove_splash_screen },
+	[AIT_API_VERSION] = { __appinfo_add_api_version, free },
 };
+
+static void __appinfo_remove_handler(gpointer data)
+{
+	struct appinfo *c = data;
+	int i;
+
+	if (!c)
+		return;
+
+	for (i = AIT_START; i < AIT_MAX; i++)
+		if (appinfo_table[i].destructor && c->val[i] != NULL)
+			appinfo_table[i].destructor(c->val[i]);
+
+	free(c);
+}
 
 static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 					void *data)
@@ -592,8 +595,8 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 	c->val[AIT_NAME] = strdup(appid);
 
 	for (i = AIT_START; i < AIT_MAX; i++) {
-		if (appinfo_add_table[i] && appinfo_add_table[i](handle, c, info) < 0) {
-			__free_appinfo(c);
+		if (appinfo_table[i].constructor && appinfo_table[i].constructor(handle, c, info) < 0) {
+			__appinfo_remove_handler(c);
 			return -1;
 		}
 	}
@@ -665,7 +668,7 @@ static struct user_appinfo *__add_user_appinfo(uid_t uid)
 
 	info->uid = uid;
 	info->tbl = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
-			__free_appinfo);
+			__appinfo_remove_handler);
 	if (info->tbl == NULL) {
 		_E("out of memory");
 		free(info);
