@@ -210,13 +210,16 @@ int _term_sub_app(int pid)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID_ASYNC,
-			(unsigned char *)&dummy, 0, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0) {
+			(unsigned char *)&dummy, 0, AUL_SOCK_NOREPLY)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
 			return -1;
 		}
 	}
+
+	if (ret > 0)
+		close(ret);
 
 	return 0;
 }
