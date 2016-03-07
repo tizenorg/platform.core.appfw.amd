@@ -32,7 +32,6 @@
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
 #include <sys/inotify.h>
-#include <Ecore_Wayland.h>
 
 #include "amd_config.h"
 #include "amd_util.h"

@@ -25,6 +25,7 @@
 #include <bundle_internal.h>
 #include <aul_sock.h>
 
+#include "amd_config.h"
 #include "amd_util.h"
 #include "amd_app_group.h"
 #include "amd_launch.h"
@@ -36,8 +37,6 @@
 
 #define APP_SVC_K_LAUNCH_MODE   "__APP_SVC_LAUNCH_MODE__"
 
-#ifdef WAYLAND
-#include <Ecore_Wayland.h>
 #include <wayland-client.h>
 #include <tizen-extension-client-protocol.h>
 static struct tizen_policy *tz_policy;
@@ -63,7 +62,6 @@ static const struct wl_registry_listener reg_listener = {
 	_reg_handle_global,
 	_reg_handle_global_remove
 };
-#endif
 
 static GHashTable *app_group_hash = NULL;
 static int dead_pid = -1;
@@ -86,9 +84,33 @@ typedef struct _app_group_context_t {
 	app_group_launch_mode launch_mode;
 } app_group_context_t;
 
+static void __lower_window(int wid)
+{
+	struct wl_display *dpy;
+	struct wl_registry *reg;
+
+	dpy = wl_display_connect(NULL);
+	reg = wl_display_get_registry(dpy);
+	wl_registry_add_listener(reg, &reg_listener, NULL);
+	wl_display_roundtrip(dpy);
+
+	if (!tz_policy) {
+		_E("ERR: no tizen_policy global interface");
+		wl_registry_destroy(reg);
+		wl_display_disconnect(dpy);
+		return;
+	}
+
+	tizen_policy_lower_by_res_id(tz_policy, wid);
+	wl_display_roundtrip(dpy);
+
+	tizen_policy_destroy(tz_policy);
+	wl_registry_destroy(reg);
+	wl_display_disconnect(dpy);
+}
+
 static void __attach_window(int parent_wid, int child_wid)
 {
-#ifdef WAYLAND
 	struct wl_display *dpy;
 	struct wl_registry *reg;
 
@@ -110,14 +132,10 @@ static void __attach_window(int parent_wid, int child_wid)
 	tizen_policy_destroy(tz_policy);
 	wl_registry_destroy(reg);
 	wl_display_disconnect(dpy);
-#else
-	/* ecore_x_icccm_transient_for_set(child_wid, parent_wid); */
-#endif
 }
 
 static void __detach_window(int child_wid)
 {
-#ifdef WAYLAND
 	struct wl_display *dpy;
 	struct wl_registry *reg;
 
@@ -139,9 +157,6 @@ static void __detach_window(int child_wid)
 	tizen_policy_destroy(tz_policy);
 	wl_registry_destroy(reg);
 	wl_display_disconnect(dpy);
-#else
-	/* ecore_x_icccm_transient_for_unset(child_wid); */
-#endif
 }
 
 static gint __comp_pid(gconstpointer a, gconstpointer b)
@@ -1291,11 +1306,7 @@ void app_group_lower(int pid, int *exit)
 			if (ac && ac->can_shift) {
 				__detach_window(ac->wid);
 				ac->can_shift = 0;
-#ifdef WAYLAND
-				ecore_wl_window_lower((Ecore_Wl_Window *)((intptr_t)ac->wid));
-#else
-				/* ecore_x_window_lower(ac->wid); */
-#endif
+				__lower_window(ac->wid);
 			}
 			return;
 		}

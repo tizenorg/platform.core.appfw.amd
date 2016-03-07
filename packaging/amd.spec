@@ -43,7 +43,6 @@ BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(sensor)
 BuildRequires:  pkgconfig(ttrace)
 %if %{with wayland}
-BuildRequires:  pkgconfig(ecore-wayland)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(tizen-extension-client)
 BuildRequires:  pkgconfig(wayland-tbm-client)

@@ -17,8 +17,8 @@
 #define _GNU_SOURCE
 
 #include <stdbool.h>
+#include <malloc.h>
 #include <aul.h>
-#include <Ecore_Wayland.h>
 #include <wayland-client.h>
 #include <tizen-extension-client-protocol.h>
 #include <glib.h>
