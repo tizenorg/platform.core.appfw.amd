@@ -17,6 +17,9 @@
 #pragma once
 
 #include <bundle.h>
+#include <unistd.h>
+#include <sys/types.h>
+
 typedef struct request_s* request_h;
 
 int _request_init(void);
@@ -31,5 +34,5 @@ void _request_free_local(request_h req);
 int _request_remove_fd(request_h req);
 int _request_reply_for_pending_request(int pid);
 int _request_flush_pending_request(int pid);
-
+uid_t _request_get_target_uid(request_h req);
 
