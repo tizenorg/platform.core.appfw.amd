@@ -218,6 +218,9 @@ int _term_sub_app(int pid)
 		}
 	}
 
+	if (ret > 0)
+		close(ret);
+
 	return 0;
 }
 

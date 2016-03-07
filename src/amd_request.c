@@ -230,8 +230,12 @@ static int __app_process_by_pid(request_h req, const char *pid_str)
 	case APP_TERM_BY_PID_ASYNC:
 		ret = aul_sock_send_raw_async(pid, getuid(), req->cmd,
 				(unsigned char *)&dummy, sizeof(int), AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY);
-		if (ret < 0)
+		if (ret < 0) {
 			_D("terminate req packet send error");
+		} else {
+			close(ret);
+			ret = 0;
+		}
 
 		_request_send_result(req, ret);
 		break;
@@ -699,10 +703,7 @@ static int __dispatch_app_group_lower(request_h req)
 static int __dispatch_app_start(request_h req)
 {
 	const char *appid;
-	const char *target_uid;
 	int ret = -1;
-	int t_uid;
-	char *state;
 	bool pending = false;
 	struct pending_item *pending_item;
 	bundle *kb;
@@ -714,27 +715,7 @@ static int __dispatch_app_start(request_h req)
 	__set_effective_appid(req->uid, kb);
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	if (req->uid < REGULAR_UID_MIN) {
-		target_uid = bundle_get_val(kb, AUL_K_TARGET_UID);
-		if (target_uid != NULL) {
-			t_uid = atoi(target_uid);
-			sd_uid_get_state(t_uid, &state);
-			if (strcmp(state, "offline") &&
-			    strcmp(state, "closing")) {
-				ret = _start_app(appid, kb, t_uid, req, &pending);
-			} else {
-				_E("uid:%d session is %s", t_uid, state);
-				_request_send_result(req, AUL_R_ERROR);
-				goto error;
-			}
-		} else {
-			_E("request from root, treat as global user");
-			ret = _start_app(appid, kb, GLOBAL_USER, req, &pending);
-		}
-	} else {
-		ret = _start_app(appid, kb, req->uid, req, &pending);
-	}
-
+	ret = _start_app(appid, kb, req->uid, req, &pending);
 	if (ret <= 0)
 		_input_unlock();
 
@@ -1380,6 +1361,8 @@ static request_h __get_request(int clifd, app_pkt_t *pkt,
 		struct ucred cr)
 {
 	request_h req;
+	const char *target_uid;
+	int t_uid;
 
 	req = (request_h)malloc(sizeof(struct request_s) + pkt->len);
 	if (req == NULL)
@@ -1394,10 +1377,24 @@ static request_h __get_request(int clifd, app_pkt_t *pkt,
 	req->opt = pkt->opt;
 	memcpy(req->data, pkt->data, pkt->len + 1);
 
-	if (pkt->opt & AUL_SOCK_BUNDLE)
+	if (pkt->opt & AUL_SOCK_BUNDLE) {
 		req->kb = bundle_decode(pkt->data, pkt->len);
-	else
+		target_uid = bundle_get_val(req->kb, AUL_K_TARGET_UID);
+		if (target_uid) {
+			t_uid = atoi(target_uid);
+			if (getuid() == t_uid) {
+				req->uid = t_uid;
+			} else {
+				__free_request(req);
+				return NULL;
+			}
+		} else {
+			req->uid = cr.uid;
+		}
+	} else {
+		req->uid = cr.uid;
 		req->kb = NULL;
+	}
 
 	return req;
 }
