@@ -62,12 +62,15 @@ struct restart_info {
 
 struct wl_watch {
 	int fd;
-	int wd;
+	int wd_wl;
+	int wd_wm;
 	GIOChannel *io;
 	guint wid;
 };
 
 static GHashTable *restart_tbl;
+static int wm_ready = 0;
+static int wl_0_ready = 0;
 static int wl_initialized = 0;
 
 static gboolean __restart_timeout_handler(void *data)
@@ -305,8 +308,17 @@ static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data
 		event = (struct inotify_event *)&buf[i];
 		if (event->len) {
 			p = event->name;
-			if (p && !strncmp(p, "wayland-0", strlen("wayland-0"))) {
-				_D("%s exists", p);
+			if (p &&
+				!strncmp(p, "wayland-0", strlen("wayland-0"))) {
+				_D("%s is created", p);
+				wl_0_ready = 1;
+			} else if (p &&
+				!strncmp(p, ".wm_ready", strlen(".wm_ready"))) {
+				_D("%s is created", p);
+				wm_ready = 1;
+			}
+
+			if (wm_ready && wl_0_ready) {
 				wl_initialized = 1;
 				return FALSE;
 			}
@@ -325,7 +337,11 @@ static void __wl_watch_destroy_cb(gpointer data)
 		return;
 
 	g_io_channel_unref(watch->io);
-	inotify_rm_watch(watch->fd, watch->wd);
+
+	if (watch->wd_wm)
+		inotify_rm_watch(watch->fd, watch->wd_wm);
+	if (watch->wd_wl)
+		inotify_rm_watch(watch->fd, watch->wd_wl);
 	close(watch->fd);
 	free(watch);
 }
@@ -338,11 +354,18 @@ static void __init_wl(void)
 	snprintf(buf, sizeof(buf), "/run/user/%d/wayland-0", getuid());
 	if (access(buf, F_OK) == 0) {
 		_D("%s exists", buf);
+		wl_0_ready = 1;
+	}
+
+	if (access("/run/.wm_ready", F_OK) == 0) {
+		_D("/run/.wm_ready exists");
+		wm_ready = 1;
+	}
+
+	if (wm_ready && wl_0_ready) {
 		wl_initialized = 1;
 		return;
 	}
-
-	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
 
 	watch = (struct wl_watch *)calloc(1, sizeof(struct wl_watch));
 	if (watch == NULL) {
@@ -357,18 +380,36 @@ static void __init_wl(void)
 		return;
 	}
 
-	watch->wd = inotify_add_watch(watch->fd, buf, IN_CREATE);
-	if (watch->wd < 0) {
-		_E("Failed to add inotify watch");
-		close(watch->fd);
-		free(watch);
-		return;
+	if (!wl_0_ready) {
+		snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
+		watch->wd_wl = inotify_add_watch(watch->fd, buf, IN_CREATE);
+		if (watch->wd_wl < 0) {
+			_E("Failed to add inotify watch");
+			close(watch->fd);
+			free(watch);
+			return;
+		}
+	}
+
+	if (!wm_ready) {
+		watch->wd_wm = inotify_add_watch(watch->fd, "/run", IN_CREATE);
+		if (watch->wd_wm < 0) {
+			_E("Failed to add inotify watch");
+			if (watch->wd_wl)
+				inotify_rm_watch(watch->fd, watch->wd_wl);
+			close(watch->fd);
+			free(watch);
+			return;
+		}
 	}
 
 	watch->io = g_io_channel_unix_new(watch->fd);
 	if (watch->io == NULL) {
 		_E("Failed to create GIOChannel");
-		inotify_rm_watch(watch->fd, watch->wd);
+		if (watch->wd_wm)
+			inotify_rm_watch(watch->fd, watch->wd_wm);
+		if (watch->wd_wl)
+			inotify_rm_watch(watch->fd, watch->wd_wl);
 		close(watch->fd);
 		free(watch);
 		return;
