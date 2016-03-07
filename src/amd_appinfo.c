@@ -38,7 +38,6 @@ static GHashTable *pkg_pending;
 struct user_appinfo {
 	uid_t uid;
 	GHashTable *tbl; /* key is appid, value is struct appinfo */
-	void *extra_data;
 };
 
 typedef int (*appinfo_handler_add_cb)(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data);
@@ -307,10 +306,8 @@ static int __appinfo_add_comptype(const pkgmgrinfo_appinfo_h handle, struct appi
 static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
 	char *tep_name = NULL;
-	struct user_appinfo *user_data = (struct user_appinfo *)data;
 
-	if (pkgmgrinfo_pkginfo_get_tep_name((pkgmgrinfo_pkginfo_h)user_data->extra_data,
-						&tep_name) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_get_tep_name(handle, &tep_name) != PMINFO_R_OK) {
 		_D("failed to get tep_name");
 		info->val[AIT_TEP] = NULL;
 	} else {
@@ -366,10 +363,8 @@ static int __appinfo_add_launch_mode(const pkgmgrinfo_appinfo_h handle, struct a
 static int __appinfo_add_global(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
 	bool is_global = false;
-	struct user_appinfo *user_data = (struct user_appinfo *)data;
 
-	if (pkgmgrinfo_pkginfo_is_for_all_users((pkgmgrinfo_pkginfo_h)user_data->extra_data,
-						&is_global) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_is_global(handle, &is_global) != PMINFO_R_OK) {
 		_E("get pkginfo failed");
 		return -1;
 	}
@@ -423,10 +418,8 @@ static int __appinfo_add_apptype(const pkgmgrinfo_appinfo_h handle, struct appin
 static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
 	char *path = NULL;
-	struct user_appinfo *user_data = (struct user_appinfo *)data;
 
-	if (pkgmgrinfo_pkginfo_get_root_path((pkgmgrinfo_pkginfo_h)user_data->extra_data,
-						&path) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_get_root_path(handle, &path) != PMINFO_R_OK) {
 		_E("get pkginfo failed");
 		return -1;
 	}
@@ -509,11 +502,8 @@ static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struc
 static int __appinfo_add_api_version(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
 	char *api_version;
-	struct user_appinfo *user_data = (struct user_appinfo *)data;
-	pkgmgrinfo_pkginfo_h pkginfo_handle = (pkgmgrinfo_pkginfo_h)user_data->extra_data;
 
-	if (pkgmgrinfo_pkginfo_get_api_version(pkginfo_handle,
-				&api_version) != PMINFO_R_OK) {
+	if (pkgmgrinfo_appinfo_get_api_version(handle, &api_version) != PMINFO_R_OK) {
 		_E("Failed to get api version");
 		return -1;
 	}
@@ -609,31 +599,6 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 	return 0;
 }
 
-static int __pkg_list_cb(pkgmgrinfo_pkginfo_h handle, void *user_data)
-{
-	bool is_global;
-	struct user_appinfo *info = (struct user_appinfo *)user_data;
-
-	if (pkgmgrinfo_pkginfo_is_for_all_users(handle, &is_global)) {
-		_E("get pkginfo failed");
-		return -1;
-	}
-
-	/* do not load appinfo for attached global apps */
-	if (info->uid != GLOBAL_USER && is_global)
-		return 0;
-
-	info->extra_data = handle;
-	if (pkgmgrinfo_appinfo_get_usr_list(handle, PMINFO_ALL_APP,
-			__appinfo_insert_handler, user_data,
-			info->uid)) {
-		_E("get appinfo failed");
-		return -1;
-	}
-
-	return 0;
-}
-
 static void __remove_user_appinfo(uid_t uid)
 {
 	g_hash_table_remove(user_tbl, GINT_TO_POINTER(uid));
@@ -677,18 +642,13 @@ static struct user_appinfo *__add_user_appinfo(uid_t uid)
 
 	g_hash_table_insert(user_tbl, GINT_TO_POINTER(uid), info);
 
-	r = pkgmgrinfo_pkginfo_get_usr_list(__pkg_list_cb, info, info->uid);
+	r = pkgmgrinfo_appinfo_get_usr_applist_for_amd(__appinfo_insert_handler, uid, info);
 	if (r != PMINFO_R_OK) {
 		__remove_user_appinfo(uid);
 		return NULL;
 	}
 
-	if (uid != GLOBAL_USER) {
-		appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
-		appinfo_foreach(GLOBAL_USER, __handle_onboot,
-				(void *)(intptr_t)uid);
-	}
-
+	appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
 	_D("loaded appinfo table for uid %d", uid);
 
 	return info;
@@ -825,7 +785,7 @@ int appinfo_init(void)
 	FILE *fp;
 	char buf[4096] = {0,};
 	char *tmp;
-	struct user_appinfo *global_appinfo;
+	struct user_appinfo *appinfo;
 
 	fp = fopen("/proc/cmdline", "r");
 	if (fp == NULL) {
@@ -850,8 +810,9 @@ int appinfo_init(void)
 	if (pkg_pending == NULL)
 		return -1;
 
-	global_appinfo = __add_user_appinfo(GLOBAL_USER);
-	if (global_appinfo == NULL) {
+	/* TODO: If amd is not in user session, it should load all available uids */
+	appinfo = __add_user_appinfo(getuid());
+	if (appinfo == NULL) {
 		appinfo_fini();
 		return -1;
 	}
@@ -874,29 +835,11 @@ void appinfo_fini(void)
 struct appinfo *appinfo_find(uid_t caller_uid, const char *appid)
 {
 	struct user_appinfo *info;
-	struct appinfo *ai;
 
 	/* search from user table */
 	info = __find_user_appinfo(caller_uid);
-	if (info == NULL) {
-		info = __add_user_appinfo(caller_uid);
-		if (info == NULL)
-			return NULL;
-	}
-
-	ai = g_hash_table_lookup(info->tbl, appid);
-	if (ai)
-		return ai;
-
-	if (caller_uid == GLOBAL_USER)
+	if (info == NULL)
 		return NULL;
-
-	/* search again from global table */
-	info = __find_user_appinfo(GLOBAL_USER);
-	if (info == NULL) {
-		_E("cannot find global appinfo table!");
-		return NULL;
-	}
 
 	return g_hash_table_lookup(info->tbl, appid);
 }
@@ -908,10 +851,8 @@ int appinfo_insert(uid_t uid, const char *pkgid)
 
 	info = __find_user_appinfo(uid);
 	if (info == NULL) {
-		info = __add_user_appinfo(uid);
-		if (info == NULL)
-			_E("load appinfo for uid %d failed", uid);
-		return 0;
+		_E("load appinfo for uid %d failed", uid);
+		return -1;
 	}
 
 	if (pkgmgrinfo_pkginfo_get_usr_pkginfo(pkgid, uid, &handle)) {
@@ -919,7 +860,6 @@ int appinfo_insert(uid_t uid, const char *pkgid)
 		return -1;
 	}
 
-	info->extra_data = handle;
 	if (pkgmgrinfo_appinfo_get_usr_list(handle, PMINFO_ALL_APP,
 				__appinfo_insert_handler,
 				info, info->uid)) {
@@ -940,7 +880,7 @@ static void __reload_appinfo(gpointer key, gpointer value, gpointer user_data)
 
 	g_hash_table_remove_all(info->tbl);
 
-	r = pkgmgrinfo_pkginfo_get_usr_list(__pkg_list_cb, info, info->uid);
+	r = pkgmgrinfo_appinfo_get_usr_applist_for_amd(__appinfo_insert_handler, info->uid, info);
 	if (r != PMINFO_R_OK) {
 		__remove_user_appinfo(info->uid);
 		return;
@@ -1015,11 +955,8 @@ void appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
 	struct _cbinfo cbi;
 
 	info = __find_user_appinfo(uid);
-	if (info == NULL) {
-		info = __add_user_appinfo(uid);
-		if (info == NULL)
-			return;
-	}
+	if (info == NULL)
+		return;
 
 	if (!cb) {
 		errno = EINVAL;
