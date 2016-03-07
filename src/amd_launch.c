@@ -210,7 +210,8 @@ int _term_sub_app(int pid)
 	int ret;
 
 	if ((ret = aul_sock_send_raw_async(pid, getuid(), APP_TERM_BY_PID_ASYNC,
-			(unsigned char *)&dummy, 0, AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0) {
+			(unsigned char *)&dummy, 0,
+			AUL_SOCK_CLOSE | AUL_SOCK_NOREPLY)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
 			_E("fail to killing - %d\n", pid);
@@ -1058,7 +1059,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 			bundle_add(kb, AUL_K_CALLER_APPID, caller_appid);
 	}
 
-	ai = appinfo_find(caller_uid, appid);
+	ai = appinfo_find(_request_get_target_uid(req), appid);
 	if (ai == NULL) {
 		_D("cannot find appinfo of %s", appid);
 		_request_send_result(req, -ENOENT);
@@ -1087,7 +1088,9 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 	api_version = appinfo_get_value(ai, AIT_API_VERSION);
 
-	if ((ret = __compare_signature(ai, cmd, caller_uid, appid, caller_appid, _request_get_fd(req))) != 0) {
+	if ((ret = __compare_signature(ai, cmd, _request_get_target_uid(req),
+					appid, caller_appid,
+					_request_get_fd(req))) != 0) {
 		_request_send_result(req, ret);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return ret;
@@ -1095,13 +1098,15 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 	multiple = appinfo_get_value(ai, AIT_MULTI);
 	if (!multiple || strncmp(multiple, "false", 5) == 0)
-		pid = _status_app_is_running(appid, caller_uid);
+		pid = _status_app_is_running(appid, _request_get_target_uid(req));
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type
 			&& strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0) {
-		pid = __get_pid_for_app_group(appid, pid, caller_uid, kb,
-				&lpid, &can_attach, &new_process, &launch_mode, &is_subapp);
+		pid = __get_pid_for_app_group(appid, pid,
+				_request_get_target_uid(req), kb,
+				&lpid, &can_attach, &new_process,
+				&launch_mode, &is_subapp);
 		if (pid == -EILLEGALACCESS) {
 			_request_send_result(req, pid);
 			traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
@@ -1111,8 +1116,8 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	} else if (component_type
 			&& strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0) {
 		if (caller_appid) {
-			ret = __check_execute_permission(pkg_id,
-					caller_appid, caller_uid, kb);
+			ret = __check_execute_permission(pkg_id, caller_appid,
+					_request_get_target_uid(req), kb);
 			if (ret != 0) {
 				_request_send_result(req, ret);
 				traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
@@ -1121,7 +1126,8 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		}
 	}
 
-	share_handle = _temporary_permission_create(caller_pid, appid, kb, caller_uid);
+	share_handle = _temporary_permission_create(caller_pid, appid,
+			kb, _request_get_target_uid(req));
 	if (share_handle == NULL)
 		_D("No sharable path : %d %s", caller_pid, appid);
 
@@ -1130,7 +1136,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		__send_mount_request(ai, tep_name, kb);
 
 	if (pid > 0)
-		callee_status = _status_get_app_info_status(pid, caller_uid);
+		callee_status = _status_get_app_info_status(pid, _request_get_target_uid(req));
 
 	if (pid > 0 && callee_status != STATUS_DYING) {
 		if (caller_pid == pid) {
@@ -1188,7 +1194,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		si = _splash_screen_create_image(ai, kb, cmd);
 		_splash_screen_send_image(si);
 
-		pid = _send_cmd_to_launchpad(pad_type, caller_uid, PAD_CMD_LAUNCH, kb);
+		pid = _send_cmd_to_launchpad(pad_type, _request_get_target_uid(req), PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
 			_splash_screen_send_pid(si, pid);
@@ -1210,11 +1216,11 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 				app_group_restart_app(pid, kb);
 			}
 		}
-		_status_add_app_info_list(appid, app_path, pid, is_subapp, caller_uid);
+		_status_add_app_info_list(appid, app_path, pid, is_subapp, _request_get_target_uid(req));
 	}
 
 	if (share_handle) {
-		if (pid > 0 && (ret = _temporary_permission_apply(pid, caller_uid, share_handle)) != 0)
+		if (pid > 0 && (ret = _temporary_permission_apply(pid, _request_get_target_uid(req), share_handle)) != 0)
 			_D("Couldn't apply temporary permission: %d", ret);
 		_temporary_permission_destroy(share_handle);
 	}
