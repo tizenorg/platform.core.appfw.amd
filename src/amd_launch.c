@@ -1036,6 +1036,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
 	splash_image_h si;
+	int enable = 1;
 
 	traceBegin(TTRACE_TAG_APPLICATION_MANAGER, "AMD:START_APP");
 
@@ -1076,6 +1077,15 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 	if (!strcmp(status, "blocking")) {
 		_D("blocking");
+		_request_send_result(req, -EREJECTED);
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
+		return -EREJECTED;
+	}
+
+
+	ret = appinfo_get_int_value(ai, AIT_ENABLEMENT, &enable);
+	if (ret == 0 && !(enable & APP_ENABLEMENT_MASK_ACTIVE)) {
+		_D("Disabled");
 		_request_send_result(req, -EREJECTED);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return -EREJECTED;
