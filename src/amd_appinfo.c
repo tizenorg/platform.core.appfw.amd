@@ -180,7 +180,7 @@ static int __appinfo_add_restart(const pkgmgrinfo_appinfo_h handle, struct appin
 		return -1;
 	}
 
-	info->val[AIT_RESTART] = strdup(restart ? "true" : "false");
+	info->val[AIT_RESTART] = GINT_TO_POINTER(restart ? 1 : 0);
 
 	return 0;
 }
@@ -513,12 +513,19 @@ static int __appinfo_add_api_version(const pkgmgrinfo_appinfo_h handle, struct a
 	return 0;
 }
 
+static int __appinfo_add_enablement(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	info->val[AIT_ENABLEMENT] = GINT_TO_POINTER(APP_ENABLEMENT_MASK_ACTIVE);
+
+	return 0;
+}
+
 static  appinfo_vft appinfo_table[AIT_MAX] = {
 	[AIT_NAME] = { NULL, NULL },
 	[AIT_EXEC] = { __appinfo_add_exec, free },
 	[AIT_PKGTYPE] = { __appinfo_add_pkgtype, free },
 	[AIT_ONBOOT] = { __appinfo_add_onboot, free },
-	[AIT_RESTART] = { __appinfo_add_restart, free },
+	[AIT_RESTART] = { __appinfo_add_restart, NULL },
 	[AIT_MULTI] = { __appinfo_add_multi, free },
 	[AIT_HWACC] = { __appinfo_add_hwacc, free },
 	[AIT_PERM] = { __appinfo_add_perm, free },
@@ -539,6 +546,8 @@ static  appinfo_vft appinfo_table[AIT_MAX] = {
 	[AIT_ROOT_PATH] = { __appinfo_add_root_path, free },
 	[AIT_SPLASH_SCREEN] = { __appinfo_add_splash_screens, __appinfo_remove_splash_screen },
 	[AIT_API_VERSION] = { __appinfo_add_api_version, free },
+	[AIT_ENABLEMENT] = { __appinfo_add_enablement, NULL },
+
 };
 
 static void __appinfo_remove_handler(gpointer data)
@@ -763,13 +772,61 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 	return 0;
 }
 
+static int __package_app_event_cb(uid_t target_uid, int req_id, const char *pkg_type,
+				const char *pkgid, const char *appid, const char *key,
+				const char *val, const void *pmsg, void *data)
+{
+	struct appinfo *ai;
+	int old;
+
+	_D("appid:%s key:%s val:%s", appid, key, val);
+	ai = appinfo_find(target_uid, appid);
+	if (!ai)
+		return 0;
+
+	if (!strcasecmp(key, "start")) {
+		if (!strcasecmp(val, "enable_global_app_for_uid") ||
+				!strcasecmp(val, "enable_app")) {
+			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
+			old = (old & APP_ENABLEMENT_MASK_ACTIVE ) | APP_ENABLEMENT_MASK_REQUEST;
+			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+		} else if (!strcasecmp(val, "disable_global_app_for_uid") ||
+				!strcasecmp(val, "disable_app")) {
+			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
+			old &=  APP_ENABLEMENT_MASK_ACTIVE;
+			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+		}
+	} else if (!strcasecmp(key, "end")) {
+		if (!strcasecmp(val, "ok")) {
+			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
+			old >>= 1;
+			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+			if (!(old & APP_ENABLEMENT_MASK_ACTIVE)) {
+				_E("terminate apps :%s", appid);
+				_status_terminate_apps(appid, target_uid);
+			}
+		} else if (!strcasecmp(val, "fail")) {
+			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
+			old &= APP_ENABLEMENT_MASK_ACTIVE;
+			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+		}
+	}
+
+	return 0;
+}
+
 static int __init_package_event_handler(void)
 {
 	pc = pkgmgr_client_new(PC_LISTENING);
 	if (pc == NULL)
 		return -1;
 
+	pkgmgr_client_set_status_type(pc, PKGMGR_CLIENT_STATUS_ALL |
+					PKGMGR_CLIENT_STATUS_ENABLE_DISABLE_APP);
+
 	if (pkgmgr_client_listen_status(pc, __package_event_cb, NULL) < 0)
+		return -1;
+	if (pkgmgr_client_listen_app_status(pc, __package_app_event_cb, NULL) < 0)
 		return -1;
 
 	return 0;
@@ -908,10 +965,38 @@ const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 	return c->val[type];
 }
 
+const void *appinfo_get_ptr_value(const struct appinfo *c, enum appinfo_type type)
+{
+	if (!c) {
+		errno = EINVAL;
+		_E("appinfo get value: %s", strerror(errno));
+		return NULL;
+	}
+
+	if (type < AIT_START || type >= AIT_MAX)
+		return NULL;
+
+	return c->val[type];
+}
+
+int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type, int *val)
+{
+	if (!c) {
+		errno = EINVAL;
+		_E("appinfo get value: %s", strerror(errno));
+		return -1;
+	}
+
+	if (type < AIT_START || type >= AIT_MAX)
+		return -1;
+
+	*val = GPOINTER_TO_INT(c->val[type]);
+
+	return 0;
+}
+
 int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val)
 {
-	int category;
-
 	if (!c || !val) {
 		errno = EINVAL;
 		_E("appinfo is NULL, type: %d, val %s", type, val);
@@ -922,15 +1007,46 @@ int appinfo_set_value(struct appinfo *c, enum appinfo_type type, const char *val
 		return -1;
 
 	_D("%s : %s : %s", c->val[AIT_NAME], c->val[type], val);
-	if (type == AIT_BG_CATEGORY) {
-		category = (intptr_t)c->val[type];
-		c->val[type] = (char *)((intptr_t)(category | (int)((intptr_t)val)));
-	} else {
-		if (c->val[type])
-			free(c->val[type]);
-		c->val[type] = strdup(val);
+	if (c->val[type])
+		free(c->val[type]);
+	c->val[type] = strdup(val);
+
+	return 0;
+}
+
+int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type type, void *val)
+{
+	if (!c || !val) {
+		errno = EINVAL;
+		_E("appinfo is NULL, type: %d, val %p", type, val);
+		return -1;
 	}
 
+	if (type < AIT_START || type >= AIT_MAX)
+		return -1;
+
+	_D("%s : %p : %p", c->val[AIT_NAME], c->val[type], val);
+	if (appinfo_table[type].destructor && c->val[type] != NULL)
+		appinfo_table[type].destructor(c->val[type]);
+
+	c->val[type] = (char*)val;
+	return 0;
+}
+
+int appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val)
+{
+	if (!c) {
+		errno = EINVAL;
+		_E("appinfo is NULL, type: %d, val %d", type, val);
+		return -1;
+	}
+
+	if (type < AIT_START || type >= AIT_MAX)
+		return -1;
+
+	_D("%s : %p : %p", c->val[AIT_NAME], c->val[type], val);
+
+	c->val[type] = (char *)GINT_TO_POINTER(val);
 	return 0;
 }
 
@@ -970,21 +1086,3 @@ void appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
 	g_hash_table_foreach(info->tbl, __iter_cb, &cbi);
 }
 
-int appinfo_get_boolean(const struct appinfo *c, enum appinfo_type type)
-{
-	const char *v;
-
-	v = appinfo_get_value(c, type);
-	if (!v)
-		return -1;
-
-	if (!strcmp(v, "1") || !strcasecmp(v, "true"))
-		return 1;
-
-	if (!strcmp(v, "0") || !strcasecmp(v, "false"))
-		return 0;
-
-	errno = EFAULT;
-
-	return -1;
-}
