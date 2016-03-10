@@ -64,9 +64,11 @@
 #define OSP_K_LAUNCH_TYPE "__OSP_LAUNCH_TYPE__"
 #define OSP_V_LAUNCH_TYPE_DATACONTROL "datacontrol"
 
-#define PROC_STATUS_LAUNCH  0
-#define PROC_STATUS_FG	3
-#define PROC_STATUS_BG	4
+#define PROC_STATUS_LAUNCH 0
+#define PROC_STATUS_FG 3
+#define PROC_STATUS_BG 4
+#define PROC_STATUS_ACTIVATE 5
+#define PROC_STATUS_DEACTIVATE 6
 
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
@@ -947,26 +949,27 @@ static int __send_hint_for_visibility(uid_t uid)
 
 static int __app_status_handler(int pid, int status, void *data)
 {
+	int app_status = -1;
 	/* char *appid = NULL; */
 	/* int bg_category = 0x00; */
-	int app_status = -1;
 	/* const struct appinfo *ai = NULL; */
 
 	_W("pid(%d) status(%d)", pid, status);
 
 	app_status  = _status_get_app_info_status(pid, getuid());
-
 	if (app_status == STATUS_DYING && status != PROC_STATUS_LAUNCH)
 		return 0;
 
-	if (status == PROC_STATUS_FG) {
+	switch (status) {
+	case PROC_STATUS_FG:
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
 		/* _amd_suspend_remove_timer(pid); */
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(getuid());
-	} else if (status == PROC_STATUS_BG) {
+		break;
+	case PROC_STATUS_BG:
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
 		/*
 		appid = _status_app_get_appid_bypid(pid);
@@ -976,8 +979,15 @@ static int __app_status_handler(int pid, int status, void *data)
 			if (!bg_category)
 				_amd_suspend_add_timer(pid, ai);
 		}*/
-	} else if (status == PROC_STATUS_LAUNCH) {
-		_D("pid(%d) status(%d)", pid, status);
+		break;
+	case PROC_STATUS_ACTIVATE:
+		_status_update_app_info_list(pid, STATUS_FOCUS, FALSE, getuid());
+		break;
+	case PROC_STATUS_DEACTIVATE:
+		_status_update_app_info_list(pid, STATUS_UNFOCUS, FALSE, getuid());
+		break;
+	default:
+		break;
 	}
 
 	return 0;
