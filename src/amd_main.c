@@ -126,6 +126,7 @@ static bool __can_restart_app(const char *appid)
 	const char *component_type;
 	struct appinfo *ai;
 	int r;
+	int val = 0;
 
 	_D("appid: %s", appid);
 	ai = appinfo_find(getuid(), appid);
@@ -146,8 +147,8 @@ static bool __can_restart_app(const char *appid)
 	} else if (pkg_status && strncmp(pkg_status, "norestart", 9) == 0) {
 		appinfo_set_value(ai, AIT_STATUS, "installed");
 	} else {
-		r = appinfo_get_boolean(ai, AIT_RESTART);
-		if (r && __check_restart(appid))
+		r = appinfo_get_int_value(ai, AIT_RESTART, &val);
+		if (r == 0 && val && __check_restart(appid))
 			return true;
 	}
 
