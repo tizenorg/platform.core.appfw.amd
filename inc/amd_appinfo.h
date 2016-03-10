@@ -46,6 +46,7 @@ enum appinfo_type {
 	AIT_ROOT_PATH,
 	AIT_SPLASH_SCREEN,
 	AIT_API_VERSION,
+	AIT_ENABLEMENT,
 	AIT_MAX
 };
 
@@ -69,6 +70,9 @@ struct appinfo_splash_image {
 #define APP_TYPE_WIDGET		"widgetapp"
 #define APP_TYPE_WATCH		"watchapp"
 
+#define APP_ENABLEMENT_MASK_ACTIVE	0x1
+#define APP_ENABLEMENT_MASK_REQUEST	0x2
+
 typedef void (*appinfo_iter_callback)(void *user_data,
 		const char *filename, struct appinfo *c);
 int appinfo_init(void);
@@ -76,7 +80,10 @@ void appinfo_fini(void);
 int appinfo_insert(uid_t uid, const char *pkgid);
 struct appinfo *appinfo_find(uid_t caller_uid, const char *appid);
 const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type);
+const void *appinfo_get_ptr_value(const struct appinfo *c, enum appinfo_type type);
+int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type, int *val);
 int appinfo_set_value(struct appinfo *c, enum appinfo_type, const char *val);
-int appinfo_get_boolean(const struct appinfo *c, enum appinfo_type type);
+int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type, void *val);
+int appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val);
 void appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data);
 void appinfo_reload(void);
