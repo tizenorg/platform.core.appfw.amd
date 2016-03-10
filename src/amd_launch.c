@@ -64,9 +64,11 @@
 #define OSP_K_LAUNCH_TYPE "__OSP_LAUNCH_TYPE__"
 #define OSP_V_LAUNCH_TYPE_DATACONTROL "datacontrol"
 
-#define PROC_STATUS_LAUNCH  0
-#define PROC_STATUS_FG	3
-#define PROC_STATUS_BG	4
+#define PROC_STATUS_LAUNCH 0
+#define PROC_STATUS_FG 3
+#define PROC_STATUS_BG 4
+#define PROC_STATUS_ACTIVATE 5
+#define PROC_STATUS_DEACTIVATE 6
 
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
@@ -976,8 +978,10 @@ static int __app_status_handler(int pid, int status, void *data)
 			if (!bg_category)
 				_amd_suspend_add_timer(pid, ai);
 		}*/
-	} else if (status == PROC_STATUS_LAUNCH) {
-		_D("pid(%d) status(%d)", pid, status);
+	} else if (status == PROC_STATUS_ACTIVATE) {
+		_status_update_app_info_list(pid, STATUS_FOCUS, FALSE, getuid());
+	} else if (status == PROC_STATUS_DEACTIVATE) {
+		_status_update_app_info_list(pid, STATUS_UNFOCUS, FALSE, getuid());
 	}
 
 	return 0;
