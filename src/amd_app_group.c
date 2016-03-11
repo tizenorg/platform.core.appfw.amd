@@ -41,6 +41,8 @@
 #include <tizen-extension-client-protocol.h>
 static struct tizen_policy *tz_policy;
 
+extern int _wl_is_initialized(void);
+
 static void _reg_handle_global(void *data, struct wl_registry *reg,
 		uint32_t id, const char *interface, uint32_t ver)
 {
@@ -67,6 +69,7 @@ static GHashTable *app_group_hash = NULL;
 static int dead_pid = -1;
 static int focused_leader_pid = -1;
 static GList *recycle_bin = NULL;
+struct wl_display *display;
 
 extern char *home_appid;
 
@@ -84,79 +87,82 @@ typedef struct _app_group_context_t {
 	app_group_launch_mode launch_mode;
 } app_group_context_t;
 
-static void __lower_window(int wid)
+static int __wl_init()
 {
-	struct wl_display *dpy;
 	struct wl_registry *reg;
 
-	dpy = wl_display_connect(NULL);
-	reg = wl_display_get_registry(dpy);
+	if (!_wl_is_initialized())
+		return -1;
+
+	display = wl_display_connect(NULL);
+
+	if (display == NULL) {
+		_E("display is null");
+		return -1;
+	}
+
+	reg = wl_display_get_registry(display);
+	if (reg == NULL) {
+		_E("registry is null");
+		wl_display_disconnect(display);
+		return -1;
+	}
+
 	wl_registry_add_listener(reg, &reg_listener, NULL);
-	wl_display_roundtrip(dpy);
+	wl_display_roundtrip(display);
 
 	if (!tz_policy) {
 		_E("ERR: no tizen_policy global interface");
 		wl_registry_destroy(reg);
-		wl_display_disconnect(dpy);
+		wl_display_disconnect(display);
+		return -1;
+	}
+
+	return 0;
+}
+
+static void __lower_window(int wid)
+{
+	if (!tz_policy && __wl_init() < 0) {
+		_E("__wl_init() failed");
 		return;
 	}
 
 	tizen_policy_lower_by_res_id(tz_policy, wid);
-	wl_display_roundtrip(dpy);
-
-	tizen_policy_destroy(tz_policy);
-	wl_registry_destroy(reg);
-	wl_display_disconnect(dpy);
+	wl_display_roundtrip(display);
 }
 
 static void __attach_window(int parent_wid, int child_wid)
 {
-	struct wl_display *dpy;
-	struct wl_registry *reg;
-
-	dpy = wl_display_connect(NULL);
-	reg = wl_display_get_registry(dpy);
-	wl_registry_add_listener(reg, &reg_listener, NULL);
-	wl_display_roundtrip(dpy);
-
-	if (!tz_policy) {
-		_E("ERR: no tizen_policy global interface");
-		wl_registry_destroy(reg);
-		wl_display_disconnect(dpy);
+	if (!tz_policy && __wl_init() < 0) {
+		_E("__wl_init() failed");
 		return;
 	}
 
 	tizen_policy_set_transient_for(tz_policy, child_wid, parent_wid);
-	wl_display_roundtrip(dpy);
-
-	tizen_policy_destroy(tz_policy);
-	wl_registry_destroy(reg);
-	wl_display_disconnect(dpy);
+	wl_display_roundtrip(display);
 }
 
 static void __detach_window(int child_wid)
 {
-	struct wl_display *dpy;
-	struct wl_registry *reg;
-
-	dpy = wl_display_connect(NULL);
-	reg = wl_display_get_registry(dpy);
-	wl_registry_add_listener(reg, &reg_listener, NULL);
-	wl_display_roundtrip(dpy);
-
-	if (!tz_policy) {
-		_E("ERR: no tz_policy global interface");
-		wl_registry_destroy(reg);
-		wl_display_disconnect(dpy);
+	if (!tz_policy && __wl_init() < 0) {
+		_E("__wl_init() failed");
 		return;
 	}
 
 	tizen_policy_unset_transient_for(tz_policy, child_wid);
-	wl_display_roundtrip(dpy);
+	wl_display_roundtrip(display);
+}
 
-	tizen_policy_destroy(tz_policy);
-	wl_registry_destroy(reg);
-	wl_display_disconnect(dpy);
+static void __activate_below(int wid, int below_wid)
+{
+	if (!tz_policy && __wl_init() < 0) {
+		_E("__wl_init() failed");
+		return;
+	}
+
+	tizen_policy_activate_below_by_res_id(tz_policy, wid, below_wid);
+	wl_display_roundtrip(display);
 }
 
 static gint __comp_pid(gconstpointer a, gconstpointer b)
@@ -1447,3 +1453,41 @@ int app_group_get_next_caller_pid(int pid)
 
 	return -1;
 }
+
+int app_group_activate_below(int pid, const char *below_appid)
+{
+	app_group_context_t *context = __get_context(pid);
+	int wid;
+	int tpid;
+	GList *list;
+	GHashTableIter iter;
+	gpointer key;
+	gpointer value;
+	const char *appid;
+
+	if (!context)
+		return -1;
+
+	if (context->wid == 0)
+		return -1;
+
+	if (!below_appid || pid <= 0)
+		return -1;
+
+	wid = context->wid;
+
+	g_hash_table_iter_init(&iter, app_group_hash);
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		tpid = GPOINTER_TO_INT(key);
+		appid = _status_app_get_appid_bypid(tpid);
+		if (appid && strcmp(appid, below_appid) == 0) {
+			list = (GList *)value;
+			context  = (app_group_context_t *)list->data;
+			__activate_below(wid, context->wid);
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
