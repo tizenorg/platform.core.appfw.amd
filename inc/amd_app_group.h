@@ -56,5 +56,7 @@ int app_group_find_pid_from_recycle_bin(const char *appid);
 void app_group_get_idle_pids(int *cnt, int **pids);
 void app_group_remove_from_recycle_bin(int pid);
 int app_group_get_next_caller_pid(int pid);
+int app_group_activate_below(int pid, const char *below_appid);
+
 
 
