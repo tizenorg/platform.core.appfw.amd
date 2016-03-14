@@ -664,6 +664,23 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 	return 0;
 }
 
+int _status_terminate_apps(const char *appid, uid_t uid)
+{
+	GSList *iter;
+	app_status_info_t *info_t;
+
+	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+		info_t = (app_status_info_t *)iter->data;
+
+		if (info_t->uid != uid || info_t->status == STATUS_DYING ||
+			strcmp(appid, info_t->appid) != 0)
+			continue;
+		_term_sub_app(info_t->pid);
+	}
+
+	return 0;
+}
+
 static inline int __find_pid_by_appid(const char *dname, const char *appid,
 		void *priv, uid_t uid)
 {
