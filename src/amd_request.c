@@ -698,6 +698,17 @@ static int __dispatch_app_group_lower(request_h req)
 	return ret;
 }
 
+static int __dispatch_app_group_activate_below(request_h req)
+{
+	char *buf = NULL;
+	int ret;
+
+	bundle_get_str(req->kb, AUL_K_APPID, &buf);
+	ret = app_group_activate_below(req->pid, buf);
+	_request_send_result(req, ret);
+	return 0;
+}
+
 static int __dispatch_app_start(request_h req)
 {
 	const char *appid;
@@ -1264,6 +1275,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GROUP_GET_IDLE_PIDS] = __dispatch_app_group_get_idle_pids,
 	[APP_GROUP_LOWER] = __dispatch_app_group_lower,
 	[APP_GROUP_CLEAR_TOP] = __dispatch_app_group_clear_top,
+	[APP_GROUP_ACTIVATE_BELOW] = __dispatch_app_group_activate_below,
 	[APP_GET_STATUS] = __dispatch_app_get_status,
 	[APP_ADD_LOADER] = __dispatch_app_add_loader,
 	[APP_REMOVE_LOADER] = __dispatch_app_remove_loader,
