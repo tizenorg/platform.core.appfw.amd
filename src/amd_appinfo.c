@@ -490,11 +490,24 @@ static int __add_splash_screen_list_cb(const char *src, const char *type,
 
 static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
+	struct appinfo_splash_screen *splash_screen;
+	bool splash_screen_display = true;
+
 	if (pkgmgrinfo_appinfo_foreach_splash_screen(handle,
 				__add_splash_screen_list_cb, info) < 0) {
 		_E("Failed to get splash screen");
 		return -1;
 	}
+
+	splash_screen = (struct appinfo_splash_screen *)info->val[AIT_SPLASH_SCREEN];
+	if (splash_screen == NULL)
+		return 0;
+
+	if (pkgmgrinfo_appinfo_get_splash_screen_display(handle,
+				&splash_screen_display) < 0)
+		_D("Failed to get splash screen display");
+
+	splash_screen->display = splash_screen_display;
 
 	return 0;
 }
