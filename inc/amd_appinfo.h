@@ -57,6 +57,7 @@ struct appinfo {
 struct appinfo_splash_screen {
 	GHashTable *portrait;
 	GHashTable *landscape;
+	bool display;
 };
 
 struct appinfo_splash_image {
