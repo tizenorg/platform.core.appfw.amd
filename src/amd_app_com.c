@@ -61,7 +61,7 @@ static void __free_endpoint(struct endpoint_info *info)
 	g_free(info);
 }
 
-int app_com_broker_init()
+int app_com_broker_init(void)
 {
 	if (!endpoint_tbl) {
 		endpoint_tbl = g_hash_table_new(g_str_hash, g_str_equal);
@@ -111,7 +111,8 @@ int app_com_broker_fini()
 	return 0;
 }
 
-int app_com_add_endpoint(const char *endpoint, unsigned int propagate, const char *assoc_priv)
+int app_com_add_endpoint(const char *endpoint, unsigned int propagate,
+			 const char *assoc_priv)
 {
 	struct endpoint_info *info;
 
@@ -121,7 +122,8 @@ int app_com_add_endpoint(const char *endpoint, unsigned int propagate, const cha
 		return AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS;
 	}
 
-	_E("endpoint=%s propagate=%d assoc_priv=%s", endpoint, propagate, assoc_priv);
+	_E("endpoint=%s propagate=%d assoc_priv=%s",
+	   endpoint, propagate, assoc_priv);
 
 	info = (struct endpoint_info *)g_malloc0(sizeof(struct endpoint_info));
 	if (info == NULL) {
@@ -164,7 +166,8 @@ int app_com_remove_endpoint(const char *endpoint)
 	return AUL_APP_COM_R_ERROR_OK;
 }
 
-static struct client_info *__add_client(struct endpoint_info *info, const char *filter, int pid)
+static struct client_info *__add_client(struct endpoint_info *info,
+					const char *filter, int pid)
 {
 	GList *client_list;
 	struct client_info *c;
@@ -186,7 +189,8 @@ static struct client_info *__add_client(struct endpoint_info *info, const char *
 	client_list = g_hash_table_lookup(cpid_tbl, GINT_TO_POINTER(pid));
 	if (client_list == NULL) {
 		client_list = g_list_append(client_list, info);
-		g_hash_table_insert(cpid_tbl, GINT_TO_POINTER(pid), client_list);
+		g_hash_table_insert(cpid_tbl, GINT_TO_POINTER(pid),
+				    client_list);
 	} else {
 		client_list = g_list_append(client_list, info);
 	}
@@ -262,12 +266,16 @@ int app_com_send(const char *endpoint, int cpid, bundle *envelope)
 		if (client->pid == cpid)
 			continue;
 
-		if (client->filter && __check_filter(client->filter, cpid, client->pid, envelope) < 0)
+		if (client->filter &&
+		    __check_filter(client->filter, cpid,
+				   client->pid, envelope) < 0)
 			continue;
 
-		ret = app_send_cmd_with_noreply(client->pid, APP_COM_MESSAGE, envelope);
+		ret = app_send_cmd_with_noreply(client->pid, APP_COM_MESSAGE,
+						envelope);
 		if (ret < 0)
-			_E("failed to send message pid: %d (%d)", client->pid, ret);
+			_E("failed to send message pid: %d (%d)",
+			   client->pid, ret);
 
 	}
 
@@ -335,5 +343,3 @@ int app_com_client_remove(int cpid)
 
 	return AUL_APP_COM_R_ERROR_OK;
 }
-
-

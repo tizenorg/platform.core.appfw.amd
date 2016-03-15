@@ -105,7 +105,8 @@ static bool __check_restart(const char *appid)
 		_D("ri (%x)", ri);
 		_D("appid (%s)", appid);
 
-		ri->timer = g_timeout_add(10 * 1000, __restart_timeout_handler, ri);
+		ri->timer = g_timeout_add(10 * 1000,
+					  __restart_timeout_handler, ri);
 	} else {
 		ri->count++;
 		_D("count (%d)", ri->count);
@@ -164,9 +165,9 @@ void _cleanup_dead_info(int pid)
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
 		if (app_group_find_second_leader(pid) == -1) {
-			app_group_clear_top(pid);
+			app_group_clear_top(pid, getuid());
 			app_group_set_dead_pid(pid);
-			app_group_remove(pid);
+			app_group_remove(pid, getuid());
 		} else {
 			app_group_remove_leader_pid(pid);
 		}
@@ -179,10 +180,10 @@ void _cleanup_dead_info(int pid)
 			app_group_reroute(pid);
 		} else {
 			_W("app_group clear top");
-			app_group_clear_top(pid);
+			app_group_clear_top(pid, getuid());
 		}
 		app_group_set_dead_pid(pid);
-		app_group_remove(pid);
+		app_group_remove(pid, getuid());
 	}
 
 	_temporary_permission_drop(pid, getuid());
@@ -289,7 +290,8 @@ int _wl_is_initialized(void)
 	return wl_initialized;
 }
 
-static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data)
+static gboolean __wl_monitor_cb(GIOChannel *io,
+				GIOCondition cond, gpointer data)
 {
 	char buf[INOTIFY_BUF];
 	ssize_t len = 0;
@@ -308,12 +310,12 @@ static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data
 		event = (struct inotify_event *)&buf[i];
 		if (event->len) {
 			p = event->name;
-			if (p &&
-				!strncmp(p, "wayland-0", strlen("wayland-0"))) {
+			if (p && !strncmp(p, "wayland-0",
+					  strlen("wayland-0"))) {
 				_D("%s is created", p);
 				wl_0_ready = 1;
-			} else if (p &&
-				!strncmp(p, ".wm_ready", strlen(".wm_ready"))) {
+			} else if (p && !strncmp(p, ".wm_ready",
+						 strlen(".wm_ready"))) {
 				_D("%s is created", p);
 				wm_ready = 1;
 			}
@@ -416,7 +418,8 @@ static void __init_wl(void)
 	}
 
 	watch->wid = g_io_add_watch_full(watch->io, G_PRIORITY_DEFAULT,
-			G_IO_IN, __wl_monitor_cb, watch, __wl_watch_destroy_cb);
+					 G_IO_IN, __wl_monitor_cb, watch,
+					 __wl_watch_destroy_cb);
 }
 
 static int __init(void)
