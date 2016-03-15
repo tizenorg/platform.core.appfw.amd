@@ -20,6 +20,3 @@ int _input_init(void);
 int _input_fini(void);
 int _input_lock(void);
 int _input_unlock(void);
-
-
-

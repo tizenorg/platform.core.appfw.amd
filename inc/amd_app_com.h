@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,8 @@
 int app_com_broker_init();
 int app_com_broker_fini();
 int app_com_client_remove(int cpid);
-int app_com_add_endpoint(const char *endpoint, unsigned int propagate, const char *assoc_priv);
+int app_com_add_endpoint(const char *endpoint, unsigned int propagate,
+		const char *assoc_priv);
 int app_com_remove_endpoint(const char *endpoint);
 int app_com_join(const char *endpoint, int cpid, const char *filter);
 int app_com_send(const char *endpoint, int cpid, bundle *envelope);
