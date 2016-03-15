@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -35,4 +35,3 @@ int _request_remove_fd(request_h req);
 int _request_reply_for_pending_request(int pid);
 int _request_flush_pending_request(int pid);
 uid_t _request_get_target_uid(request_h req);
-
