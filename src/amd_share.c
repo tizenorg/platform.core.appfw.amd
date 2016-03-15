@@ -372,5 +372,3 @@ int _temporary_permission_drop(int pid, uid_t uid)
 	}
 	return _status_clear_shared_info_list(pid, uid);
 }
-
-

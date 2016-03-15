@@ -814,7 +814,7 @@ static int __package_app_event_cb(uid_t target_uid, int req_id, const char *pkg_
 		if (!strcasecmp(val, "enable_global_app_for_uid") ||
 				!strcasecmp(val, "enable_app")) {
 			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
-			old = (old & APP_ENABLEMENT_MASK_ACTIVE ) | APP_ENABLEMENT_MASK_REQUEST;
+			old = (old & APP_ENABLEMENT_MASK_ACTIVE) | APP_ENABLEMENT_MASK_REQUEST;
 			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
 		} else if (!strcasecmp(val, "disable_global_app_for_uid") ||
 				!strcasecmp(val, "disable_app")) {
