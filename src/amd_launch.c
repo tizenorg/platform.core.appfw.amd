@@ -67,6 +67,7 @@
 #define PROC_STATUS_LAUNCH  0
 #define PROC_STATUS_FG	3
 #define PROC_STATUS_BG	4
+#define PROC_STATUS_FOCUS	5
 
 /* SDK related defines */
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
@@ -86,6 +87,7 @@ struct fgmgr {
 
 static GList *_fgmgr_list;
 static int __pid_of_last_launched_ui_app;
+static int __focused_pid;
 static GDBusConnection *conn;
 
 static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
@@ -958,14 +960,17 @@ static int __app_status_handler(int pid, int status, void *data)
 	if (app_status == STATUS_DYING && status != PROC_STATUS_LAUNCH)
 		return 0;
 
-	if (status == PROC_STATUS_FG) {
+	switch (status) {
+	case PROC_STATUS_FG:
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
 		/* _amd_suspend_remove_timer(pid); */
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(getuid());
-	} else if (status == PROC_STATUS_BG) {
+		break;
+
+	case PROC_STATUS_BG:
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
 		/*
 		appid = _status_app_get_appid_bypid(pid);
@@ -975,14 +980,21 @@ static int __app_status_handler(int pid, int status, void *data)
 			if (!bg_category)
 				_amd_suspend_add_timer(pid, ai);
 		}*/
-	} else if (status == PROC_STATUS_LAUNCH) {
-		_D("pid(%d) status(%d)", pid, status);
-	}
+		break;
 
+	case PROC_STATUS_FOCUS:
+		__focused_pid = pid;
+		break;
+	}
 	return 0;
 }
 
-int _launch_init()
+int _get_focused_pid(void)
+{
+	return __focused_pid;
+}
+
+int _launch_init(void)
 {
 	int ret;
 	GError *err = NULL;

@@ -35,5 +35,6 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid, request_h req, b
 int _start_app_local(uid_t uid, const char *appid);
 int _start_app_local_with_bundle(uid_t uid, const char *appid, bundle *kb);
 int _launch_init(void);
+int _get_focused_pid(void);
 
 
