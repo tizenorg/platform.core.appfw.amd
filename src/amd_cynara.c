@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -29,13 +29,18 @@
 
 #include "amd_util.h"
 
-#define PRIVILEGE_APPMANAGER_LAUNCH "http://tizen.org/privilege/appmanager.launch"
-#define PRIVILEGE_APPMANAGER_KILL "http://tizen.org/privilege/appmanager.kill"
-#define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
+#define PRIVILEGE_APPMANAGER_LAUNCH \
+	"http://tizen.org/privilege/appmanager.launch"
+#define PRIVILEGE_APPMANAGER_KILL \
+	"http://tizen.org/privilege/appmanager.kill"
+#define PRIVILEGE_APPMANAGER_KILL_BGAPP \
+	"http://tizen.org/privilege/appmanager.kill.bgapp"
 #define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
 #define PRIVILEGE_CALL "http://tizen.org/privilege/call"
-#define PRIVILEGE_PACKAGEMANAGER_INFO "http://tizen.org/privilege/packagemanager.info"
-#define PRIVILEGE_SYSTEM_SETTING "http://tizen.org/privilege/systemsettings.admin"
+#define PRIVILEGE_PACKAGEMANAGER_INFO \
+	"http://tizen.org/privilege/packagemanager.info"
+#define PRIVILEGE_SYSTEM_SETTING \
+	"http://tizen.org/privilege/systemsettings.admin"
 
 static cynara *r_cynara;
 
@@ -45,7 +50,8 @@ struct caller_info {
 	char *session;
 };
 
-typedef int (*checker_func)(struct caller_info *info, request_h req, void *data);
+typedef int (*checker_func)(struct caller_info *info, request_h req,
+		void *data);
 
 struct checker_info {
 	int cmd;
@@ -99,14 +105,16 @@ static int __get_caller_info_from_cynara(int sockfd, struct caller_info *info)
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT, &(info->user));
+	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT,
+			&(info->user));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_cred_socket_get_user failed.");
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT, &(info->client));
+	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT,
+			&(info->client));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_creds_socket_get_client failed.");
@@ -121,32 +129,39 @@ static int __check_privilege(struct caller_info *info, const char *privilege)
 	int ret;
 	char buf[MAX_LOCAL_BUFSZ];
 
-	ret = cynara_check(r_cynara, info->client, info->session, info->user, privilege);
+	ret = cynara_check(r_cynara, info->client, info->session, info->user,
+			privilege);
 	switch (ret) {
-	case CYNARA_API_ACCESS_ALLOWED:
-		_D("%s(%s) from user %s privilege %s allowed.", info->client, info->session, info->user, privilege);
-		ret = 0;
-		break;
-	case CYNARA_API_ACCESS_DENIED:
-		_E("%s(%s) from user %s privilege %s denied.", info->client, info->session, info->user, privilege);
-		ret = -1;
-		break;
-	default:
-		cynara_strerror(ret, buf, MAX_LOCAL_BUFSZ);
-		_E("cynara_check failed: %s", buf);
-		ret = -1;
-		break;
+		case CYNARA_API_ACCESS_ALLOWED:
+			_D("%s(%s) from user %s privilege %s allowed.",
+					info->client, info->session,
+					info->user, privilege);
+			ret = 0;
+			break;
+		case CYNARA_API_ACCESS_DENIED:
+			_E("%s(%s) from user %s privilege %s denied.",
+					info->client, info->session,
+					info->user, privilege);
+			ret = -1;
+			break;
+		default:
+			cynara_strerror(ret, buf, MAX_LOCAL_BUFSZ);
+			_E("cynara_check failed: %s", buf);
+			ret = -1;
+			break;
 	}
 
 	return ret;
 }
 
-static int __simple_checker(struct caller_info *info, request_h req, void *data)
+static int __simple_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	return __check_privilege(info, (const char *)data);
 }
 
-static int __appcontrol_checker(struct caller_info *info, request_h req, void *data)
+static int __appcontrol_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	bundle *appcontrol;
 	const char *op_priv;
@@ -161,7 +176,8 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	if (appcontrol == NULL)
 		return 0;
 
-	if (bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op) != BUNDLE_ERROR_NONE)
+	if (bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op)
+			!= BUNDLE_ERROR_NONE)
 		return 0;
 
 	op_priv = __convert_operation_to_privilege(op);
@@ -173,7 +189,8 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	return ret;
 }
 
-static int __com_create_checker(struct caller_info *info, request_h req, void *data)
+static int __com_create_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	char *privilege = NULL;
 	bundle *kb = _request_get_bundle(req);
@@ -185,7 +202,8 @@ static int __com_create_checker(struct caller_info *info, request_h req, void *d
 	return  __check_privilege(info, privilege);
 }
 
-static int __com_join_checker(struct caller_info *info, request_h req, void *data)
+static int __com_join_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	char *endpoint = NULL;
 	const char *privilege;
@@ -228,7 +246,8 @@ static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 
 	for (i = 0; i < checker_len; i++) {
 		if (checker_table[i].cmd == _request_get_cmd(req))
-			return checker_table[i].checker(info, req, checker_table[i].data);
+			return checker_table[i].checker(info, req,
+					checker_table[i].data);
 	}
 
 	return 0;

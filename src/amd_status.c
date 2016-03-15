@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -94,16 +94,20 @@ static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 	pkg_status_info_t *pkginfo = NULL;
 
 	if (pkgid == NULL || appinfo == NULL) {
-		_E("empty arguments: %s", pkgid == NULL ? (appinfo == NULL ? "appinfo, pkgid" : "pkgid") : "appinfo");
+		_E("empty arguments");
 		return;
 	}
 
 	if (pkg_status_info_table == NULL)
-		pkg_status_info_table = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+		pkg_status_info_table = g_hash_table_new_full(g_str_hash,
+				g_str_equal,
+				NULL,
+				NULL);
 
 	pkginfo = g_hash_table_lookup(pkg_status_info_table, pkgid);
 	if (pkginfo == NULL) {
-		pkginfo = (pkg_status_info_t *)malloc(sizeof(pkg_status_info_t));
+		pkginfo = (pkg_status_info_t *)malloc(
+				sizeof(pkg_status_info_t));
 		if (pkginfo == NULL) {
 			_E("failed to allocate memory");
 			return;
@@ -117,7 +121,8 @@ static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 			return;
 		}
 
-		g_hash_table_insert(pkg_status_info_table, pkginfo->pkgid, pkginfo);
+		g_hash_table_insert(pkg_status_info_table,
+				pkginfo->pkgid, pkginfo);
 	}
 
 	pkginfo->status = appinfo->status;
@@ -161,7 +166,8 @@ static int __update_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 	if (pkg_status_info_table == NULL)
 		return -1;
 
-	pkginfo = (pkg_status_info_t *)g_hash_table_lookup(pkg_status_info_table, pkgid);
+	pkginfo = (pkg_status_info_t *)g_hash_table_lookup(
+			pkg_status_info_table, pkgid);
 	if (pkginfo == NULL) {
 		_E("pkgid(%s) is not on list");
 		return -1;
@@ -179,21 +185,23 @@ static int __update_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 }
 
 
-static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo, uid_t caller_uid)
+static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo,
+		uid_t caller_uid)
 {
 	pkg_status_info_t *pkginfo = NULL;
 	const struct appinfo *ai = NULL;
 	const char *component_type = NULL;
 
 	if (pkgid == NULL || appinfo == NULL) {
-		_E("empty arguments: %s", pkgid == NULL ? (appinfo == NULL ? "appinfo, pkgid" : "pkgid") : "appinfo");
+		_E("empty arguments");
 		return;
 	}
 
 	ai = appinfo_find(caller_uid, appinfo->appid);
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
 
-	pkginfo = (pkg_status_info_t *)g_hash_table_lookup(pkg_status_info_table, pkgid);
+	pkginfo = (pkg_status_info_t *)g_hash_table_lookup(
+			pkg_status_info_table, pkgid);
 	if (pkginfo == NULL) {
 		_E("pkgid(%s) is not on list");
 		return;
@@ -201,12 +209,14 @@ static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo, uid
 
 	if (component_type && strcmp(component_type, APP_TYPE_SERVICE) == 0) {
 		if (pkginfo->svc_list) {
-			pkginfo->svc_list = g_slist_remove(pkginfo->svc_list, appinfo);
+			pkginfo->svc_list = g_slist_remove(pkginfo->svc_list,
+					appinfo);
 			_D("STATUS_SERVICE : appid(%s)", appinfo->appid);
 		}
 	} else {
 		if (pkginfo->ui_list) {
-			pkginfo->ui_list = g_slist_remove(pkginfo->ui_list, appinfo);
+			pkginfo->ui_list = g_slist_remove(pkginfo->ui_list,
+					appinfo);
 			_D("~STATUS_SERVICE : appid(%s)", appinfo->appid);
 		}
 	}
@@ -310,7 +320,9 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 				return 0;
 			} else {
 				/* PID is unique so if it is exist but user value is not correct remove it. */
-				app_status_info_list = g_slist_remove(app_status_info_list, info_t);
+				app_status_info_list = g_slist_remove(
+						app_status_info_list,
+						info_t);
 				__remove_pkg_info(info_t->pkgid, info_t, uid);
 				__destroy_app_status_info(info_t);
 				break;
@@ -369,7 +381,8 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 
 	app_status_info_list = g_slist_append(app_status_info_list, info_t);
 	__add_pkg_info(pkgid, info_t);
-	_D("pid(%d) appid(%s) pkgid(%s) comp(%s)", pid, appid, pkgid, component_type);
+	_D("pid(%d) appid(%s) pkgid(%s) comp(%s)",
+			pid, appid, pkgid, component_type);
 
 	return 0;
 error:
@@ -385,9 +398,10 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 
 	_D("pid(%d) status(%d)", pid, status);
 	_input_unlock();
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
-		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
+		if ((pid == info_t->pid) &&
+			((info_t->uid == uid) || (info_t->uid == 0))) {
 			if (info_t->status == STATUS_DYING) {
 				_E("Not allowed in STATUS_DYING");
 				return -1;
@@ -405,12 +419,13 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 					__check_running_uiapp_list();
 			}
 
-			_D("pid(%d) appid(%s) pkgid(%s) status(%d)", pid, info_t->appid, info_t->pkgid, info_t->status);
+			_D("pid(%d) appid(%s) pkgid(%s) status(%d)", pid,
+				info_t->appid, info_t->pkgid, info_t->status);
 			break;
 		}
 	}
 
-	app_group_set_status(pid, status, force);
+	app_group_set_status(pid, status, force, uid);
 
 	return 0;
 }
@@ -441,9 +456,13 @@ int _status_remove_app_info_list(int pid, uid_t uid)
 
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
 		info_t = (app_status_info_t *)iter->data;
-		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
-			app_status_info_list = g_slist_remove(app_status_info_list, info_t);
-			running_uiapp_list = g_slist_remove(running_uiapp_list, info_t);
+		if ((pid == info_t->pid) && ((info_t->uid == uid)
+					|| (info_t->uid == 0))) {
+			app_status_info_list = g_slist_remove(
+					app_status_info_list,
+					info_t);
+			running_uiapp_list = g_slist_remove(running_uiapp_list,
+					info_t);
 			__remove_pkg_info(info_t->pkgid, info_t, uid);
 			__destroy_app_status_info(info_t);
 			break;
@@ -455,10 +474,10 @@ int _status_remove_app_info_list(int pid, uid_t uid)
 
 int _status_get_app_info_status(int pid, uid_t uid)
 {
-	GSList *iter = NULL;
-	app_status_info_t *info_t = NULL;
+	GSList *iter;
+	app_status_info_t *info_t;
 
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
 		if (pid == info_t->pid
 				&& ((uid == 0) ? true : (uid == info_t->uid)))
@@ -479,7 +498,8 @@ static gint __find_app_bypid(gconstpointer app_data, gconstpointer pid_data)
 	return -1;
 }
 
-void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void (*send_event_to_svc_core) (int), bool suspend)
+void _status_find_service_apps(int pid, uid_t uid, enum app_status status,
+		void (*send_event_to_svc_core) (int, uid_t), bool suspend)
 {
 	GSList *app_list = NULL;
 	GSList *svc_list = NULL;
@@ -488,8 +508,8 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 	const struct appinfo *ai = NULL;
 	int bg_allowed = 0x00;
 
-	app_list = g_slist_find_custom(app_status_info_list, GINT_TO_POINTER(pid), __find_app_bypid);
-
+	app_list = g_slist_find_custom(app_status_info_list,
+			GINT_TO_POINTER(pid), __find_app_bypid);
 	if (!app_list) {
 		_E("unable to find app by pid:%d", pid);
 		return;
@@ -503,11 +523,13 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 		svc_info_t = (app_status_info_t *)svc_list->data;
 		if (svc_info_t) {
 			ai = appinfo_find(uid, svc_info_t->appid);
-			bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
+			bg_allowed = (intptr_t)appinfo_get_value(ai,
+					AIT_BG_CATEGORY);
 			if (!bg_allowed) {
 				send_event_to_svc_core(svc_info_t->pid);
 				if (suspend)
-					_suspend_add_timer(svc_info_t->pid, ai);
+					_suspend_add_timer(svc_info_t->pid,
+							ai);
 				else
 					_suspend_remove_timer(svc_info_t->pid);
 			}
@@ -516,16 +538,20 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 	}
 }
 
-void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_core) (int))
+void _status_check_service_only(int pid, uid_t uid,
+		void (*send_event_to_svc_core) (int, uid_t))
 {
 	GSList *app_list = NULL;
 	GSList *ui_list = NULL;
 	app_status_info_t *info_t = NULL;
 	app_status_info_t *ui_info_t = NULL;
 	int ui_cnt = 0;
+	const char *appid = NULL;
+	const struct appinfo *ai = NULL;
+	int bg_allowed = 0x00;
 
-	app_list = g_slist_find_custom(app_status_info_list, GINT_TO_POINTER(pid), __find_app_bypid);
-
+	app_list = g_slist_find_custom(app_status_info_list,
+			GINT_TO_POINTER(pid), __find_app_bypid);
 	if (!app_list) {
 		_E("unable to find app by pid:%d", pid);
 		return;
@@ -535,21 +561,18 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 	ui_list = info_t->pkginfo->ui_list;
 	while (ui_list) {
 		ui_info_t = (app_status_info_t *)ui_list->data;
-		if (ui_info_t && _status_app_is_running_v2(ui_info_t->appid, uid) > 0)
+		if (ui_info_t &&
+			_status_app_is_running_v2(ui_info_t->appid, uid) > 0)
 			ui_cnt++;
 		ui_list = g_slist_next(ui_list);
 	}
 
 	if (ui_cnt == 0) {
-		const char *appid = NULL;
-		const struct appinfo *ai = NULL;
-		int bg_allowed = 0x00;
-
 		appid = _status_app_get_appid_bypid(pid);
 		if (appid) {
 			ai = appinfo_find(uid, appid);
-			bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
-
+			bg_allowed = (intptr_t)appinfo_get_value(ai,
+					AIT_BG_CATEGORY);
 			if (!bg_allowed) {
 				send_event_to_svc_core(pid);
 				_suspend_add_timer(pid, ai);
@@ -599,13 +622,13 @@ GList* _status_get_shared_info_list(int pid, uid_t uid)
 
 int _status_app_is_running(const char *appid, uid_t uid)
 {
-	GSList *iter = NULL;
-	app_status_info_t *info_t = NULL;
+	GSList *iter;
+	app_status_info_t *info_t;
 
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
 		if ((strncmp(appid, info_t->appid, MAX_PACKAGE_STR_SIZE) == 0)
-			&& (info_t->uid == uid) && !info_t->is_subapp)
+				&& (info_t->uid == uid) && !info_t->is_subapp)
 			return info_t->pid;
 	}
 
@@ -614,12 +637,12 @@ int _status_app_is_running(const char *appid, uid_t uid)
 
 char* _status_app_get_appid_bypid(int pid)
 {
-	GSList *iter = NULL;
-	app_status_info_t *info_t = NULL;
+	GSList *iter;
+	app_status_info_t *info_t;
 
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
-		if (pid == info_t->pid)
+		if (info_t && info_t->pid == pid)
 			return info_t->appid;
 	}
 
@@ -633,14 +656,13 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 	char tmp_str[MAX_PID_STR_BUFSZ];
 	char buf[AUL_SOCK_MAXBUFF - AUL_PKT_HEADER_SIZE] = {0, };
 
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
-
 		if (info_t->uid != uid || info_t->status == STATUS_DYING)
 			continue;
 
 		if (cmd != APP_ALL_RUNNING_INFO &&
-			app_group_is_sub_app(info_t->pid))
+				app_group_is_sub_app(info_t->pid))
 			continue;
 
 		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->pid);
@@ -671,11 +693,10 @@ int _status_terminate_apps(const char *appid, uid_t uid)
 	GSList *iter;
 	app_status_info_t *info_t;
 
-	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
-
 		if (info_t->uid != uid || info_t->status == STATUS_DYING ||
-			strcmp(appid, info_t->appid) != 0)
+				strcmp(appid, info_t->appid) != 0)
 			continue;
 		_term_sub_app(info_t->pid);
 	}
@@ -757,7 +778,7 @@ int _status_get_appid_bypid(int fd, int pid)
 		cmd = APP_GET_INFO_OK;
 	}
 
- out:
+out:
 	aul_sock_send_raw_with_fd(fd, cmd,
 			(unsigned char *)appid, len, AUL_SOCK_NOREPLY);
 
@@ -821,14 +842,15 @@ int _status_get_pkgid_bypid(int fd, int pid)
 		cmd = APP_GET_INFO_OK;
 	}
 
- out:
+out:
 	aul_sock_send_raw_with_fd(fd, cmd,
 			(unsigned char *)pkgid, len, AUL_SOCK_NOREPLY);
 
 	return 0;
 }
 
-static gint __compare_app_status_info_for_sorting(gconstpointer p1, gconstpointer p2)
+static gint __compare_app_status_info_for_sorting(gconstpointer p1,
+		gconstpointer p2)
 {
 	app_status_info_t *info_t1 = (app_status_info_t *)p1;
 	app_status_info_t *info_t2 = (app_status_info_t *)p2;
@@ -917,7 +939,8 @@ static void __vconf_cb(keynode_t *key, void *data)
 	}
 }
 
-static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data)
+static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond,
+		gpointer data)
 {
 	char buf[INOTIFY_BUF];
 	ssize_t len = 0;
@@ -979,13 +1002,18 @@ int _status_init(void)
 		return -1;
 	}
 
-	socket_wid = g_io_add_watch(socket_io, G_IO_IN, __socket_monitor_cb, NULL);
+	socket_wid = g_io_add_watch(socket_io, G_IO_IN,
+			__socket_monitor_cb, NULL);
 
-	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, &limit_bg_uiapps))
+	if (vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS,
+				&limit_bg_uiapps))
 		limit_bg_uiapps = 0;
 
-	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS, __vconf_cb, NULL) != 0)
-		_E("Unable to register callback for VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS");
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS,
+				__vconf_cb, NULL) != 0) {
+		_E("Unable to register callback for "
+				"VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS");
+	}
 
 	return 0;
 }

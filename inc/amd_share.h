@@ -20,10 +20,8 @@
 
 typedef struct shared_info_main_s* shared_info_h;
 
-shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bundle *kb, uid_t uid);
+shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
+		bundle *kb, uid_t uid);
 int _temporary_permission_destroy(shared_info_h handle);
 int _temporary_permission_apply(int pid, uid_t uid, shared_info_h handle);
 int _temporary_permission_drop(int pid, uid_t uid);
-
-
-
