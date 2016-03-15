@@ -64,7 +64,8 @@ static int __can_share(const char *path, const char *pkgid, uid_t uid)
 		return -1;
 
 	tzplatform_set_user(uid);
-	snprintf(buf, sizeof(buf), "%s/%s/data/", tzplatform_getenv(TZ_USER_APP), pkgid);
+	snprintf(buf, sizeof(buf), "%s/%s/data/",
+		 tzplatform_getenv(TZ_USER_APP), pkgid);
 	tzplatform_reset_user();
 
 	if (strncmp(path, buf, strlen(buf)) != 0)
@@ -79,7 +80,8 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 	const char *appid;
 	int org_caller_pid;
 
-	if (bundle_get_str(kb, AUL_K_ORG_CALLER_PID, &org_caller) == BUNDLE_ERROR_NONE) {
+	if (bundle_get_str(kb, AUL_K_ORG_CALLER_PID,
+			   &org_caller) == BUNDLE_ERROR_NONE) {
 		org_caller_pid = atoi(org_caller);
 		appid = _status_app_get_appid_bypid(caller_pid);
 
@@ -91,9 +93,11 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 	return caller_pid;
 }
 
-static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, const char *owner_appid)
+static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid,
+					      const char *owner_appid)
 {
 	shared_info_h h;
+	int ret;
 
 	h = malloc(sizeof(struct shared_info_main_s));
 	if (h == NULL)
@@ -105,7 +109,8 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 		return NULL;
 	}
 
-	if (security_manager_private_sharing_req_new(&h->shared_info->handle) != SECURITY_MANAGER_SUCCESS) {
+	ret = security_manager_private_sharing_req_new(&h->shared_info->handle);
+	if (ret != SECURITY_MANAGER_SUCCESS) {
 		free(h);
 		return NULL;
 	}
@@ -117,8 +122,8 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 	return h;
 }
 
-static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char ***paths,
-		int *owner_pid, uid_t uid)
+static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb,
+			    char ***paths, int *owner_pid, uid_t uid)
 {
 	char *path = NULL;
 	const char *owner_appid = NULL;
@@ -177,7 +182,8 @@ static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char 
 	return false;
 }
 
-shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bundle *kb, uid_t uid)
+shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
+					   bundle *kb, uid_t uid)
 {
 	int type = bundle_get_type(kb, AUL_SVC_DATA_PATH);
 	char *path = NULL;
@@ -199,7 +205,8 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		bundle_get_str(kb, AUL_SVC_DATA_PATH, &path);
 		if (!path) {
 			_E("path was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths,
+						&owner_pid, uid);
 			owner_appid = _status_app_get_appid_bypid(owner_pid);
 			goto finally;
 		}
@@ -213,7 +220,8 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 
 		if (__can_share(path, pkgid, uid) != 0) {
 			_E("__can_share() returned an error");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths,
+						&owner_pid, uid);
 			goto finally;
 
 		}
@@ -234,7 +242,8 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
 		if (!path_array || len <= 0) {
 			_E("path_array was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
+			valid = __has_valid_uri(caller_pid, appid, kb, &paths,
+						&owner_pid, uid);
 			owner_appid = _status_app_get_appid_bypid(owner_pid);
 			goto finally;
 
@@ -272,7 +281,8 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bu
 		valid = true;
 finally:
 	if (valid && owner_appid && paths) {
-		_D("grant permission %s : %s : %s", paths[0], owner_appid, appid);
+		_D("grant permission %s : %s : %s",
+		   paths[0], owner_appid, appid);
 
 		h = __new_shared_info_handle(appid, uid, owner_appid);
 
@@ -281,23 +291,28 @@ finally:
 			return NULL;
 		}
 
-		r = security_manager_private_sharing_req_set_owner_appid(h->shared_info->handle, owner_appid);
+		r = security_manager_private_sharing_req_set_owner_appid(
+					h->shared_info->handle, owner_appid);
 		if (r != SECURITY_MANAGER_SUCCESS)
 			_E("security_manager_private_sharing_req_set_owner_appid(,%s) return %d", owner_appid, r);
 
-		r = security_manager_private_sharing_req_set_target_appid(h->shared_info->handle, appid);
+		r = security_manager_private_sharing_req_set_target_appid(
+					h->shared_info->handle, appid);
 		if (r != SECURITY_MANAGER_SUCCESS)
 			_E("security_manager_private_sharing_req_set_target_appid(,%s) return %d", appid, r);
 
-		r = security_manager_private_sharing_req_add_paths(h->shared_info->handle,
-					(const char **)paths, g_strv_length(paths));
+		r = security_manager_private_sharing_req_add_paths(
+					h->shared_info->handle,
+					(const char **)paths,
+					g_strv_length(paths));
 
 		if (r != SECURITY_MANAGER_SUCCESS)
 			_E("security_manager_private_sharing_req_add_paths() return %d", r);
 
 		g_strfreev(paths);
 		_D("security_manager_private_sharing_apply ++");
-		r = security_manager_private_sharing_apply(h->shared_info->handle);
+		r = security_manager_private_sharing_apply(
+					h->shared_info->handle);
 		_D("security_manager_private_sharing_apply --");
 		if (r != SECURITY_MANAGER_SUCCESS) {
 			_E("security_manager_private_sharing_apply() returned an error %d", r);
@@ -333,12 +348,15 @@ int _temporary_permission_destroy(shared_info_h handle)
 
 	if (handle) {
 		if (handle->shared_info) { /* back out */
-			_D("revoke permission %s : %s",  handle->shared_info->owner_appid, handle->appid);
-			r = security_manager_private_sharing_drop(handle->shared_info->handle);
+			_D("revoke permission %s : %s",
+			   handle->shared_info->owner_appid, handle->appid);
+			r = security_manager_private_sharing_drop(
+						handle->shared_info->handle);
 			if (r != SECURITY_MANAGER_SUCCESS)
 				_E("revoke error %d", r);
 
-			security_manager_private_sharing_req_free(handle->shared_info->handle);
+			security_manager_private_sharing_req_free(
+						handle->shared_info->handle);
 			free(handle->shared_info->owner_appid);
 		}
 
@@ -372,5 +390,3 @@ int _temporary_permission_drop(int pid, uid_t uid)
 	}
 	return _status_clear_shared_info_list(pid, uid);
 }
-
-

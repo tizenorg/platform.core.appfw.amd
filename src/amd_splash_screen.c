@@ -95,7 +95,7 @@ static gboolean __splash_image_timeout_handler(gpointer data)
 }
 
 static int __app_can_launch_splash_image(const struct appinfo *ai,
-					bundle *kb)
+		bundle *kb)
 {
 	const char *component_type;
 	const char *fake_effect;
@@ -131,7 +131,7 @@ static struct appinfo_splash_image *__get_splash_image_info(
 		return NULL;
 
 	if ((rotation.angle == 90 || rotation.angle == 270)
-				&& rotation.auto_rotate == true)
+			&& rotation.auto_rotate == true)
 		tbl = ai_ss->landscape;
 	else
 		tbl = ai_ss->portrait;
@@ -148,12 +148,12 @@ static struct appinfo_splash_image *__get_splash_image_info(
 		return NULL;
 
 	if ((strcmp(operation, APP_CONTROL_OPERATION_MAIN) == 0)
-		|| (strcmp(operation, AUL_SVC_OPERATION_DEFAULT) == 0))
+			|| (strcmp(operation, AUL_SVC_OPERATION_DEFAULT) == 0))
 		return (struct appinfo_splash_image *)g_hash_table_lookup(
 				tbl, "launch-effect");
 
 	return (struct appinfo_splash_image *)g_hash_table_lookup(
-				tbl, operation);
+			tbl, operation);
 }
 
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ int _create_server_sock(void)
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	snprintf(addr.sun_path, sizeof(addr.sun_path), "/run/amd/%d",
-				getuid());
+			getuid());
 	unlink(addr.sun_path);
 
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
@@ -104,8 +104,8 @@ int _create_server_sock(void)
 	return fd;
 }
 
-static int __connect_client_sock(int fd, const struct sockaddr *saptr, socklen_t salen,
-		   int nsec)
+static int __connect_client_sock(int fd, const struct sockaddr *saptr,
+		socklen_t salen, int nsec)
 {
 	int flags;
 	int ret;
@@ -137,7 +137,7 @@ static int __connect_client_sock(int fd, const struct sockaddr *saptr, socklen_t
 	timeout.tv_usec = nsec;
 
 	if ((ret = select(fd + 1, &readfds, &writefds, NULL,
-			nsec ? &timeout : NULL)) == 0) {
+					nsec ? &timeout : NULL)) == 0) {
 		close(fd);	/* timeout */
 		errno = ETIMEDOUT;
 		return (-1);
@@ -150,7 +150,7 @@ static int __connect_client_sock(int fd, const struct sockaddr *saptr, socklen_t
 	} else
 		return (-1);	/* select error: sockfd not set*/
 
- done:
+done:
 	(void)fcntl(fd, F_SETFL, flags);
 	if (error) {
 		close(fd);
@@ -184,10 +184,11 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 	}
 
 	saddr.sun_family = AF_UNIX;
-	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s", uid, pad_type);
- retry_con:
-	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr, sizeof(saddr),
-			100 * 1000);
+	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s",
+			uid, pad_type);
+retry_con:
+	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr,
+			sizeof(saddr), 100 * 1000);
 	if (ret < -1) {
 		_E("maybe peer not launched or peer daed\n");
 		if (retry > 0) {
@@ -206,7 +207,8 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 	return fd;
 }
 
-int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
+int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd,
+		bundle *kb)
 {
 	int fd;
 	int len;
