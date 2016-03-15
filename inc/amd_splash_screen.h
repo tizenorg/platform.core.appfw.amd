@@ -16,9 +16,7 @@
 
 #pragma once
 
-#include <glib.h>
 #include <bundle.h>
-#include <tizen-extension-client-protocol.h>
 
 #include "amd_appinfo.h"
 

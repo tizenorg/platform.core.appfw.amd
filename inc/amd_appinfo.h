@@ -80,8 +80,10 @@ void appinfo_fini(void);
 int appinfo_insert(uid_t uid, const char *pkgid);
 struct appinfo *appinfo_find(uid_t caller_uid, const char *appid);
 const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type);
-const void *appinfo_get_ptr_value(const struct appinfo *c, enum appinfo_type type);
-int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type, int *val);
+const void *appinfo_get_ptr_value(const struct appinfo *c,
+				  enum appinfo_type type);
+int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
+			  int *val);
 int appinfo_set_value(struct appinfo *c, enum appinfo_type, const char *val);
 int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type, void *val);
 int appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val);
