@@ -746,6 +746,9 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 {
 	char *op;
 
+	if (target_uid == 0 || target_uid == GLOBAL_USER)
+		target_uid = getuid();
+
 	if (!strcasecmp(key, "start")) {
 		if (!strcasecmp(val, "uninstall") ||
 				!strcasecmp(val, "update"))
