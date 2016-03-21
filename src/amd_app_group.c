@@ -34,6 +34,7 @@
 #include "app_signal.h"
 #include "amd_appinfo.h"
 #include "amd_share.h"
+#include "amd_suspend.h"
 
 #define APP_SVC_K_LAUNCH_MODE   "__APP_SVC_LAUNCH_MODE__"
 
@@ -242,26 +243,23 @@ static GList* __find_removable_apps(int from)
 
 static void __prepare_to_suspend_services(int pid)
 {
-	/*
 	int ret;
 	int dummy;
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	ret = aul_sock_send_raw_async(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy, sizeof(int));
-	if (ret > 0)
-		close(ret);
-	*/
+	_D("[__SUSPEND__] pid: %d", pid);
+	ret = aul_sock_send_raw(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	if (ret < 0)
+		_E("error on suspend service for pid: %d", pid);
+
 }
 
 static void __prepare_to_wake_services(int pid)
 {
-	/*
 	int ret;
 	int dummy;
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	ret = aul_sock_send_raw_async(pid, getuid(), APP_WAKE, (unsigned char *)&dummy, sizeof(int));
-	if (ret > 0)
-		close(ret);
-	*/
+	_D("[__SUSPEND__] pid: %d", pid);
+	ret = aul_sock_send_raw(pid, getuid(), APP_WAKE, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	if (ret < 0)
+		_E("error on wake service for pid: %d", pid);
 }
 
 static void __set_fg_flag(int cpid, int flag, gboolean force)
@@ -310,11 +308,10 @@ static void __set_fg_flag(int cpid, int flag, gboolean force)
 										APP_TYPE_UI);
 						if (!bg_category) {
 							_status_find_service_apps(ac->pid, getuid(), STATUS_BG, __prepare_to_suspend_services, true);
-							/*
 							if (force == TRUE && cpid == ac->pid) {
 								__prepare_to_suspend_services(ac->pid);
-								_amd_suspend_add_timer(ac->pid, ai);
-							}*/
+								_suspend_add_timer(ac->pid, ai);
+							}
 						}
 
 
