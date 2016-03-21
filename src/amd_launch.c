@@ -28,14 +28,12 @@
 #include <sys/prctl.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <pkgmgr-info.h>
 #include <poll.h>
 #include <tzplatform_config.h>
 #include <cert-svc/ccert.h>
 #include <cert-svc/cinstance.h>
-#include <gio/gio.h>
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
@@ -54,6 +52,8 @@
 #include "amd_app_com.h"
 #include "amd_splash_screen.h"
 #include "amd_input.h"
+#include "amd_suspend.h"
+#include "amd_signal.h"
 
 #define DAC_ACTIVATE
 
@@ -88,7 +88,6 @@ struct fgmgr {
 static GList *_fgmgr_list;
 static int __pid_of_last_launched_ui_app;
 static int __focused_pid;
-static GDBusConnection *conn;
 
 static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle * kb, request_h req);
@@ -336,44 +335,6 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 	return ret;
 }
 
-static int __send_watchdog_signal(int pid, int signal_num)
-{
-	GError *err = NULL;
-
-	if (conn == NULL) {
-		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-		if (conn == NULL) {
-			_E("g_bus_get_sync() is failed: %s", err->message);
-			g_error_free(err);
-			return -1;
-		}
-	}
-
-	if (g_dbus_connection_emit_signal(conn,
-					NULL,
-					RESOURCED_PROC_OBJECT,
-					RESOURCED_PROC_INTERFACE,
-					RESOURCED_PROC_WATCHDOG_SIGNAL,
-					g_variant_new("(ii)", pid, signal_num),
-					&err) == FALSE) {
-		_E("g_dbus_connection_emit_signal() is failed: %s",
-					err->message);
-		g_error_free(err);
-		return -1;
-	}
-
-	if (g_dbus_connection_flush_sync(conn, NULL, &err) == FALSE) {
-		_E("g_dbus_connection_flush_sync() is failed: %s",
-					err->message);
-		g_error_free(err);
-		return -1;
-	}
-
-	_W("send a watchdog signal done: %d", pid);
-
-	return 0;
-}
-
 static gboolean __au_glib_check(GSource *src)
 {
 	GSList *fd_list;
@@ -482,7 +443,7 @@ static gboolean __recv_timeout_handler(gpointer data)
 			break;
 		taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
 		if (taskmanage && strcmp(taskmanage, "true") == 0)
-			__send_watchdog_signal(r_info->pid, SIGKILL);
+			_signal_send_watchdog(r_info->pid, SIGKILL);
 		break;
 	case APP_TERM_BY_PID:
 	case APP_TERM_BGAPP_BY_PID:
@@ -648,61 +609,6 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 	return pid;
 }
 
-static int __tep_mount(char *mnt_path[])
-{
-	GError *err = NULL;
-	GDBusMessage *msg = NULL;
-	int ret = 0;
-	int rv = 0;
-	struct stat link_buf = {0,};
-
-	if (!conn) {
-		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-		if (!conn) {
-			_E("g_bus_get_sync() is failed: %s", err->message);
-			g_error_free(err);
-			return -1;
-		}
-	}
-
-	rv = lstat(mnt_path[0], &link_buf);
-	if (rv == 0) {
-		rv = unlink(mnt_path[0]);
-		if (rv)
-			_E("Unable tp remove link file %s", mnt_path[0]);
-	}
-
-	msg = g_dbus_message_new_method_call(TEP_BUS_NAME,
-					TEP_OBJECT_PATH,
-					TEP_INTERFACE_NAME,
-					TEP_MOUNT_METHOD);
-	if (msg == NULL) {
-		_E("g_dbus_message_new_method_call() is failed.");
-		ret = -1;
-		goto func_out;
-	}
-	g_dbus_message_set_body(msg,
-			g_variant_new("(ss)", mnt_path[0], mnt_path[1]));
-
-	if (g_dbus_connection_send_message(conn,
-					msg,
-					G_DBUS_SEND_MESSAGE_FLAGS_NONE,
-					NULL,
-					&err) == FALSE) {
-		_E("g_dbus_connection_send_message() is failed: %s",
-					err->message);
-		ret = -1;
-	}
-
-func_out:
-	if (msg)
-		g_object_unref(msg);
-
-	g_clear_error(&err);
-
-	return ret;
-}
-
 static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		bundle *kb)
 {
@@ -749,7 +655,7 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 			int ret = -1;
 			ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
 			if (ret != 1) {
-				ret = __tep_mount(mnt_path);
+				ret = _signal_send_tep_mount(mnt_path);
 				if (ret < 0)
 					_E("dbus error %d", ret);
 			}
@@ -759,6 +665,30 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		if (mnt_path[1])
 			free(mnt_path[1]);
 	}
+}
+
+static void __prepare_to_suspend_services(int pid)
+{
+	int dummy;
+	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
+	aul_sock_send_raw(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+}
+
+static void __prepare_to_wake_services(int pid)
+{
+	int dummy;
+	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
+	aul_sock_send_raw(pid, getuid(), APP_WAKE, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+}
+
+static gboolean __check_service_only(gpointer user_data)
+{
+	int pid = GPOINTER_TO_INT(user_data);
+	SECURE_LOGD("[__SUSPEND__] pid :%d", pid);
+
+	_status_check_service_only(pid, getuid(), __prepare_to_suspend_services);
+
+	return FALSE;
 }
 
 static char *__get_cert_value_from_pkginfo(const char *pkgid, uid_t uid)
@@ -948,10 +878,10 @@ static int __send_hint_for_visibility(uid_t uid)
 
 static int __app_status_handler(int pid, int status, void *data)
 {
-	/* char *appid = NULL; */
-	/* int bg_category = 0x00; */
+	char *appid = NULL;
+	int bg_category = 0x00;
 	int app_status = -1;
-	/* const struct appinfo *ai = NULL; */
+	const struct appinfo *ai = NULL;
 
 	_W("pid(%d) status(%d)", pid, status);
 
@@ -964,7 +894,7 @@ static int __app_status_handler(int pid, int status, void *data)
 	case PROC_STATUS_FG:
 		__del_fgmgr_list(pid);
 		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
-		/* _amd_suspend_remove_timer(pid); */
+		_suspend_remove_timer(pid);
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(getuid());
@@ -972,14 +902,13 @@ static int __app_status_handler(int pid, int status, void *data)
 
 	case PROC_STATUS_BG:
 		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
-		/*
 		appid = _status_app_get_appid_bypid(pid);
 		if (appid) {
 			ai = appinfo_find(getuid(), appid);
 			bg_category = (bool)appinfo_get_value(ai, AIT_BG_CATEGORY);
 			if (!bg_category)
-				_amd_suspend_add_timer(pid, ai);
-		}*/
+				_suspend_add_timer(pid, ai);
+		}
 		break;
 
 	case PROC_STATUS_FOCUS:
@@ -997,21 +926,51 @@ int _get_focused_pid(void)
 int _launch_init(void)
 {
 	int ret;
-	GError *err = NULL;
 
 	_D("_launch_init");
-
-	if (!conn) {
-		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
-		if (!conn) {
-			_E("g_bus_get_sync() is failed: %s", err->message);
-			g_error_free(err);
-			return -1;
-		}
-	}
+	_signal_init();
 
 	ret = aul_listen_app_status_signal(__app_status_handler, NULL);
 	_D("ret : %d", ret);
+
+	return 0;
+}
+
+static int __check_ver(const char *required, const char *actual)
+{
+	int ret = 0;
+	if (required && actual) {
+		ret = strverscmp(required, actual); // should 0 or less
+		if (ret < 1)
+			return 1;
+	}
+
+	return 0;
+}
+
+static int __get_prelaunch_attribute(const struct appinfo *ai)
+{
+	int attribute_val = 0;
+	const char *attribute_str = NULL;
+
+        attribute_val |= RESOURCED_BACKGROUND_MANAGEMENT_ATTRIBUTE;
+
+	attribute_str = appinfo_get_value(ai, AIT_API_VERSION);
+	if (attribute_str && __check_ver("2.4", attribute_str)) {
+		attribute_val |= RESOURCED_API_VER_2_4_ATTRIBUTE;
+	}
+
+	return attribute_val;
+}
+
+static int __get_background_category(const struct appinfo *ai)
+{
+	int category = 0x0;
+
+	category = (int)appinfo_get_value(ai, AIT_BG_CATEGORY);
+	if (category > 0) {
+		return category;
+	}
 
 	return 0;
 }
@@ -1048,6 +1007,9 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	int caller_pid = _request_get_pid(req);
 	splash_image_h si;
 	int enable = 1;
+	int prelaunch_attribute;
+	int bg_category;
+	bool bg_allowed = false;
 
 	traceBegin(TTRACE_TAG_APPLICATION_MANAGER, "AMD:START_APP");
 
@@ -1159,6 +1121,31 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	if (pid > 0)
 		callee_status = _status_get_app_info_status(pid, _request_get_target_uid(req));
 
+	prelaunch_attribute =  __get_prelaunch_attribute(ai);
+	bg_category = __get_background_category(ai);
+
+	/* 2.4 bg-categorized (ui app || svc app) || watch || widget -> bg allowed (2.3 ui app -> not allowed)
+	2.3 svc app -> bg allowed */
+	if (component_type && bg_category &&
+			((strncmp(component_type, APP_TYPE_UI, strlen(APP_TYPE_UI)) == 0)
+			|| (strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0))) {
+		bg_allowed = true;
+	} else if (component_type && ((strncmp(component_type, APP_TYPE_WATCH, strlen(APP_TYPE_WATCH)) == 0)
+			|| (strncmp(component_type, APP_TYPE_WIDGET, strlen(APP_TYPE_WIDGET)) == 0))) {
+		bg_allowed = true;
+	} else {
+		bg_allowed = false;
+	}
+
+	if (bg_allowed) {
+		_D("[__SUSPEND__] allowed background, appid: %s, bg category: 0x%x, app type: %s, api version: %s",
+				appid, bg_category, component_type, appinfo_get_value(ai, AIT_API_VERSION));
+		bundle_add(kb, AUL_K_ALLOWED_BG, "ALLOWED_BG");
+	}
+
+	_D("prelaunch attribute %d%d%d%d(2) for %s", (prelaunch_attribute & 0x8) >> 3,
+		(prelaunch_attribute & 0x4) >> 2, (prelaunch_attribute & 0x2) >> 1, prelaunch_attribute & 0x1, appid);
+
 	if (pid > 0 && callee_status != STATUS_DYING) {
 		if (caller_pid == pid) {
 			SECURE_LOGD("caller process & callee process is same.[%s:%d]", appid, pid);
@@ -1166,6 +1153,13 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 			_request_send_result(req, pid);
 		} else {
 			aul_send_app_resume_request_signal(pid, appid, pkg_id, component_type);
+
+			_suspend_remove_timer(pid);
+
+			if (!bg_allowed &&
+					strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE) == 0))
+				__prepare_to_wake_services(pid);
+
 			if ((ret = __nofork_processing(cmd, pid, kb, req)) < 0) {
 				pid = ret;
 				_request_send_result(req, pid);
@@ -1215,14 +1209,23 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 		si = _splash_screen_create_image(ai, kb, cmd);
 		_splash_screen_send_image(si);
 
+		_signal_send_proc_prelaunch(appid, pkg_id, prelaunch_attribute, bg_category);
+
 		pid = _send_cmd_to_launchpad(pad_type, _request_get_target_uid(req), PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
 			_splash_screen_send_pid(si, pid);
+
+			_suspend_add_proc(pid);
+
 			aul_send_app_launch_request_signal(pid, appid, pkg_id, component_type);
 		} else {
 			_splash_screen_destroy_image(si);
 		}
+
+		if (bg_allowed && component_type &&
+				strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0)
+			g_idle_add(__check_service_only, GINT_TO_POINTER(pid));
 	}
 
 	if (pid > 0) {

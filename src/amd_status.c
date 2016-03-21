@@ -38,6 +38,7 @@
 #include "amd_util.h"
 #include "amd_app_group.h"
 #include "amd_input.h"
+#include "amd_suspend.h"
 
 #define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
@@ -500,12 +501,10 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 			bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 			if (!bg_allowed) {
 				send_event_to_svc_core(svc_info_t->pid);
-				/* TODO: APIs should be prepared
 				if (suspend)
-					_amd_suspend_add_timer(svc_info_t->pid, ai);
+					_suspend_add_timer(svc_info_t->pid, ai);
 				else
-					_amd_suspend_remove_timer(svc_info_t->pid);
-				*/
+					_suspend_remove_timer(svc_info_t->pid);
 			}
 		}
 		svc_list = g_slist_next(svc_list);
@@ -548,9 +547,7 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 
 			if (!bg_allowed) {
 				send_event_to_svc_core(pid);
-				/* TODO: APIs should be prepared
-				_amd_suspend_add_timer(pid, ai);
-				*/
+				_suspend_add_timer(pid, ai);
 			}
 		}
 	}
