@@ -352,7 +352,7 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 	if (info_t->pkgid == NULL)
 		goto error;
 
-	info_t->lpid = app_group_get_leader_pid(pid);;
+	info_t->lpid = app_group_get_leader_pid(pid);
 	info_t->timestamp = time(NULL) / 10;
 	info_t->fg_count = 0;
 

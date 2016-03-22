@@ -658,6 +658,15 @@ static void __handle_onboot(void *user_data, const char *appid,
 	}
 }
 
+static gboolean __onboot_cb(gpointer data)
+{
+	uid_t uid = (uid_t)(intptr_t)data;
+
+	appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
+
+	return FALSE;
+}
+
 static struct user_appinfo *__add_user_appinfo(uid_t uid)
 {
 	int r;
@@ -686,7 +695,7 @@ static struct user_appinfo *__add_user_appinfo(uid_t uid)
 		return NULL;
 	}
 
-	appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
+	g_idle_add(__onboot_cb, (gpointer)(intptr_t)uid);
 	_D("loaded appinfo table for uid %d", uid);
 
 	return info;
