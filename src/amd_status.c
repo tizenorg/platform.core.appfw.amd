@@ -387,6 +387,11 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 	for (iter = app_status_info_list; iter != NULL; iter = g_slist_next(iter)) {
 		info_t = (app_status_info_t *)iter->data;
 		if ((pid == info_t->pid) && ((info_t->uid == uid) || (info_t->uid == 0))) {
+			if (info_t->status == STATUS_DYING) {
+				_E("Not allowed in STATUS_DYING");
+				return -1;
+			}
+
 			info_t->status = status;
 			__update_pkg_info(info_t->pkgid, info_t);
 			if (info_t->status == STATUS_VISIBLE) {
