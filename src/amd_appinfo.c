@@ -311,7 +311,10 @@ static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle, struct appinfo *
 		_D("failed to get tep_name");
 		info->val[AIT_TEP] = NULL;
 	} else {
-		info->val[AIT_TEP] = strdup(tep_name);
+		if (tep_name && strlen(tep_name) > 0)
+			info->val[AIT_TEP] = strdup(tep_name);
+		else
+			info->val[AIT_TEP] = NULL;
 	}
 
 	return 0;
