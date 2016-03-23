@@ -155,7 +155,7 @@ void _suspend_add_timer(int pid, const struct appinfo* ai)
 	int bg_allowed = 0x00;
 	proc_info_t* proc = NULL;
 
-	bg_allowed = (int)appinfo_get_value(ai, AIT_BG_CATEGORY);
+	bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 	if (bg_allowed)
 		return;
 

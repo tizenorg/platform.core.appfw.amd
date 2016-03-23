@@ -967,7 +967,7 @@ static int __get_background_category(const struct appinfo *ai)
 {
 	int category = 0x0;
 
-	category = (int)appinfo_get_value(ai, AIT_BG_CATEGORY);
+	category = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 	if (category > 0) {
 		return category;
 	}
