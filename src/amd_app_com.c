@@ -278,6 +278,7 @@ static void __remove_client(struct endpoint_info *info, int cpid)
 {
 	GList *client_head;
 	struct client_info *client;
+	GList *endpoint_head;
 
 	client_head = info->clients;
 	while (client_head) {
@@ -291,6 +292,13 @@ static void __remove_client(struct endpoint_info *info, int cpid)
 			g_free(client);
 		}
 	}
+
+	endpoint_head = g_hash_table_lookup(cpid_tbl, GINT_TO_POINTER(cpid));
+	if (endpoint_head)
+		endpoint_head = g_list_remove(endpoint_head, info);
+
+	if (endpoint_head == NULL)
+		g_hash_table_remove(cpid_tbl, GINT_TO_POINTER(cpid));
 
 	if (info->clients == NULL) {
 		g_hash_table_remove(endpoint_tbl, info->endpoint);
@@ -321,7 +329,7 @@ int app_com_client_remove(int cpid)
 
 	client_list = g_hash_table_lookup(cpid_tbl, GINT_TO_POINTER(cpid));
 	if (client_list == NULL)
-		return AUL_APP_COM_R_ERROR_FATAL_ERROR;
+		return AUL_APP_COM_R_OK;
 
 	while (client_list) {
 		info = (struct endpoint_info *)client_list->data;
