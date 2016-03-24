@@ -401,7 +401,7 @@ int _input_unlock(void)
 	__do_keyungrab("XF86Back");
 	wl_display_roundtrip(display);
 
-	locked = true;
+	locked = false;
 	if (timer > 0) {
 		g_source_remove(timer);
 		timer = 0;
