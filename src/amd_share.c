@@ -357,7 +357,7 @@ int _temporary_permission_drop(int pid, uid_t uid)
 	GList *list = _status_get_shared_info_list(pid, uid);
 
 	if (!list) {
-		_E("list was null");
+		_D("list was null");
 		return -1;
 	}
 
