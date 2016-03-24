@@ -24,7 +24,7 @@ static GDBusConnection *conn;
 
 int _signal_init(void)
 {
-	GError *err;
+	GError *err = NULL;
 	if (!conn) {
 		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 		if (!conn) {
