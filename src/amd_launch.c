@@ -17,10 +17,6 @@
 #define _GNU_SOURCE
 #include <stdbool.h>
 #include <signal.h>
-#include <bundle.h>
-#include <bundle_internal.h>
-#include <aul.h>
-#include <glib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -29,6 +25,11 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <aul.h>
+#include <glib.h>
+#include <bundle.h>
+#include <bundle_internal.h>
 #include <pkgmgr-info.h>
 #include <poll.h>
 #include <tzplatform_config.h>
@@ -37,6 +38,7 @@
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
+#include <aul_proc.h>
 #include <ttrace.h>
 
 #include "amd_config.h"
@@ -80,9 +82,12 @@
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
 
+#define REGULAR_UID_MIN 5000
+
 struct fgmgr {
 	guint tid;
 	int pid;
+	uid_t uid;
 };
 
 static GList *_fgmgr_list;
@@ -160,11 +165,11 @@ int _resume_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw(pid, getuid(), APP_RESUME_BY_PID,
+	if ((ret = aul_sock_send_raw(pid, _request_get_target_uid(req), APP_RESUME_BY_PID,
 			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
-		if (ret == -EAGAIN)
+		if (ret == -EAGAIN) {
 			_E("resume packet timeout error");
-		else {
+		} else {
 			_E("raise failed - %d resume fail\n", pid);
 			_E("we will term the app - %d\n", pid);
 			_send_to_sigkill(pid);
@@ -185,11 +190,11 @@ int _pause_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw(pid, getuid(), APP_PAUSE_BY_PID,
+	if ((ret = aul_sock_send_raw(pid, _request_get_target_uid(req), APP_PAUSE_BY_PID,
 			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
-		if (ret == -EAGAIN)
+		if (ret == -EAGAIN) {
 			_E("pause packet timeout error");
-		else {
+		} else {
 			_E("iconify failed - %d pause fail", pid);
 			_E("we will term the app - %d", pid);
 			_send_to_sigkill(pid);
@@ -205,12 +210,12 @@ int _pause_app(int pid, request_h req)
 	return ret;
 }
 
-int _term_sub_app(int pid)
+int _term_sub_app(int pid, uid_t uid)
 {
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID_ASYNC,
+	if ((ret = aul_sock_send_raw(pid, uid, APP_TERM_BY_PID_ASYNC,
 			(unsigned char *)&dummy, 0, AUL_SOCK_NOREPLY)) < 0) {
 		_E("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
@@ -226,6 +231,7 @@ int _term_app(int pid, request_h req)
 {
 	int dummy;
 	int ret;
+	uid_t uid = _request_get_target_uid(req);
 
 	if (app_group_is_leader_pid(pid)) {
 		int cnt;
@@ -236,15 +242,15 @@ int _term_app(int pid, request_h req)
 		if (cnt > 0) {
 			for (i = cnt - 1 ; i >= 0; i--) {
 				if (i != 0)
-					_term_sub_app(pids[i]);
-				app_group_remove(pids[i]);
+					_term_sub_app(pids[i], uid);
+				app_group_remove(pids[i], uid);
 
 			}
 			free(pids);
 		}
 	}
 
-	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID,
+	if ((ret = aul_sock_send_raw(pid, uid, APP_TERM_BY_PID,
 			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
@@ -266,7 +272,7 @@ int _term_req_app(int pid, request_h req)
 	int dummy;
 	int ret;
 
-	if ((ret = aul_sock_send_raw(pid, getuid(), APP_TERM_REQ_BY_PID,
+	if ((ret = aul_sock_send_raw(pid, _request_get_target_uid(req), APP_TERM_REQ_BY_PID,
 			(unsigned char *)&dummy, 0, AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate req send error");
 		_request_send_result(req, ret);
@@ -286,23 +292,24 @@ int _term_bgapp(int pid, request_h req)
 	int *pids = NULL;
 	int i;
 	int status = -1;
+	uid_t uid = _request_get_target_uid(req);
 
 	if (app_group_is_leader_pid(pid)) {
 		app_group_get_group_pids(pid, &cnt, &pids);
 		if (cnt > 0) {
-			status = _status_get_app_info_status(pids[cnt - 1], getuid());
+			status = _status_get_app_info_status(pids[cnt - 1], uid);
 			if (status == STATUS_BG) {
 				for (i = cnt - 1 ; i >= 0; i--) {
 					if (i != 0)
-						_term_sub_app(pids[i]);
-					app_group_remove(pids[i]);
+						_term_sub_app(pids[i], uid);
+					app_group_remove(pids[i], uid);
 				}
 			}
 		}
 		free(pids);
 	}
 
-	if ((fd = aul_sock_send_raw(pid, getuid(), APP_TERM_BGAPP_BY_PID,
+	if ((fd = aul_sock_send_raw(pid, uid, APP_TERM_BGAPP_BY_PID,
 		(unsigned char *)&dummy, sizeof(int), AUL_SOCK_ASYNC)) < 0) {
 		_D("terminate packet send error - use SIGKILL");
 		if (_send_to_sigkill(pid) < 0) {
@@ -323,7 +330,7 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 {
 	int ret;
 
-	if ((ret = aul_sock_send_bundle(pid, getuid(), cmd, kb,
+	if ((ret = aul_sock_send_bundle(pid, _request_get_target_uid(req), cmd, kb,
 			 AUL_SOCK_ASYNC)) < 0) {
 		_E("error request fake launch - error code = %d", ret);
 		_request_send_result(req, ret);
@@ -376,6 +383,7 @@ struct reply_info {
 	int clifd;
 	int pid;
 	int cmd;
+	uid_t uid;
 };
 
 static gboolean __reply_handler(gpointer data)
@@ -438,7 +446,7 @@ static gboolean __recv_timeout_handler(gpointer data)
 		appid = _status_app_get_appid_bypid(r_info->pid);
 		if (appid == NULL)
 			break;
-		ai = appinfo_find(getuid(), appid);
+		ai = appinfo_find(r_info->uid, appid);
 		if (ai == NULL)
 			break;
 		taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
@@ -486,6 +494,7 @@ static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 	r_info->src = src;
 	r_info->gpollfd = gpollfd;
 	r_info->cmd = cmd;
+	r_info->uid = _request_get_target_uid(req);
 
 	r_info->timer_id = g_timeout_add(5000, __recv_timeout_handler, (gpointer) r_info);
 	g_source_add_poll(src, gpollfd);
@@ -536,7 +545,7 @@ static int __compare_signature(const struct appinfo *ai, int cmd,
 
 	permission = appinfo_get_value(ai, AIT_PERM);
 	if (permission && strncmp(permission, "signature", 9) == 0) {
-		if (caller_uid != 0 && (cmd == APP_START
+		if (caller_uid >= REGULAR_UID_MIN && (cmd == APP_START
 					|| cmd == APP_START_RES
 					|| cmd == APP_START_ASYNC)) {
 			caller_ai = appinfo_find(caller_uid, caller_appid);
@@ -569,7 +578,7 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 	int found_pid = -1;
 	int found_lpid = -1;
 
-	if (app_group_is_group_app(kb)) {
+	if (app_group_is_group_app(kb, caller_uid)) {
 		pid = -1;
 		*is_subapp = true;
 	} else {
@@ -587,7 +596,7 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 			*new_process = TRUE;
 		}
 
-		if (app_group_can_start_app(appid, kb, can_attach, lpid, launch_mode) != 0) {
+		if (app_group_can_start_app(appid, kb, caller_uid, can_attach, lpid, launch_mode) != 0) {
 			_E("can't make group info");
 			return -EILLEGALACCESS;
 		}
@@ -599,7 +608,7 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 
 		if (found_pid != -1) {
 			_W("app_group_clear_top, pid: %d", found_pid);
-			app_group_clear_top(found_pid);
+			app_group_clear_top(found_pid, caller_uid);
 		}
 	}
 
@@ -667,26 +676,27 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 	}
 }
 
-static void __prepare_to_suspend_services(int pid)
+static void __prepare_to_suspend_services(int pid, uid_t uid)
 {
 	int dummy;
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	aul_sock_send_raw(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	SECURE_LOGD("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	aul_sock_send_raw(pid, uid, APP_SUSPEND, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
 }
 
-static void __prepare_to_wake_services(int pid)
+static void __prepare_to_wake_services(int pid, uid_t uid)
 {
 	int dummy;
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	aul_sock_send_raw(pid, getuid(), APP_WAKE, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	SECURE_LOGD("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	aul_sock_send_raw(pid, uid, APP_WAKE, (unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
 }
 
 static gboolean __check_service_only(gpointer user_data)
 {
 	int pid = GPOINTER_TO_INT(user_data);
-	SECURE_LOGD("[__SUSPEND__] pid :%d", pid);
+	uid_t uid = aul_proc_get_usr_bypid(pid);
+	SECURE_LOGD("[__SUSPEND__] pid :%d, uid: %d", pid, uid);
 
-	_status_check_service_only(pid, getuid(), __prepare_to_suspend_services);
+	_status_check_service_only(pid, uid, __prepare_to_suspend_services);
 
 	return FALSE;
 }
@@ -818,7 +828,7 @@ static gboolean __fg_timeout_handler(gpointer data)
 	if (!fg)
 		return FALSE;
 
-	_status_update_app_info_list(fg->pid, STATUS_BG, TRUE, getuid());
+	_status_update_app_info_list(fg->pid, STATUS_BG, TRUE, fg->uid);
 
 	_fgmgr_list = g_list_remove(_fgmgr_list, fg);
 	free(fg);
@@ -826,7 +836,7 @@ static gboolean __fg_timeout_handler(gpointer data)
 	return FALSE;
 }
 
-static void __add_fgmgr_list(int pid)
+static void __add_fgmgr_list(int pid, uid_t uid)
 {
 	struct fgmgr *fg;
 
@@ -835,6 +845,7 @@ static void __add_fgmgr_list(int pid)
 		return;
 
 	fg->pid = pid;
+	fg->uid = uid;
 	fg->tid = g_timeout_add(5000, __fg_timeout_handler, fg);
 
 	_fgmgr_list = g_list_append(_fgmgr_list, fg);
@@ -882,10 +893,12 @@ static int __app_status_handler(int pid, int status, void *data)
 	int bg_category = 0x00;
 	int app_status = -1;
 	const struct appinfo *ai = NULL;
+	uid_t uid;
 
 	_W("pid(%d) status(%d)", pid, status);
 
-	app_status  = _status_get_app_info_status(pid, getuid());
+	uid = aul_proc_get_usr_bypid(pid);
+	app_status  = _status_get_app_info_status(pid, uid);
 
 	if (app_status == STATUS_DYING && status != PROC_STATUS_LAUNCH)
 		return 0;
@@ -893,18 +906,18 @@ static int __app_status_handler(int pid, int status, void *data)
 	switch (status) {
 	case PROC_STATUS_FG:
 		__del_fgmgr_list(pid);
-		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, getuid());
+		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE, uid);
 		_suspend_remove_timer(pid);
 
 		if (pid == __pid_of_last_launched_ui_app)
-			__send_hint_for_visibility(getuid());
+			__send_hint_for_visibility(uid);
 		break;
 
 	case PROC_STATUS_BG:
-		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
+		_status_update_app_info_list(pid, STATUS_BG, FALSE, uid);
 		appid = _status_app_get_appid_bypid(pid);
 		if (appid) {
-			ai = appinfo_find(getuid(), appid);
+			ai = appinfo_find(uid, appid);
 			bg_category = (bool)appinfo_get_value(ai, AIT_BG_CATEGORY);
 			if (!bg_category)
 				_suspend_add_timer(pid, ai);
@@ -1071,7 +1084,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	app_type = appinfo_get_value(ai, AIT_APPTYPE);
 	api_version = appinfo_get_value(ai, AIT_API_VERSION);
 
-	if ((ret = __compare_signature(ai, cmd, _request_get_target_uid(req),
+	if ((ret = __compare_signature(ai, cmd, caller_uid,
 					appid, caller_appid,
 					_request_get_fd(req))) != 0) {
 		_request_send_result(req, ret);
@@ -1100,7 +1113,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 			&& strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE)) == 0) {
 		if (caller_appid) {
 			ret = __check_execute_permission(pkg_id, caller_appid,
-					_request_get_target_uid(req), kb);
+					caller_uid, kb);
 			if (ret != 0) {
 				_request_send_result(req, ret);
 				traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
@@ -1158,7 +1171,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 
 			if (!bg_allowed &&
 					strncmp(component_type, APP_TYPE_SERVICE, strlen(APP_TYPE_SERVICE) == 0))
-				__prepare_to_wake_services(pid);
+				__prepare_to_wake_services(pid, _request_get_target_uid(req));
 
 			if ((ret = __nofork_processing(cmd, pid, kb, req)) < 0) {
 				pid = ret;
@@ -1235,7 +1248,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 				_D("add app group info");
 				__pid_of_last_launched_ui_app = pid;
 				app_group_start_app(pid, kb, lpid, can_attach, launch_mode);
-				__add_fgmgr_list(pid);
+				__add_fgmgr_list(pid, _request_get_target_uid(req));
 			} else {
 				app_group_restart_app(pid, kb);
 			}

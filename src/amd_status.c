@@ -410,7 +410,7 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 		}
 	}
 
-	app_group_set_status(pid, status, force);
+	app_group_set_status(pid, status, force, uid);
 
 	return 0;
 }
@@ -479,7 +479,7 @@ static gint __find_app_bypid(gconstpointer app_data, gconstpointer pid_data)
 	return -1;
 }
 
-void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void (*send_event_to_svc_core) (int), bool suspend)
+void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void (*send_event_to_svc_core) (int, uid_t), bool suspend)
 {
 	GSList *app_list = NULL;
 	GSList *svc_list = NULL;
@@ -505,7 +505,7 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 			ai = appinfo_find(uid, svc_info_t->appid);
 			bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 			if (!bg_allowed) {
-				send_event_to_svc_core(svc_info_t->pid);
+				send_event_to_svc_core(svc_info_t->pid, uid);
 				if (suspend)
 					_suspend_add_timer(svc_info_t->pid, ai);
 				else
@@ -516,7 +516,7 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status, void 
 	}
 }
 
-void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_core) (int))
+void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_core) (int, uid_t))
 {
 	GSList *app_list = NULL;
 	GSList *ui_list = NULL;
@@ -551,7 +551,7 @@ void _status_check_service_only(int pid, uid_t uid, void (*send_event_to_svc_cor
 			bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 
 			if (!bg_allowed) {
-				send_event_to_svc_core(pid);
+				send_event_to_svc_core(pid, uid);
 				_suspend_add_timer(pid, ai);
 			}
 		}
@@ -677,7 +677,7 @@ int _status_terminate_apps(const char *appid, uid_t uid)
 		if (info_t->uid != uid || info_t->status == STATUS_DYING ||
 			strcmp(appid, info_t->appid) != 0)
 			continue;
-		_term_sub_app(info_t->pid);
+		_term_sub_app(info_t->pid, uid);
 	}
 
 	return 0;

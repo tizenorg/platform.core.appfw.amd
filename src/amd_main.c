@@ -120,7 +120,7 @@ static bool __check_restart(const char *appid)
 	return true;
 }
 
-static bool __can_restart_app(const char *appid)
+static bool __can_restart_app(const char *appid, uid_t uid)
 {
 	const char *pkg_status;
 	const char *component_type;
@@ -129,7 +129,7 @@ static bool __can_restart_app(const char *appid)
 	int val = 0;
 
 	_D("appid: %s", appid);
-	ai = appinfo_find(getuid(), appid);
+	ai = appinfo_find(uid, appid);
 	if (!ai)
 		return false;
 
@@ -155,7 +155,7 @@ static bool __can_restart_app(const char *appid)
 	return false;
 }
 
-void _cleanup_dead_info(int pid)
+void _cleanup_dead_info(int pid, uid_t uid)
 {
 	int caller_pid;
 
@@ -164,9 +164,9 @@ void _cleanup_dead_info(int pid)
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
 		if (app_group_find_second_leader(pid) == -1) {
-			app_group_clear_top(pid);
+			app_group_clear_top(pid, uid);
 			app_group_set_dead_pid(pid);
-			app_group_remove(pid);
+			app_group_remove(pid, uid);
 		} else {
 			app_group_remove_leader_pid(pid);
 		}
@@ -179,14 +179,14 @@ void _cleanup_dead_info(int pid)
 			app_group_reroute(pid);
 		} else {
 			_W("app_group clear top");
-			app_group_clear_top(pid);
+			app_group_clear_top(pid, uid);
 		}
 		app_group_set_dead_pid(pid);
-		app_group_remove(pid);
+		app_group_remove(pid, uid);
 	}
 
-	_temporary_permission_drop(pid, getuid());
-	_status_remove_app_info_list(pid, getuid());
+	_temporary_permission_drop(pid, uid);
+	_status_remove_app_info_list(pid, uid);
 	aul_send_app_terminated_signal(pid);
 }
 
@@ -195,6 +195,7 @@ static int __app_dead_handler(int pid, void *data)
 	bool restart = false;
 	char *appid = NULL;
 	const char *tmp_appid;
+	uid_t uid = getuid(); /* TODO: */
 
 	if (pid <= 0)
 		return 0;
@@ -205,15 +206,15 @@ static int __app_dead_handler(int pid, void *data)
 	if (tmp_appid == NULL)
 		return 0;
 
-	restart = __can_restart_app(tmp_appid);
+	restart = __can_restart_app(tmp_appid, uid);
 	if (restart)
 		appid = strdup(tmp_appid);
 
-	_cleanup_dead_info(pid);
+	_cleanup_dead_info(pid, uid);
 	_request_flush_pending_request(pid);
 
 	if (restart)
-		_start_app_local(getuid(), appid);
+		_start_app_local(uid, appid);
 	if (appid)
 		free(appid);
 

@@ -29,7 +29,7 @@ int _pause_app(int pid, request_h req);
 int _term_app(int pid, request_h req);
 int _term_req_app(int pid, request_h req);
 int _term_bgapp(int pid, request_h req);
-int _term_sub_app(int pid);
+int _term_sub_app(int pid, uid_t uid);
 int _fake_launch_app(int cmd, int pid, bundle * kb, request_h req);
 int _start_app(const char* appid, bundle* kb, uid_t caller_uid, request_h req, bool *pend);
 int _start_app_local(uid_t uid, const char *appid);

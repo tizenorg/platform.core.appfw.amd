@@ -371,7 +371,7 @@ static int __add_rua_info(request_h req, bundle *kb, const char *appid)
 
 	}
 	rua_stat_item->uid = _request_get_target_uid(req);
-	rua_stat_item->is_group_app = app_group_is_group_app(kb);
+	rua_stat_item->is_group_app = app_group_is_group_app(kb, rua_stat_item->uid);
 	strncpy(rua_stat_item->appid, appid, 511);
 
 	g_timeout_add(1500, __add_history_handler, rua_stat_item);
@@ -604,7 +604,7 @@ static int __dispatch_app_group_get_fg_flag(request_h req)
 
 static int __dispatch_app_group_clear_top(request_h req)
 {
-	app_group_clear_top(req->pid);
+	app_group_clear_top(req->pid, _request_get_target_uid(req));
 	_request_send_result(req, 0);
 
 	return 0;
@@ -692,7 +692,7 @@ static int __dispatch_app_group_lower(request_h req)
 {
 	int ret = 0;
 
-	app_group_lower(req->pid, &ret);
+	app_group_lower(req->pid, _request_get_target_uid(req), &ret);
 	_request_send_result(req, ret);
 
 	return ret;
