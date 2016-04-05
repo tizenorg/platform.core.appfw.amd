@@ -1196,12 +1196,12 @@ int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
 void app_group_start_app(int pid, bundle *b, int lpid, gboolean can_attach,
 			app_group_launch_mode mode)
 {
-	_E("app_group_start_app");
-
 	int caller_pid = __get_caller_pid(b);
 	int can_shift = 0;
 	int recycle = 0;
 	const char *str;
+
+	_D("app_group_start_app");
 
 	str = bundle_get_val(b, AUL_SVC_K_SHIFT_WINDOW);
 	if (str != NULL && strcmp(str, "true") == 0)

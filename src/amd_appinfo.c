@@ -308,7 +308,6 @@ static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle, struct appinfo *
 	char *tep_name = NULL;
 
 	if (pkgmgrinfo_appinfo_get_tep_name(handle, &tep_name) != PMINFO_R_OK) {
-		_D("failed to get tep_name");
 		info->val[AIT_TEP] = NULL;
 	} else {
 		if (tep_name && strlen(tep_name) > 0)
@@ -382,7 +381,6 @@ static int __appinfo_add_effective_appid(const pkgmgrinfo_appinfo_h handle, stru
 	char *effective_appid = NULL;
 
 	if (pkgmgrinfo_appinfo_get_effective_appid(handle, &effective_appid) != PMINFO_R_OK) {
-		_D("Failed to get effective appid");
 		info->val[AIT_EFFECTIVE_APPID] = NULL;
 	} else {
 		if (effective_appid && strlen(effective_appid) > 0)
@@ -396,8 +394,7 @@ static int __appinfo_add_taskmanage(const pkgmgrinfo_appinfo_h handle, struct ap
 {
 	bool taskmanage = false;
 
-	if (pkgmgrinfo_appinfo_is_taskmanage(handle, &taskmanage) != PMINFO_R_OK)
-		_D("Failed to get taskmanage info");
+	pkgmgrinfo_appinfo_is_taskmanage(handle, &taskmanage);
 
 	info->val[AIT_TASKMANAGE] = strdup(taskmanage ? "true" : "false");
 
@@ -506,9 +503,8 @@ static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struc
 	if (splash_screen == NULL)
 		return 0;
 
-	if (pkgmgrinfo_appinfo_get_splash_screen_display(handle,
-				&splash_screen_display) < 0)
-		_D("Failed to get splash screen display");
+	pkgmgrinfo_appinfo_get_splash_screen_display(handle,
+			&splash_screen_display);
 
 	splash_screen->display = splash_screen_display;
 
