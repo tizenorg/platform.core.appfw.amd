@@ -612,16 +612,17 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid, b
 static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		bundle *kb)
 {
-	SECURE_LOGD("tep name is: %s", tep_name);
 	char *mnt_path[2] = {NULL, };
 	const char *installed_storage = NULL;
 	char tep_path[PATH_MAX] = {0, };
 	const char *path_app_root = NULL;
-
 	const char *global = appinfo_get_value(ai, AIT_GLOBAL);
 	const char *pkgid = appinfo_get_value(ai, AIT_PKGID);
 	const char *preload = appinfo_get_value(ai, AIT_PRELOAD);
+
 	installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
+
+	SECURE_LOGD("tep name is: %s", tep_name);
 
 	if (global && strcmp("true", global) == 0) {
 		if (preload && strcmp(preload, "true") == 0)
@@ -635,9 +636,7 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 	if (installed_storage != NULL) {
 		SECURE_LOGD("storage: %s", installed_storage);
 		if (strncmp(installed_storage, "internal", 8) == 0) {
-			snprintf(tep_path, PATH_MAX, "%s/%s/res/%s",
-					path_app_root, pkgid, tep_name);
-			mnt_path[1] = strdup(tep_path);
+			mnt_path[1] = strdup(tep_name);
 			snprintf(tep_path, PATH_MAX, "%s/%s/res/tep",
 					path_app_root, pkgid);
 			mnt_path[0] = strdup(tep_path);

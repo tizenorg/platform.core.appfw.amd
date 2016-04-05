@@ -169,6 +169,49 @@ func_out:
 	return ret;
 }
 
+int _signal_send_tep_unmount(const char *mnt_path)
+{
+	GError *err = NULL;
+	GDBusMessage *msg = NULL;
+
+	if (!conn) {
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+		if (!conn) {
+			_E("g_bus_get_sync() is failed: %s", err->message);
+			g_error_free(err);
+			return -1;
+		}
+	}
+
+	msg = g_dbus_message_new_method_call(TEP_BUS_NAME,
+					TEP_OBJECT_PATH,
+					TEP_INTERFACE_NAME,
+					TEP_UNMOUNT_METHOD);
+	if (msg == NULL) {
+		_E("g_dbus_message_new_method_call() is failed.");
+		return -1;
+	}
+
+	g_dbus_message_set_body(msg, g_variant_new("(s)", mnt_path));
+	if (g_dbus_connection_send_message(conn,
+					msg,
+					G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+					NULL,
+					&err) == FALSE) {
+		_E("g_dbus_connection_send_message() is failed: %s",
+					err->message);
+		g_object_unref(msg);
+		g_clear_error(&err);
+		return -1;
+	}
+
+	if (msg)
+		g_object_unref(msg);
+	g_clear_error(&err);
+
+	return 0;
+}
+
 int _signal_send_proc_suspend(int pid)
 {
 	GError *err = NULL;
