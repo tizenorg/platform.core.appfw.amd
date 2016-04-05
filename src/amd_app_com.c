@@ -121,7 +121,7 @@ int app_com_add_endpoint(const char *endpoint, unsigned int propagate, const cha
 		return AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS;
 	}
 
-	_E("endpoint=%s propagate=%d assoc_priv=%s", endpoint, propagate, assoc_priv);
+	_D("endpoint=%s propagate=%d assoc_priv=%s", endpoint, propagate, assoc_priv);
 
 	info = (struct endpoint_info *)g_malloc0(sizeof(struct endpoint_info));
 	if (info == NULL) {
@@ -204,7 +204,7 @@ int app_com_join(const char *endpoint, int cpid, const char *filter)
 		return AUL_APP_COM_R_ERROR_UNKNOWN_ENDPOINT;
 	}
 
-	_E("endpoint=%s cpid=%d filter=%s", endpoint, cpid, filter);
+	_D("endpoint=%s cpid=%d filter=%s", endpoint, cpid, filter);
 
 	if (__add_client(info, filter, cpid) == NULL)
 		return AUL_APP_COM_R_ERROR_OUT_OF_MEMORY;
