@@ -91,6 +91,18 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 	return caller_pid;
 }
 
+static const char* __get_owner_appid(int caller_pid, bundle *kb)
+{
+	const char *owner_appid = NULL;
+	int owner_pid = -1;
+
+	owner_pid = __get_owner_pid(caller_pid, kb);
+	owner_pid = getpgid(owner_pid); /* for webapp */
+	owner_appid = _status_app_get_appid_bypid(owner_pid);
+
+	return owner_appid;
+}
+
 static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, const char *owner_appid)
 {
 	shared_info_h h;
@@ -117,199 +129,206 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid, cons
 	return h;
 }
 
-static bool __has_valid_uri(int caller_pid, const char *appid, bundle *kb, char ***paths,
-		int *owner_pid, uid_t uid)
+static GList *__add_valid_uri(GList *paths, int caller_pid, const char *appid, const char *owner_appid,
+		bundle *kb, uid_t uid)
 {
 	char *path = NULL;
-	const char *owner_appid = NULL;
 	const char *pkgid = NULL;
 	const struct appinfo *ai = NULL;
 
-	if (bundle_get_str(kb, AUL_SVC_K_URI, &path) == BUNDLE_ERROR_NONE) {
-		if (!path) {
-			_E("path was null");
-			return false;
-		}
+	if (bundle_get_str(kb, AUL_SVC_K_URI, &path) != BUNDLE_ERROR_NONE)
+		return paths;
 
-		if (strncmp(path, "file://", 7) == 0) {
-			path = &path[7];
-		} else {
-			_E("file wasn't started with file://");
-			return false;
-		}
-
-		if (*owner_pid == -1) {
-			*owner_pid = __get_owner_pid(caller_pid, kb);
-			*owner_pid = getpgid(*owner_pid); /* for webapp */
-		}
-
-		owner_appid = _status_app_get_appid_bypid(*owner_pid);
-		ai = appinfo_find(uid, owner_appid);
-		pkgid = appinfo_get_value(ai, AIT_PKGID);
-
-		if (__can_share(path, pkgid, uid) != 0) {
-			_E("__can_share() returned an error");
-			return false;
-		}
-
-		if (!*paths) {
-			*paths = (char**)g_malloc(sizeof(char*) * 2);
-			if (!*paths) {
-				_E("Out of memory");
-				return false;
-			}
-
-			(*paths)[0] = g_strdup(path);
-			(*paths)[1] = NULL;
-		} else {
-			int i = 0;
-			while (1) {
-				if ((*paths)[i] == NULL) {
-					(*paths)[i] = g_strdup(path);
-					break;
-				}
-				i++;
-			}
-		}
-		return true;
+	if (!path) {
+		_D("path was null");
+		return paths;
 	}
 
-	return false;
+	if (strncmp(path, "file://", 7) == 0) {
+		path = &path[7];
+	} else {
+		_E("file wasn't started with file://");
+		return paths;
+	}
+
+	ai = appinfo_find(uid, owner_appid);
+	pkgid = appinfo_get_value(ai, AIT_PKGID);
+
+	if (__can_share(path, pkgid, uid) != 0) {
+		_E("__can_share() returned an error");
+		return paths;
+	}
+	paths = g_list_append(paths, strdup(path));
+
+	return paths;
 }
 
-shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bundle *kb, uid_t uid)
+static GList *__add_valid_key_for_data_selected(GList *paths, int caller_pid, const char *appid, const char *owner_appid,
+		bundle *kb, uid_t uid)
+{
+	int i;
+	int len = 0;
+	const char **path_array = NULL;
+	int type = bundle_get_type(kb, AUL_SVC_DATA_SELECTED);
+	const char *pkgid = NULL;
+	const struct appinfo *ai = NULL;
+
+	if (type != BUNDLE_TYPE_STR_ARRAY)
+		return paths;
+
+	path_array = bundle_get_str_array(kb, AUL_SVC_DATA_SELECTED, &len);
+	if (!path_array || len <= 0) {
+		_E("path_array was null");
+		return paths;
+	}
+
+	ai = appinfo_find(uid, owner_appid);
+	pkgid = appinfo_get_value(ai, AIT_PKGID);
+
+	for (i = 0; i < len; i++) {
+		if (__can_share(path_array[i], pkgid, uid) == 0)
+			paths = g_list_append(paths, strdup(path_array[i]));
+	}
+
+	return paths;
+}
+
+static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid, const char *appid, const char *owner_appid,
+		bundle *kb, uid_t uid)
 {
 	int type = bundle_get_type(kb, AUL_SVC_DATA_PATH);
 	char *path = NULL;
 	const char **path_array = NULL;
 	int len;
-	const char *owner_appid = NULL;
 	int i;
-	char **paths = NULL;
-	int owner_pid = -1;
 	const char *pkgid = NULL;
 	const struct appinfo *ai = NULL;
-	bool valid = false;
-	int cnt = 0;
-	shared_info_h h;
-	int r;
 
 	switch (type) {
 	case BUNDLE_TYPE_STR:
 		bundle_get_str(kb, AUL_SVC_DATA_PATH, &path);
 		if (!path) {
 			_E("path was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
-			owner_appid = _status_app_get_appid_bypid(owner_pid);
-			goto finally;
+			break;
 		}
-
-		owner_pid = __get_owner_pid(caller_pid, kb);
-		owner_pid = getpgid(owner_pid); /* for webapp */
-		owner_appid = _status_app_get_appid_bypid(owner_pid);
 
 		ai = appinfo_find(uid, owner_appid);
 		pkgid = appinfo_get_value(ai, AIT_PKGID);
 
 		if (__can_share(path, pkgid, uid) != 0) {
 			_E("__can_share() returned an error");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
-			goto finally;
-
+			break;
 		}
 
-		paths = (char**)g_malloc(sizeof(char*) * 3);
-		if (!paths) {
-			_E("Out of memory");
-			goto finally;
-		}
-
-		paths[0] = g_strdup(path);
-		paths[1] = NULL;
-		paths[2] = NULL;
-		valid = true;
+		paths = g_list_append(paths, strdup(path));
 		break;
 
 	case BUNDLE_TYPE_STR_ARRAY:
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
 		if (!path_array || len <= 0) {
 			_E("path_array was null");
-			valid = __has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid);
-			owner_appid = _status_app_get_appid_bypid(owner_pid);
-			goto finally;
-
+			break;
 		}
 
-		owner_pid = __get_owner_pid(caller_pid, kb);
-		owner_pid = getpgid(owner_pid); /* for webapp */
-		owner_appid = _status_app_get_appid_bypid(owner_pid);
 		ai = appinfo_find(uid, owner_appid);
 		pkgid = appinfo_get_value(ai, AIT_PKGID);
 
-		paths = (char**)g_malloc(sizeof(char*) * (len + 2));
-		if (!paths) {
-			_E("Out of memory");
-			goto finally;
-		}
-
 		for (i = 0; i < len; i++) {
 			if (__can_share(path_array[i], pkgid, uid) == 0)
-				paths[cnt++] = g_strdup(path_array[i]);
+				paths = g_list_append(paths, strdup(path_array[i]));
 		}
 
-		if (cnt > 0) {
-			paths[cnt] = NULL;
-			paths[cnt + 1] = NULL;
-			valid = true;
-		} else {
-			g_free(paths);
-			paths = NULL;
-		}
 		break;
 	}
 
-	if (__has_valid_uri(caller_pid, appid, kb, &paths, &owner_pid, uid))
-		valid = true;
-finally:
-	if (valid && owner_appid && paths) {
-		_D("grant permission %s : %s : %s", paths[0], owner_appid, appid);
+	return paths;
+}
 
-		h = __new_shared_info_handle(appid, uid, owner_appid);
+static char** __convert_list_to_array(GList *list)
+{
+	int len;
+	int i = 0;
+	char **array = NULL;
 
-		if (h == NULL) {
-			g_strfreev(paths);
-			return NULL;
-		}
+	if (list)
+		return NULL;
 
-		r = security_manager_private_sharing_req_set_owner_appid(h->shared_info->handle, owner_appid);
-		if (r != SECURITY_MANAGER_SUCCESS)
-			_E("security_manager_private_sharing_req_set_owner_appid(,%s) return %d", owner_appid, r);
+	len = g_list_length(list);
+	if (len == 0)
+		return NULL;
 
-		r = security_manager_private_sharing_req_set_target_appid(h->shared_info->handle, appid);
-		if (r != SECURITY_MANAGER_SUCCESS)
-			_E("security_manager_private_sharing_req_set_target_appid(,%s) return %d", appid, r);
+	array = (char**)g_malloc(sizeof(char*) * len);
 
-		r = security_manager_private_sharing_req_add_paths(h->shared_info->handle,
-					(const char **)paths, g_strv_length(paths));
+	while (list) {
+		array[i] = g_strdup(list->data);
+		list = g_list_next(list);
+		i++;
+	}
+	array[len] = NULL;
 
-		if (r != SECURITY_MANAGER_SUCCESS)
-			_E("security_manager_private_sharing_req_add_paths() return %d", r);
+	return array;
+}
 
-		g_strfreev(paths);
-		_D("security_manager_private_sharing_apply ++");
-		r = security_manager_private_sharing_apply(h->shared_info->handle);
-		_D("security_manager_private_sharing_apply --");
-		if (r != SECURITY_MANAGER_SUCCESS) {
-			_E("security_manager_private_sharing_apply() returned an error %d", r);
-			_temporary_permission_destroy(h);
-			return NULL;
-		}
+shared_info_h _temporary_permission_create(int caller_pid, const char *appid, bundle *kb, uid_t uid)
+{
+	char **path_array = NULL;
+	int len;
+	const char *owner_appid = NULL;
+	GList *paths = NULL;
+	shared_info_h h = NULL;
+	int r;
 
-		return h;
+	owner_appid = __get_owner_appid(caller_pid, kb);
+	paths = __add_valid_key_for_data_path(paths, caller_pid, appid, owner_appid, kb, uid);
+	paths = __add_valid_key_for_data_selected(paths, caller_pid, appid, owner_appid, kb, uid);
+	paths = __add_valid_uri(paths, caller_pid, appid, owner_appid, kb, uid);
+
+	if (!paths || !owner_appid)
+		goto clear;
+
+	_D("grant permission %s : %s", owner_appid, appid);
+
+	h = __new_shared_info_handle(appid, uid, owner_appid);
+
+	if (h == NULL)
+		goto clear;
+
+	len = g_list_length(paths);
+	path_array = __convert_list_to_array(paths);
+	if (path_array == NULL)
+		goto clear;
+
+	r = security_manager_private_sharing_req_set_owner_appid(h->shared_info->handle, owner_appid);
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("security_manager_private_sharing_req_set_owner_appid(,%s) return %d", owner_appid, r);
+
+	r = security_manager_private_sharing_req_set_target_appid(h->shared_info->handle, appid);
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("security_manager_private_sharing_req_set_target_appid(,%s) return %d", appid, r);
+
+	r = security_manager_private_sharing_req_add_paths(h->shared_info->handle,
+				(const char**)path_array, len);
+
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("security_manager_private_sharing_req_add_paths() return %d", r);
+
+	_D("security_manager_private_sharing_apply ++");
+	r = security_manager_private_sharing_apply(h->shared_info->handle);
+	_D("security_manager_private_sharing_apply --");
+	if (r != SECURITY_MANAGER_SUCCESS) {
+		_E("security_manager_private_sharing_apply() returned an error %d", r);
+		_temporary_permission_destroy(h);
+		h = NULL;
 	}
 
-	g_strfreev(paths);
-	return NULL;
+clear:
+	if (paths)
+		g_list_free_full(paths, free);
+
+	if (path_array)
+		g_strfreev(path_array);
+
+	return h;
 }
 
 int _temporary_permission_apply(int pid, uid_t uid, shared_info_h handle)
