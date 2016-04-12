@@ -396,9 +396,8 @@ static int __dispatch_get_mp_socket_pair(request_h req)
 	struct iovec vec[3];
 	int msglen = 0;
 	char buffer[1024];
-	struct sockaddr_un saddr;
 	int ret = 0;
-
+	struct timeval tv;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 		_E("error create socket pair");
@@ -412,8 +411,22 @@ static int __dispatch_get_mp_socket_pair(request_h req)
 		return -1;
 	}
 
-	memset(&saddr, 0, sizeof(saddr));
-	saddr.sun_family = AF_UNIX;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	if(setsockopt(handles[0], SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+		_E("Cannot Set SO_RCVTIMEO for socket %d", handles[0]);
+		_request_send_result(req, -1);
+		ret = -1;
+		goto out;
+	}
+
+	if(setsockopt(handles[1], SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+		_E("Cannot Set SO_RCVTIMEO for socket %d", handles[1]);
+		_request_send_result(req, -1);
+		ret = -1;
+		goto out;
+	}
 
 	_D("amd send mp fd : [%d, %d]", handles[0], handles[1]);
 	vec[0].iov_base = buffer;
@@ -425,7 +438,7 @@ static int __dispatch_get_mp_socket_pair(request_h req)
 		_request_send_result(req, -1);
 		ret = -1;
 	}
-
+out:
 	close(handles[0]);
 	close(handles[1]);
 
@@ -443,8 +456,8 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 	struct iovec vec[3];
 	int msglen = 0;
 	char buffer[1024];
-	struct sockaddr_un saddr;
 	bundle *kb = req->kb;
+	struct timeval tv;
 
 	caller = bundle_get_val(kb, AUL_K_CALLER_APPID);
 	callee = bundle_get_val(kb, AUL_K_CALLEE_APPID);
@@ -473,28 +486,45 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 			_E("error create socket pair");
 			_request_send_result(req, -1);
 
-			if (handles)
-				free(handles);
+			free(handles);
 			goto err_out;
 		}
 
-		if (handles[0] == -1) {
+		if (handles[0] == -1 || handles[1] == -1) {
 			_E("error socket open");
 			_request_send_result(req, -1);
 
-			if (handles)
-				free(handles);
+			free(handles);
 			goto err_out;
 		}
+
+		tv.tv_sec = 5;
+		tv.tv_usec = 0;
+		if(setsockopt(handles[0], SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+			_E("Cannot Set SO_RCVTIMEO for socket %d", handles[0]);
+			_request_send_result(req, -1);
+
+			close(handles[0]);
+			close(handles[1]);
+			free(handles);
+			goto err_out;
+		}
+
+		if(setsockopt(handles[1], SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+			_E("Cannot Set SO_RCVTIMEO for socket %d", handles[1]);
+			_request_send_result(req, -1);
+
+			close(handles[0]);
+			close(handles[1]);
+			free(handles);
+			goto err_out;
+		}
+
 		g_hash_table_insert(__dc_socket_pair_hash, strdup(socket_pair_key),
 				handles);
 
 		_D("New socket pair insert done.");
 	}
-
-
-	memset(&saddr, 0, sizeof(saddr));
-	saddr.sun_family = AF_UNIX;
 
 	SECURE_LOGD("amd send fd : [%d, %d]", handles[0], handles[1]);
 	vec[0].iov_base = buffer;
@@ -507,7 +537,6 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
 				_request_send_result(req, -1);
-				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
 			close(handles[0]);
@@ -522,7 +551,6 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 			if (msglen < 0) {
 				_E("Error[%d]: while sending message\n", -msglen);
 				_request_send_result(req, -1);
-				g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 				goto err_out;
 			}
 			close(handles[1]);
@@ -540,8 +568,17 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 	return 0;
 
 err_out:
-	if (socket_pair_key)
+
+	if (handles) {
+		if (handles[0] > 0)
+			close(handles[0]);
+		if (handles[1] > 0)
+			close(handles[1]);
+	}
+	if (socket_pair_key) {
+		g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
 		free(socket_pair_key);
+	}
 
 	return -1;
 }
