@@ -25,10 +25,13 @@
 #include <aul_svc_priv_key.h>
 #include <amd_app_com.h>
 #include <amd_request.h>
+#include <amd_appinfo.h>
 #include <aul.h>
 
+#include "amd_config.h"
 #include "amd_util.h"
 
+#define PRIVILEGE_WIDGET_VIEWER	"http://tizen.org/privilege/widget.viewer"
 #define PRIVILEGE_APPMANAGER_LAUNCH "http://tizen.org/privilege/appmanager.launch"
 #define PRIVILEGE_APPMANAGER_KILL "http://tizen.org/privilege/appmanager.kill"
 #define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
@@ -59,8 +62,10 @@ static const char *__convert_operation_to_privilege(const char *operation)
 		return PRIVILEGE_DOWNLOAD;
 	else if (!strcmp(operation, AUL_SVC_OPERATION_CALL))
 		return PRIVILEGE_CALL;
-	else
-		return NULL;
+	else if (!strcmp(operation, AUL_SVC_OPERATION_WIDGET))
+		return PRIVILEGE_WIDGET_VIEWER;
+
+	return NULL;
 }
 
 static void __destroy_caller_info(struct caller_info *info)
@@ -146,29 +151,65 @@ static int __simple_checker(struct caller_info *info, request_h req, void *data)
 	return __check_privilege(info, (const char *)data);
 }
 
+static int __widget_viewer_checker(struct caller_info *info, request_h req, void *data)
+{
+	char *appid = NULL;
+	const char *apptype;
+	struct appinfo *appinfo;
+	bundle *appcontrol = _request_get_bundle(req);
+
+	bundle_get_str(appcontrol, AUL_K_APPID, &appid);
+	if (!appid) {
+		_E("can not resolve appid. request denied.");
+		return -1;
+	}
+
+	appinfo = appinfo_find(_request_get_target_uid(req), appid);
+	if (!appinfo) {
+		_E("can not resolve appinfo   request denied.");
+		return -1;
+	}
+
+	apptype = appinfo_get_value(appinfo, AIT_APPTYPE);
+	if (!apptype) {
+		_E("can not resolve apptype   request denied.");
+		return -1;
+	}
+
+	if (!strcmp(apptype, APP_TYPE_WIDGET) || !strcmp(apptype, APP_TYPE_WATCH)) {
+		return __check_privilege(info, PRIVILEGE_WIDGET_VIEWER);
+	} else {
+		_E("illegal app type of request: only widget or watch apps are allowed");
+		return -1;
+	}
+}
+
 static int __appcontrol_checker(struct caller_info *info, request_h req, void *data)
 {
 	bundle *appcontrol;
-	const char *op_priv;
+	const char *op_priv = NULL;
 	char *op;
 	int ret;
-
-	ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
-	if (ret < 0)
-		return ret;
 
 	appcontrol = _request_get_bundle(req);
 	if (appcontrol == NULL)
 		return 0;
 
-	if (bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op) != BUNDLE_ERROR_NONE)
-		return 0;
+	ret = bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
 
-	op_priv = __convert_operation_to_privilege(op);
-	if (op_priv == NULL)
-		return 0;
+	if (ret == BUNDLE_ERROR_NONE)
+		op_priv = __convert_operation_to_privilege(op);
 
-	ret = __check_privilege(info, op_priv);
+	if (op_priv && strncmp(op_priv, PRIVILEGE_WIDGET_VIEWER, sizeof(PRIVILEGE_WIDGET_VIEWER)))
+		return __widget_viewer_checker(info, req, data);
+	else
+		ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
+
+	if (ret < 0)
+		return ret;
+
+	if (op_priv)
+		ret = __check_privilege(info, op_priv);
 
 	return ret;
 }
