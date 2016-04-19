@@ -46,6 +46,7 @@ enum appinfo_type {
 	AIT_APPTYPE,
 	AIT_ROOT_PATH,
 	AIT_SPLASH_SCREEN,
+	AIT_SPLASH_SCREEN_DISPLAY,
 	AIT_API_VERSION,
 	AIT_ENABLEMENT,
 	AIT_MAX
@@ -58,7 +59,6 @@ struct appinfo {
 struct appinfo_splash_screen {
 	GHashTable *portrait;
 	GHashTable *landscape;
-	bool display;
 };
 
 struct appinfo_splash_image {
