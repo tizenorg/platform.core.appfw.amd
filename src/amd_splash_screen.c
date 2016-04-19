@@ -99,7 +99,7 @@ static int __app_can_launch_splash_image(const struct appinfo *ai,
 {
 	const char *component_type;
 	const char *fake_effect;
-	const struct appinfo_splash_screen *ai_ss;
+	int display;
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strncmp(component_type, APP_TYPE_SERVICE,
@@ -112,8 +112,8 @@ static int __app_can_launch_splash_image(const struct appinfo *ai,
 	if (fake_effect && strncmp(fake_effect, "OFF", strlen("OFF")) == 0)
 		return -1;
 
-	ai_ss = appinfo_get_ptr_value(ai, AIT_SPLASH_SCREEN);
-	if (ai_ss == NULL || ai_ss->display == false)
+	appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, &display);
+	if (!(display & APP_ENABLEMENT_MASK_ACTIVE))
 		return -1;
 
 	return 0;
