@@ -40,6 +40,13 @@ struct user_appinfo {
 	GHashTable *tbl; /* key is appid, value is struct appinfo */
 };
 
+struct app_event_info {
+	int req_id;
+	int type;
+};
+
+static GList *app_event_list;
+
 typedef int (*appinfo_handler_add_cb)(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data);
 typedef void (*appinfo_handler_remove_cb)(void *data);
 
@@ -490,23 +497,29 @@ static int __add_splash_screen_list_cb(const char *src, const char *type,
 
 static int __appinfo_add_splash_screens(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
-	struct appinfo_splash_screen *splash_screen;
-	bool splash_screen_display = true;
-
 	if (pkgmgrinfo_appinfo_foreach_splash_screen(handle,
 				__add_splash_screen_list_cb, info) < 0) {
 		_E("Failed to get splash screen");
 		return -1;
 	}
 
-	splash_screen = (struct appinfo_splash_screen *)info->val[AIT_SPLASH_SCREEN];
-	if (splash_screen == NULL)
-		return 0;
+	return 0;
+}
 
-	pkgmgrinfo_appinfo_get_splash_screen_display(handle,
+static int __appinfo_add_splash_screen_display(
+		const pkgmgrinfo_appinfo_h handle, struct appinfo *info,
+		void *data)
+{
+	bool splash_screen_display = true;
+	int ret;
+
+	ret = pkgmgrinfo_appinfo_get_splash_screen_display(handle,
 			&splash_screen_display);
+	if (ret < 0)
+		_D("Failed to get splash screen display");
 
-	splash_screen->display = splash_screen_display;
+	info->val[AIT_SPLASH_SCREEN_DISPLAY] =
+		GINT_TO_POINTER(splash_screen_display ? 0 : 1);
 
 	return 0;
 }
@@ -564,6 +577,7 @@ static  appinfo_vft appinfo_table[AIT_MAX] = {
 	[AIT_APPTYPE] = { __appinfo_add_apptype, free },
 	[AIT_ROOT_PATH] = { __appinfo_add_root_path, free },
 	[AIT_SPLASH_SCREEN] = { __appinfo_add_splash_screens, __appinfo_remove_splash_screen },
+	[AIT_SPLASH_SCREEN_DISPLAY] = { __appinfo_add_splash_screen_display, NULL },
 	[AIT_API_VERSION] = { __appinfo_add_api_version, free },
 	[AIT_ENABLEMENT] = { __appinfo_add_enablement, NULL },
 
@@ -809,12 +823,52 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 	return 0;
 }
 
+static void __add_app_event_info(int req_id, int type)
+{
+	struct app_event_info *info;
+
+	info = (struct app_event_info *)malloc(sizeof(struct app_event_info));
+	if (info == NULL) {
+		_E("Out of memory");
+		return;
+	}
+
+	info->req_id = req_id;
+	info->type = type;
+
+	app_event_list = g_list_append(app_event_list, (gpointer)info);
+}
+
+static struct app_event_info *__find_app_event_info(int req_id)
+{
+	GList *iter;
+	struct app_event_info *info;
+
+	for (iter = g_list_first(app_event_list); iter; iter = g_list_next(iter)) {
+		info = (struct app_event_info *)iter->data;
+		if (info && info->req_id == req_id)
+			return info;
+	}
+
+	return NULL;
+}
+
+static void __remove_app_event_info(struct app_event_info *info)
+{
+	if (info == NULL)
+		return;
+
+	app_event_list = g_list_remove(app_event_list, info);
+	free(info);
+}
+
 static int __package_app_event_cb(uid_t target_uid, int req_id, const char *pkg_type,
 				const char *pkgid, const char *appid, const char *key,
 				const char *val, const void *pmsg, void *data)
 {
 	struct appinfo *ai;
 	int old;
+	struct app_event_info *ei;
 
 	_D("appid:%s key:%s val:%s", appid, key, val);
 	ai = appinfo_find(target_uid, appid);
@@ -825,28 +879,54 @@ static int __package_app_event_cb(uid_t target_uid, int req_id, const char *pkg_
 		if (!strcasecmp(val, "enable_global_app_for_uid") ||
 				!strcasecmp(val, "enable_app")) {
 			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
-			old = (old & APP_ENABLEMENT_MASK_ACTIVE ) | APP_ENABLEMENT_MASK_REQUEST;
+			old = (old & APP_ENABLEMENT_MASK_ACTIVE) | APP_ENABLEMENT_MASK_REQUEST;
 			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+			__add_app_event_info(req_id, AIT_ENABLEMENT);
 		} else if (!strcasecmp(val, "disable_global_app_for_uid") ||
 				!strcasecmp(val, "disable_app")) {
 			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
-			old &=  APP_ENABLEMENT_MASK_ACTIVE;
-			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
-		}
-	} else if (!strcasecmp(key, "end")) {
-		if (!strcasecmp(val, "ok")) {
-			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
-			old >>= 1;
-			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
-			if (!(old & APP_ENABLEMENT_MASK_ACTIVE)) {
-				_E("terminate apps :%s", appid);
-				_status_terminate_apps(appid, target_uid);
-			}
-		} else if (!strcasecmp(val, "fail")) {
-			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
 			old &= APP_ENABLEMENT_MASK_ACTIVE;
 			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+			__add_app_event_info(req_id, AIT_ENABLEMENT);
+		} else if (!strcasecmp(val, "enable_app_splash_screen")) {
+			_D("enable_app_splash_screen");
+			appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, &old);
+			old = (old & APP_ENABLEMENT_MASK_ACTIVE) | APP_ENABLEMENT_MASK_REQUEST;
+			appinfo_set_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, old);
+			__add_app_event_info(req_id, AIT_SPLASH_SCREEN_DISPLAY);
+		} else if (!strcasecmp(val, "disable_app_splash_screen")) {
+			_D("disable_app_splash_screen");
+			appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, &old);
+			old &= APP_ENABLEMENT_MASK_ACTIVE;
+			appinfo_set_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, old);
+			__add_app_event_info(req_id, AIT_SPLASH_SCREEN_DISPLAY);
 		}
+	} else if (!strcasecmp(key, "end")) {
+		ei = __find_app_event_info(req_id);
+		if (ei == NULL)
+			return 0;
+
+		if (!strcasecmp(val, "ok")) {
+			if (ei->type == AIT_ENABLEMENT ||
+					ei->type == AIT_SPLASH_SCREEN_DISPLAY) {
+				appinfo_get_int_value(ai, ei->type, &old);
+				old >>= 1;
+				appinfo_set_int_value(ai, ei->type, old);
+				if (ei->type == AIT_ENABLEMENT &&
+						!(old & APP_ENABLEMENT_MASK_ACTIVE)) {
+					_E("terminate apps: %s", appid);
+					_status_terminate_apps(appid, target_uid);
+				}
+			}
+		} else if (!strcasecmp(val, "fail")) {
+			if (ei->type == AIT_ENABLEMENT ||
+					ei->type == AIT_SPLASH_SCREEN_DISPLAY) {
+				appinfo_get_int_value(ai, ei->type, &old);
+				old &= APP_ENABLEMENT_MASK_ACTIVE;
+				appinfo_set_int_value(ai, ei->type, old);
+			}
+		}
+		__remove_app_event_info(ei);
 	}
 
 	return 0;
