@@ -1277,6 +1277,54 @@ static int __dispatch_app_unset_app_control_default_app(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_set_process_group(request_h req)
+{
+	int owner_pid;
+	int child_pid;
+	bundle *kb = NULL;
+	const char *child_appid;
+	const char *child_pkgid;
+	const struct appinfo *ai;
+	const char *str_pid;
+	int ret;
+
+	kb = req->kb;
+	if (kb == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	str_pid = bundle_get_val(kb, AUL_K_OWNER_PID);
+	if (str_pid == NULL) {
+		_E("No owner pid");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	owner_pid = atoi(str_pid);
+	str_pid = bundle_get_val(kb, AUL_K_CHILD_PID);
+	if (str_pid == NULL) {
+		_E("No child pid");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	child_pid = atoi(str_pid);
+	child_appid = _status_app_get_appid_bypid(child_pid);
+	if (child_appid == NULL) {
+		_E("No child appid");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	ai = appinfo_find(_request_get_target_uid(req), child_appid);
+	child_pkgid = appinfo_get_value(ai, AIT_PKGID);
+	ret = aul_send_app_group_signal(owner_pid, child_pid, child_pkgid);
+
+	_request_send_result(req, ret);
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1334,6 +1382,8 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
 	[APP_START_ASYNC] = __dispatch_app_start,
+	[APP_SET_PROCESS_GROUP] = __dispatch_app_set_process_group,
+
 };
 
 static void __free_request(gpointer data)
