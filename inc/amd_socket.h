@@ -30,6 +30,7 @@
 #define PAD_CMD_ADD_LOADER	11
 #define PAD_CMD_REMOVE_LOADER	12
 #define PAD_CMD_MAKE_DEFAULT_SLOTS	13
+#define PAD_CMD_DEMAND		14
 
 int _create_sock_activation(void);
 int _create_server_sock(void);

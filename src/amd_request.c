@@ -1277,6 +1277,25 @@ static int __dispatch_app_unset_app_control_default_app(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_prepare_candidate_process(request_h req)
+{
+	bundle *b = NULL;
+	int ret;
+
+	b = bundle_create();
+	if (b == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, _request_get_target_uid(req),
+			PAD_CMD_DEMAND, b);
+	bundle_free(b);
+
+	_request_send_result(req, ret);
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] =  __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] =  __dispatch_get_mp_socket_pair,
@@ -1334,6 +1353,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
 	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
 	[APP_START_ASYNC] = __dispatch_app_start,
+	[APP_PREPARE_CANDIDATE_PROCESS] = __dispatch_app_prepare_candidate_process,
 };
 
 static void __free_request(gpointer data)
