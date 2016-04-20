@@ -18,6 +18,7 @@
 
 #include <sys/types.h>
 #include <glib.h>
+#include <stdbool.h>
 
 #define AIT_START 0
 enum appinfo_type {
