@@ -38,7 +38,6 @@
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
 #include <ttrace.h>
-
 #include "amd_config.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"
@@ -637,7 +636,7 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		SECURE_LOGD("storage: %s", installed_storage);
 		if (strncmp(installed_storage, "internal", 8) == 0) {
 			mnt_path[1] = strdup(tep_name);
-			snprintf(tep_path, PATH_MAX, "%s/%s/res/tep",
+			snprintf(tep_path, PATH_MAX, "%s/%s/tep/mount",
 					path_app_root, pkgid);
 			mnt_path[0] = strdup(tep_path);
 		} else if (strncmp(installed_storage, "external", 8) == 0) {
