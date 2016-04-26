@@ -195,7 +195,7 @@ static void __send_unmount_request(int pid)
 
 	SECURE_LOGD("storage: %s", installed_storage);
 	if (strncmp(installed_storage, "internal", strlen("internal")) == 0) {
-		snprintf(buf, sizeof(buf), "%s/%s/res/tep", path_app_root,
+		snprintf(buf, sizeof(buf), "%s/%s/tep/mount", path_app_root,
 				pkgid);
 		mnt_path = strdup(buf);
 	} else if (strncmp(installed_storage, "external",
