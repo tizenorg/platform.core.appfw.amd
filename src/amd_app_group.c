@@ -1174,7 +1174,7 @@ int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
 			caller_wid = app_group_get_window(caller_pid);
 
 			if (caller_wid == 0) {
-				_E("caller window wasn't ready");
+				_D("caller window wasn't ready");
 				if (__can_be_leader(b))
 					*can_attach = FALSE;
 				else
