@@ -35,15 +35,10 @@
 #include "amd_appinfo.h"
 #include "amd_util.h"
 #include "amd_splash_screen.h"
+#include "amd_wayland.h"
 
 #define K_FAKE_EFFECT "__FAKE_EFFECT__"
 #define APP_CONTROL_OPERATION_MAIN "http://tizen.org/appcontrol/operation/main"
-
-struct splash_screen_s {
-	struct wl_display *display;
-	struct wl_registry *registry;
-	struct tizen_launchscreen *screen;
-};
 
 struct splash_image_s {
 	struct tizen_launch_image *image;
@@ -60,12 +55,12 @@ struct rotation_s {
 	int auto_rotate;
 };
 
-static struct splash_screen_s splash_screen;
-static int splash_screen_initialized = 0;
+static struct wl_display *display;
+static struct tizen_launchscreen *tz_launchscreen;
+static int splash_screen_initialized;
 static struct rotation_s rotation;
-static int rotation_initialized = 0;
+static int rotation_initialized;
 
-extern int _wl_is_initialized(void);
 static int __init_splash_screen(void);
 static int __init_rotation(void);
 
@@ -80,7 +75,7 @@ void _splash_screen_destroy_image(splash_image_h si)
 		g_source_remove(si->tid);
 	if (si->image) {
 		tizen_launch_image_destroy(si->image);
-		wl_display_flush(splash_screen.display);
+		wl_display_flush(display);
 	}
 	free(si);
 }
@@ -194,13 +189,13 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 		return NULL;
 	}
 
-	si->image = tizen_launchscreen_create_img(splash_screen.screen);
+	si->image = tizen_launchscreen_create_img(tz_launchscreen);
 	if (si->image == NULL) {
 		_E("Failed to get launch image");
 		free(si);
 		return NULL;
 	}
-	wl_display_flush(splash_screen.display);
+	wl_display_flush(display);
 
 	si->src = strdup(ai_si->src);
 	if (si->src == NULL) {
@@ -224,7 +219,7 @@ void _splash_screen_send_image(splash_image_h si)
 
 	tizen_launch_image_launch(si->image, si->src, si->type,
 			si->rotation, si->indicator);
-	wl_display_flush(splash_screen.display);
+	wl_display_flush(display);
 }
 
 void _splash_screen_send_pid(splash_image_h si, int pid)
@@ -233,7 +228,7 @@ void _splash_screen_send_pid(splash_image_h si, int pid)
 		return;
 
 	tizen_launch_image_owner(si->image, pid);
-	wl_display_flush(splash_screen.display);
+	wl_display_flush(display);
 }
 
 static void __wl_listener_cb(void *data, struct wl_registry *registry,
@@ -242,50 +237,38 @@ static void __wl_listener_cb(void *data, struct wl_registry *registry,
 	if (interface && strncmp(interface, "tizen_launchscreen",
 				strlen("tizen_launchscreen")) == 0) {
 		_D("interface: %s", interface);
-		splash_screen.screen = wl_registry_bind(registry, id,
-				&tizen_launchscreen_interface, 1);
+		if (!tz_launchscreen)
+			tz_launchscreen = wl_registry_bind(registry, id,
+					&tizen_launchscreen_interface, 1);
 	}
 }
 
-static void __wl_listener_remove_cb(void *data,
-		struct wl_registry *registry, unsigned int id)
+static void __wl_listener_remove_cb(void *data, struct wl_registry *registry,
+		unsigned int id)
 {
-	(void)data;
-	(void)registry;
-	(void)id;
+	if (tz_launchscreen) {
+		tizen_launchscreen_destroy(tz_launchscreen);
+		tz_launchscreen = NULL;
+	}
 }
 
-static const struct wl_registry_listener registry_listener = {
+static struct wl_registry_listener registry_listener = {
 	__wl_listener_cb,
-	__wl_listener_remove_cb,
+	__wl_listener_remove_cb
 };
 
 static int __init_splash_screen(void)
 {
-	if (!_wl_is_initialized())
-		return -1;
-
-	splash_screen.display = wl_display_connect(NULL);
-	if (splash_screen.display == NULL) {
-		_E("Failed to get display");
-		return -1;
+	if (!display) {
+		display = _wayland_get_display();
+		if (!display) {
+			_E("Failed to get display");
+			return -1;
+		}
 	}
 
-	splash_screen.registry = wl_display_get_registry(splash_screen.display);
-	if (splash_screen.registry == NULL) {
-		_E("Failed to get registry");
-		wl_display_disconnect(splash_screen.display);
-		return -1;
-	}
-
-	wl_registry_add_listener(splash_screen.registry,
-			&registry_listener, NULL);
-	wl_display_flush(splash_screen.display);
-	wl_display_roundtrip(splash_screen.display);
-
-	if (splash_screen.screen == NULL) {
-		_E("Failed to bind screen");
-		wl_display_disconnect(splash_screen.display);
+	if (!tz_launchscreen) {
+		_E("Failed to bind tizen launch screen");
 		return -1;
 	}
 
@@ -381,8 +364,7 @@ int _splash_screen_init(void)
 {
 	_D("init splash screen");
 
-	if (__init_splash_screen() < 0)
-		_E("Failed to initialize splash screen");
+	_wayland_add_registry_listener(&registry_listener, NULL);
 
 	if (__init_rotation() < 0)
 		_E("Failed to initialize rotation");

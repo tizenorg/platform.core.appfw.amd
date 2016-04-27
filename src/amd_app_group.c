@@ -24,6 +24,9 @@
 #include <aul_svc.h>
 #include <bundle_internal.h>
 #include <aul_sock.h>
+#include <wayland-client.h>
+#include <wayland-tbm-client.h>
+#include <tizen-extension-client-protocol.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -35,42 +38,45 @@
 #include "amd_appinfo.h"
 #include "amd_share.h"
 #include "amd_suspend.h"
+#include "amd_wayland.h"
 
 #define APP_SVC_K_LAUNCH_MODE   "__APP_SVC_LAUNCH_MODE__"
 
 #include <wayland-client.h>
 #include <tizen-extension-client-protocol.h>
+
+static struct wl_display *display;
 static struct tizen_policy *tz_policy;
+static int tz_policy_initialized;
 
-extern int _wl_is_initialized(void);
-
-static void _reg_handle_global(void *data, struct wl_registry *reg,
+static void __wl_listener_cb(void *data, struct wl_registry *reg,
 		uint32_t id, const char *interface, uint32_t ver)
 {
 	if (!strcmp(interface, "tizen_policy")) {
-		tz_policy = wl_registry_bind(reg,
-				id,
-				&tizen_policy_interface,
-				1);
+		if (!tz_policy)
+			tz_policy = wl_registry_bind(reg, id,
+					&tizen_policy_interface, 1);
 	}
 }
 
-static void _reg_handle_global_remove(void *data, struct wl_registry *reg,
+static void __wl_listener_remove_cb(void *data, struct wl_registry *reg,
 		uint32_t id)
 {
-	/* do nothing */
+	if (tz_policy) {
+		tizen_policy_destroy(tz_policy);
+		tz_policy = NULL;
+	}
 }
 
-static const struct wl_registry_listener reg_listener = {
-	_reg_handle_global,
-	_reg_handle_global_remove
+static struct wl_registry_listener registry_listener = {
+	__wl_listener_cb,
+	__wl_listener_remove_cb
 };
 
 static GHashTable *app_group_hash = NULL;
 static int dead_pid = -1;
 static int focused_leader_pid = -1;
 static GList *recycle_bin = NULL;
-struct wl_display *display;
 
 extern char *home_appid;
 
@@ -88,45 +94,31 @@ typedef struct _app_group_context_t {
 	app_group_launch_mode launch_mode;
 } app_group_context_t;
 
-static int __wl_init()
+static int __wl_init(void)
 {
-	struct wl_registry *reg;
-
-	if (!_wl_is_initialized())
-		return -1;
-
-	display = wl_display_connect(NULL);
-
-	if (display == NULL) {
-		_E("display is null");
-		return -1;
+	if (!display) {
+		display = _wayland_get_display();
+		if (!display) {
+			_E("Failed to get display");
+			return -1;
+		}
 	}
 
-	reg = wl_display_get_registry(display);
-	if (reg == NULL) {
-		_E("registry is null");
-		wl_display_disconnect(display);
+	if (!tz_policy)
 		return -1;
-	}
 
-	wl_registry_add_listener(reg, &reg_listener, NULL);
-	wl_display_roundtrip(display);
-
-	if (!tz_policy) {
-		_E("ERR: no tizen_policy global interface");
-		wl_registry_destroy(reg);
-		wl_display_disconnect(display);
-		return -1;
-	}
+	tz_policy_initialized = 1;
 
 	return 0;
 }
 
 static void __lower_window(int wid)
 {
-	if (!tz_policy && __wl_init() < 0) {
-		_E("__wl_init() failed");
-		return;
+	if (!tz_policy_initialized) {
+		if (__wl_init() < 0) {
+			_E("__wl_init() failed");
+			return;
+		}
 	}
 
 	tizen_policy_lower_by_res_id(tz_policy, wid);
@@ -135,9 +127,11 @@ static void __lower_window(int wid)
 
 static void __attach_window(int parent_wid, int child_wid)
 {
-	if (!tz_policy && __wl_init() < 0) {
-		_E("__wl_init() failed");
-		return;
+	if (!tz_policy_initialized) {
+		if (__wl_init() < 0) {
+			_E("__wl_init() failed");
+			return;
+		}
 	}
 
 	tizen_policy_set_transient_for(tz_policy, child_wid, parent_wid);
@@ -146,9 +140,11 @@ static void __attach_window(int parent_wid, int child_wid)
 
 static void __detach_window(int child_wid)
 {
-	if (!tz_policy && __wl_init() < 0) {
-		_E("__wl_init() failed");
-		return;
+	if (!tz_policy_initialized) {
+		if (__wl_init() < 0) {
+			_E("__wl_init() failed");
+			return;
+		}
 	}
 
 	tizen_policy_unset_transient_for(tz_policy, child_wid);
@@ -157,9 +153,11 @@ static void __detach_window(int child_wid)
 
 static void __activate_below(int wid, int below_wid)
 {
-	if (!tz_policy && __wl_init() < 0) {
-		_E("__wl_init() failed");
-		return;
+	if (!tz_policy_initialized) {
+		if (__wl_init() < 0) {
+			_E("__wl_init() failed");
+			return;
+		}
 	}
 
 	tizen_policy_activate_below_by_res_id(tz_policy, below_wid, wid);
@@ -624,8 +622,9 @@ static void __do_recycle(app_group_context_t *context)
 
 void app_group_init()
 {
-	app_group_hash = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL,
-			NULL);
+	_wayland_add_registry_listener(&registry_listener, NULL);
+	app_group_hash = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+			NULL, NULL);
 }
 
 void app_group_remove(int pid)
