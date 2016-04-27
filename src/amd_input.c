@@ -28,18 +28,18 @@
 #include "amd_config.h"
 #include "amd_util.h"
 #include "amd_input.h"
+#include "amd_wayland.h"
 
 #define TIMEOUT_VAL 1000
 
-extern int _wl_is_initialized(void);
-
+static bool add_listener_cb = false;
 static bool locked = false;
 static bool init_done = false;
 static guint timer;
-struct tizen_keyrouter *keyrouter;
-struct tizen_input_device_manager *input_devmgr;
-struct wl_display *display;
-struct wl_registry *registry;
+static struct tizen_keyrouter *keyrouter;
+static struct tizen_input_device_manager *input_devmgr;
+static struct wl_display *display;
+static struct wl_seat *seat;
 struct xkb_context *g_ctx;
 struct xkb_keymap *g_keymap;
 struct wl_keyboard *keyboard;
@@ -113,42 +113,38 @@ static const struct wl_keyboard_listener keyboard_listener = {
 	.modifiers = __keyboard_modifiers
 };
 
-static void __global_registry_handler(void * data,
-					struct wl_registry * registry,
-					uint32_t id,
-					const char * interface, uint32_t version)
+static void __global_registry_handler(void *data, struct wl_registry *registry,
+		uint32_t id, const char *interface, uint32_t version)
 {
 	if (interface == NULL)
 		return;
 
 	if (strncmp(interface, "tizen_input_device_manager", 12) == 0) {
-		input_devmgr = wl_registry_bind(registry, id,
-				&tizen_input_device_manager_interface, 1);
-		_D("input_devmgr = %p", input_devmgr);
+		if (!input_devmgr) {
+			input_devmgr = wl_registry_bind(registry, id,
+					&tizen_input_device_manager_interface,
+					1);
+			_D("input_devmgr = %p", input_devmgr);
+		}
 	} else if (strncmp(interface, "tizen_keyrouter", 12) == 0) {
-		keyrouter = wl_registry_bind(registry, id, &tizen_keyrouter_interface, 1);
-		_D("keyrouter = %p", keyrouter);
+		if (!keyrouter) {
+			keyrouter = wl_registry_bind(registry, id,
+					&tizen_keyrouter_interface, 1);
+			_D("keyrouter = %p", keyrouter);
+		}
 	} else if (strncmp(interface, "wl_seat", 7) == 0) {
-		struct wl_seat *seat = wl_registry_bind(registry, id, &wl_seat_interface, 1);
-		if (seat)
-			_D("Succeed to bind wl_seat_interface!");
+		if (!seat) {
+			seat = wl_registry_bind(registry, id, &wl_seat_interface, 1);
+			if (!seat)
+				return;
 
-		keyboard = wl_seat_get_keyboard(seat);
-		wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
-		_D("keyboard = %p", keyboard);
+			_D("Succeed to bind wl_seat_interface!");
+			keyboard = wl_seat_get_keyboard(seat);
+			wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
+			_D("keyboard = %p", keyboard);
+		}
 	}
 }
-
-static void __global_registry_remover(void * data,
-					struct wl_registry * registry,
-					uint32_t id)
-{
-}
-
-static const struct wl_registry_listener registry_listener = {
-	__global_registry_handler,
-	__global_registry_remover
-};
 
 static gboolean __timeout_handler(void *data)
 {
@@ -240,10 +236,12 @@ static void __do_keyungrab(const char *keyname)
 
 static int __xkb_init(void)
 {
-	g_ctx = xkb_context_new(0);
 	if (!g_ctx) {
-		_E("Failed to get xkb_context");
-		return -1;
+		g_ctx = xkb_context_new(0);
+		if (!g_ctx) {
+			_E("Failed to get xkb_context");
+			return -1;
+		}
 	}
 
 	return 0;
@@ -295,24 +293,23 @@ static struct tizen_input_device_manager_listener input_devmgr_listener = {
 
 int _input_init(void)
 {
-	if (!_wl_is_initialized())
-		return -1;
+	if (!add_listener_cb) {
+		_wayland_add_listener_cb(__global_registry_handler, NULL);
+		add_listener_cb = true;
+	}
 
-	display = wl_display_connect(NULL);
 	if (!display) {
-		_E("Failed to connect to wayland compositor");
-		return -1;
+		display = _wayland_get_display();
+		if (!display) {
+			_E("Failed to connect to wayland compositor");
+			return -1;
+		}
 	}
 
 	if (__xkb_init() < 0)
 		return -1;
 
 	_D("Connected to wayland compositor!");
-
-	registry = wl_display_get_registry(display);
-	wl_registry_add_listener(registry, &registry_listener, NULL);
-	wl_display_flush(display);
-	wl_display_roundtrip(display);
 
 	if (input_devmgr == NULL) {
 		_E("input_devmgr is null");
@@ -355,15 +352,6 @@ int _input_fini(void)
 		keyboard = NULL;
 	}
 
-	if (registry) {
-		wl_registry_destroy(registry);
-		registry = NULL;
-	}
-
-	if (display) {
-		wl_display_disconnect(display);
-		display = NULL;
-	}
 	return 0;
 }
 

@@ -54,6 +54,7 @@ ADD_EXECUTABLE(amd
 	src/amd_input.c
 	src/amd_suspend.c
 	src/amd_signal.c
+	src/amd_wayland.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")
