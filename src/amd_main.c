@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
-#include <sys/inotify.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -47,12 +46,12 @@
 #include "amd_splash_screen.h"
 #include "amd_input.h"
 #include "amd_signal.h"
+#include "amd_wayland.h"
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
 #define AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL "syspopup_launch_request"
-#define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
 #define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
 #define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
@@ -64,18 +63,7 @@ struct restart_info {
 	guint timer;
 };
 
-struct wl_watch {
-	int fd;
-	int wd_wl;
-	int wd_wm;
-	GIOChannel *io;
-	guint wid;
-};
-
 static GHashTable *restart_tbl;
-static int wm_ready = 0;
-static int wl_0_ready = 0;
-static int wl_initialized = 0;
 
 static gboolean __restart_timeout_handler(void *data)
 {
@@ -364,141 +352,6 @@ static int __syspopup_dbus_signal_handler_init(void)
 	return 0;
 }
 
-int _wl_is_initialized(void)
-{
-	return wl_initialized;
-}
-
-static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond, gpointer data)
-{
-	char buf[INOTIFY_BUF];
-	ssize_t len = 0;
-	int i = 0;
-	struct inotify_event *event;
-	char *p;
-	int fd = g_io_channel_unix_get_fd(io);
-
-	len = read(fd, buf, sizeof(buf));
-	if (len < 0) {
-		_E("Failed to read");
-		return TRUE;
-	}
-
-	while (i < len) {
-		event = (struct inotify_event *)&buf[i];
-		if (event->len) {
-			p = event->name;
-			if (p &&
-				!strncmp(p, "wayland-0", strlen("wayland-0"))) {
-				_D("%s is created", p);
-				wl_0_ready = 1;
-			} else if (p &&
-				!strncmp(p, ".wm_ready", strlen(".wm_ready"))) {
-				_D("%s is created", p);
-				wm_ready = 1;
-			}
-
-			if (wm_ready && wl_0_ready) {
-				wl_initialized = 1;
-				return FALSE;
-			}
-		}
-		i += offsetof(struct inotify_event, name) + event->len;
-	}
-
-	return TRUE;
-}
-
-static void __wl_watch_destroy_cb(gpointer data)
-{
-	struct wl_watch *watch = (struct wl_watch *)data;
-
-	if (watch == NULL)
-		return;
-
-	g_io_channel_unref(watch->io);
-
-	if (watch->wd_wm)
-		inotify_rm_watch(watch->fd, watch->wd_wm);
-	if (watch->wd_wl)
-		inotify_rm_watch(watch->fd, watch->wd_wl);
-	close(watch->fd);
-	free(watch);
-}
-
-static void __init_wl(void)
-{
-	char buf[PATH_MAX];
-	struct wl_watch *watch;
-
-	snprintf(buf, sizeof(buf), "/run/user/%d/wayland-0", getuid());
-	if (access(buf, F_OK) == 0) {
-		_D("%s exists", buf);
-		wl_0_ready = 1;
-	}
-
-	if (access("/run/.wm_ready", F_OK) == 0) {
-		_D("/run/.wm_ready exists");
-		wm_ready = 1;
-	}
-
-	if (wm_ready && wl_0_ready) {
-		wl_initialized = 1;
-		return;
-	}
-
-	watch = (struct wl_watch *)calloc(1, sizeof(struct wl_watch));
-	if (watch == NULL) {
-		_E("out of memory");
-		return;
-	}
-
-	watch->fd = inotify_init();
-	if (watch->fd < 0) {
-		_E("Failed to initialize inotify");
-		free(watch);
-		return;
-	}
-
-	if (!wl_0_ready) {
-		snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
-		watch->wd_wl = inotify_add_watch(watch->fd, buf, IN_CREATE);
-		if (watch->wd_wl < 0) {
-			_E("Failed to add inotify watch");
-			close(watch->fd);
-			free(watch);
-			return;
-		}
-	}
-
-	if (!wm_ready) {
-		watch->wd_wm = inotify_add_watch(watch->fd, "/run", IN_CREATE);
-		if (watch->wd_wm < 0) {
-			_E("Failed to add inotify watch");
-			if (watch->wd_wl)
-				inotify_rm_watch(watch->fd, watch->wd_wl);
-			close(watch->fd);
-			free(watch);
-			return;
-		}
-	}
-
-	watch->io = g_io_channel_unix_new(watch->fd);
-	if (watch->io == NULL) {
-		_E("Failed to create GIOChannel");
-		if (watch->wd_wm)
-			inotify_rm_watch(watch->fd, watch->wd_wm);
-		if (watch->wd_wl)
-			inotify_rm_watch(watch->fd, watch->wd_wl);
-		close(watch->fd);
-		free(watch);
-		return;
-	}
-
-	watch->wid = g_io_add_watch_full(watch->io, G_PRIORITY_DEFAULT,
-			G_IO_IN, __wl_monitor_cb, watch, __wl_watch_destroy_cb);
-}
-
 static int __init(void)
 {
 	int r;
@@ -522,7 +375,6 @@ static int __init(void)
 		return -1;
 	}
 
-	__init_wl();
 	_request_init();
 	_status_init();
 	app_group_init();
@@ -533,6 +385,7 @@ static int __init(void)
 	_launch_init();
 	_splash_screen_init();
 	_input_init();
+	_wayland_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		 _E("__syspopup_dbus_signal_handler_init failed");

@@ -24,6 +24,9 @@
 #include <aul_svc.h>
 #include <bundle_internal.h>
 #include <aul_sock.h>
+#include <wayland-client.h>
+#include <wayland-tbm-client.h>
+#include <tizen-extension-client-protocol.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -35,42 +38,31 @@
 #include "amd_appinfo.h"
 #include "amd_share.h"
 #include "amd_suspend.h"
+#include "amd_wayland.h"
 
 #define APP_SVC_K_LAUNCH_MODE   "__APP_SVC_LAUNCH_MODE__"
 
 #include <wayland-client.h>
 #include <tizen-extension-client-protocol.h>
+
+static int add_listen_cb;
+static struct wl_display *display;
 static struct tizen_policy *tz_policy;
 
-extern int _wl_is_initialized(void);
-
-static void _reg_handle_global(void *data, struct wl_registry *reg,
+static void __reg_handle_global(void *data, struct wl_registry *reg,
 		uint32_t id, const char *interface, uint32_t ver)
 {
 	if (!strcmp(interface, "tizen_policy")) {
-		tz_policy = wl_registry_bind(reg,
-				id,
-				&tizen_policy_interface,
-				1);
+		if (!tz_policy)
+			tz_policy = wl_registry_bind(reg, id,
+					&tizen_policy_interface, 1);
 	}
 }
-
-static void _reg_handle_global_remove(void *data, struct wl_registry *reg,
-		uint32_t id)
-{
-	/* do nothing */
-}
-
-static const struct wl_registry_listener reg_listener = {
-	_reg_handle_global,
-	_reg_handle_global_remove
-};
 
 static GHashTable *app_group_hash = NULL;
 static int dead_pid = -1;
 static int focused_leader_pid = -1;
 static GList *recycle_bin = NULL;
-struct wl_display *display;
 
 extern char *home_appid;
 
@@ -88,36 +80,23 @@ typedef struct _app_group_context_t {
 	app_group_launch_mode launch_mode;
 } app_group_context_t;
 
-static int __wl_init()
+static int __wl_init(void)
 {
-	struct wl_registry *reg;
-
-	if (!_wl_is_initialized())
-		return -1;
-
-	display = wl_display_connect(NULL);
-
-	if (display == NULL) {
-		_E("display is null");
-		return -1;
+	if (!add_listen_cb) {
+		_wayland_add_listen_cb(__reg_handle_global, NULL);
+		add_listen_cb = 1;
 	}
 
-	reg = wl_display_get_registry(display);
-	if (reg == NULL) {
-		_E("registry is null");
-		wl_display_disconnect(display);
-		return -1;
+	if (!display) {
+		display = _wayland_get_display();
+		if (!display) {
+			_E("Failed to get display");
+			return -1;
+		}
 	}
 
-	wl_registry_add_listener(reg, &reg_listener, NULL);
-	wl_display_roundtrip(display);
-
-	if (!tz_policy) {
-		_E("ERR: no tizen_policy global interface");
-		wl_registry_destroy(reg);
-		wl_display_disconnect(display);
+	if (!tz_policy)
 		return -1;
-	}
 
 	return 0;
 }
@@ -624,6 +603,7 @@ static void __do_recycle(app_group_context_t *context)
 
 void app_group_init()
 {
+	__wl_init();
 	app_group_hash = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL,
 			NULL);
 }
