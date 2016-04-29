@@ -30,15 +30,18 @@ static GHashTable *proc_info_tbl = NULL;
 
 static void __destroy_proc_info_value(gpointer data)
 {
-	proc_info_t* proc = (proc_info_t *)data;
+	proc_info_t *proc = (proc_info_t *)data;
 	if (proc)
 		free(proc);
 }
 
 void _suspend_init(void)
 {
-	if (!proc_info_tbl)
-		proc_info_tbl = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, __destroy_proc_info_value);
+	if (!proc_info_tbl) {
+		proc_info_tbl = g_hash_table_new_full(g_direct_hash,
+				g_direct_equal, NULL,
+				__destroy_proc_info_value);
+	}
 
 	_D("_amd_proc_init done");
 }
@@ -49,7 +52,7 @@ void _suspend_fini(void)
 	_D("_amd_proc_fini done");
 }
 
-proc_info_t* __create_proc_info(int pid)
+proc_info_t *__create_proc_info(int pid)
 {
 	proc_info_t *proc = NULL;
 
@@ -70,7 +73,7 @@ proc_info_t* __create_proc_info(int pid)
 	return proc;
 }
 
-proc_info_t* __find_proc_info(int pid)
+proc_info_t *__find_proc_info(int pid)
 {
 	proc_info_t *proc = NULL;
 
@@ -79,7 +82,8 @@ proc_info_t* __find_proc_info(int pid)
 		return NULL;
 	}
 
-	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl, GINT_TO_POINTER(pid));
+	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl,
+			GINT_TO_POINTER(pid));
 	if (proc == NULL) {
 		_E("proc info not found");
 		return NULL;
@@ -88,7 +92,7 @@ proc_info_t* __find_proc_info(int pid)
 	return proc;
 }
 
-int __add_proc_info(proc_info_t* proc)
+int __add_proc_info(proc_info_t *proc)
 {
 	if (proc == NULL) {
 		_E("invalid proc info");
@@ -118,14 +122,15 @@ int _suspend_add_proc(int pid)
 
 int _suspend_remove_proc(int pid)
 {
-	proc_info_t* proc = NULL;
+	proc_info_t *proc = NULL;
 
 	if (pid < 1) {
 		_E("invalid pid");
 		return -1;
 	}
 
-	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl, GINT_TO_POINTER(pid));
+	proc = (proc_info_t *)g_hash_table_lookup(proc_info_tbl,
+			GINT_TO_POINTER(pid));
 	if (proc == NULL) {
 		_E("proc info not found");
 		return -1;
@@ -138,7 +143,7 @@ int _suspend_remove_proc(int pid)
 
 static gboolean __send_suspend_hint(gpointer data)
 {
-	proc_info_t* proc = NULL;
+	proc_info_t *proc = NULL;
 	int pid = GPOINTER_TO_INT(data);
 
 	proc = __find_proc_info(pid);
@@ -150,10 +155,10 @@ static gboolean __send_suspend_hint(gpointer data)
 	return FALSE;
 }
 
-void _suspend_add_timer(int pid, const struct appinfo* ai)
+void _suspend_add_timer(int pid, const struct appinfo *ai)
 {
 	int bg_allowed = 0x00;
-	proc_info_t* proc = NULL;
+	proc_info_t *proc = NULL;
 
 	bg_allowed = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
 	if (bg_allowed)
@@ -166,13 +171,15 @@ void _suspend_add_timer(int pid, const struct appinfo* ai)
 			__add_proc_info(proc);
 	}
 
-	if (proc)
-		proc->timer_id = g_timeout_add_seconds(10, __send_suspend_hint, GINT_TO_POINTER(pid));
+	if (proc) {
+		proc->timer_id = g_timeout_add_seconds(10, __send_suspend_hint,
+				GINT_TO_POINTER(pid));
+	}
 }
 
 void _suspend_remove_timer(int pid)
 {
-	proc_info_t* proc = NULL;
+	proc_info_t *proc = NULL;
 
 	proc = __find_proc_info(pid);
 	if (proc && proc->timer_id > 0) {
