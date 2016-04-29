@@ -18,7 +18,9 @@
 
 int _signal_init(void);
 int _signal_send_watchdog(int pid, int signal_num);
-int _signal_send_proc_prelaunch(const char *appid, const char *pkgid, int attribute, int category);
+int _signal_send_proc_prelaunch(const char *appid, const char *pkgid,
+		int attribute, int category);
 int _signal_send_proc_suspend(int pid);
 int _signal_send_tep_mount(char *mnt_path[]);
 int _signal_send_tep_unmount(const char *mnt_path);
+

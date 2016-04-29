@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-#include <gio/gio.h>
 #include <sys/stat.h>
+
+#include <gio/gio.h>
 #include <app_signal.h>
+
 #include "amd_util.h"
 #include "amd_signal.h"
 
@@ -25,6 +27,7 @@ static GDBusConnection *conn;
 int _signal_init(void)
 {
 	GError *err = NULL;
+
 	if (!conn) {
 		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 		if (!conn) {
@@ -75,9 +78,11 @@ int _signal_send_watchdog(int pid, int signal_num)
 	return 0;
 }
 
-int _signal_send_proc_prelaunch(const char *appid, const char *pkgid, int attribute, int category)
+int _signal_send_proc_prelaunch(const char *appid, const char *pkgid,
+		int attribute, int category)
 {
 	GError *err = NULL;
+	GVariant *param;
 
 	if (conn == NULL) {
 		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
@@ -88,12 +93,13 @@ int _signal_send_proc_prelaunch(const char *appid, const char *pkgid, int attrib
 		}
 	}
 
+	param = g_variant_new("(ssii)", appid, pkgid, attribute, category);
 	if (g_dbus_connection_emit_signal(conn,
 					NULL,
 					RESOURCED_PROC_OBJECT,
 					RESOURCED_PROC_INTERFACE,
 					RESOURCED_PROC_PRELAUNCH_SIGNAL,
-					g_variant_new("(ssii)", appid, pkgid, attribute, category),
+					param,
 					&err) == FALSE) {
 		_E("g_dbus_connection_emit_signal() is failed: %s",
 					err->message);
@@ -108,7 +114,8 @@ int _signal_send_proc_prelaunch(const char *appid, const char *pkgid, int attrib
 		return -1;
 	}
 
-	_W("send a prelaunch signal done: appid(%s) pkgid(%s) attribute(%x) category(%x)",
+	_W("send a prelaunch signal done: "
+			"appid(%s) pkgid(%s) attribute(%x) category(%x)",
 			appid, pkgid, attribute, category);
 
 	return 0;
@@ -249,5 +256,4 @@ int _signal_send_proc_suspend(int pid)
 
 	return 0;
 }
-
 
