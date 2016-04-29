@@ -134,18 +134,20 @@ static struct appinfo_splash_image *__get_splash_image_info(
 	if (tbl == NULL)
 		return NULL;
 
-	if (cmd == APP_OPEN)
+	if (cmd == APP_OPEN) {
 		return (struct appinfo_splash_image *)g_hash_table_lookup(
 				tbl, "launch-effect");
+	}
 
 	operation = bundle_get_val(kb, AUL_SVC_K_OPERATION);
 	if (operation == NULL)
 		return NULL;
 
 	if ((strcmp(operation, APP_CONTROL_OPERATION_MAIN) == 0)
-		|| (strcmp(operation, AUL_SVC_OPERATION_DEFAULT) == 0))
+		|| (strcmp(operation, AUL_SVC_OPERATION_DEFAULT) == 0)) {
 		return (struct appinfo_splash_image *)g_hash_table_lookup(
 				tbl, "launch-effect");
+	}
 
 	return (struct appinfo_splash_image *)g_hash_table_lookup(
 				tbl, operation);
@@ -237,9 +239,10 @@ static void __wl_listener_cb(void *data, struct wl_registry *registry,
 	if (interface && strncmp(interface, "tizen_launchscreen",
 				strlen("tizen_launchscreen")) == 0) {
 		_D("interface: %s", interface);
-		if (!tz_launchscreen)
+		if (!tz_launchscreen) {
 			tz_launchscreen = wl_registry_bind(registry, id,
 					&tizen_launchscreen_interface, 1);
+		}
 	}
 }
 
@@ -309,13 +312,15 @@ static void __rotation_changed_cb(sensor_t sensor, unsigned int event_type,
 static void __auto_rotate_screen_cb(keynode_t *key, void *data)
 {
 	rotation.auto_rotate = vconf_keynode_get_bool(key);
-	if (!rotation.auto_rotate)
+	if (!rotation.auto_rotate) {
 		_D("auto_rotate: %d, angle: %d",
 				rotation.auto_rotate, rotation.angle);
+	}
 }
 
 static int __init_rotation(void)
 {
+	int ret;
 	bool r;
 	sensor_t sensor = sensord_get_sensor(AUTO_ROTATION_SENSOR);
 
@@ -347,13 +352,17 @@ static int __init_rotation(void)
 		return -1;
 	}
 
-	if (vconf_get_bool(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
-				&rotation.auto_rotate))
+	ret = vconf_get_bool(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
+			&rotation.auto_rotate);
+	if (ret != VCONF_OK)
 		rotation.auto_rotate = false;
-	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
-				__auto_rotate_screen_cb, NULL) != 0)
+
+	ret = vconf_notify_key_changed(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
+			__auto_rotate_screen_cb, NULL);
+	if (ret != 0) {
 		_E("Failed to register callback for %s",
 				VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL);
+	}
 
 	rotation_initialized = 1;
 
@@ -371,3 +380,4 @@ int _splash_screen_init(void)
 
 	return 0;
 }
+

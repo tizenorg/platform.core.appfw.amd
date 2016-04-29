@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-typedef struct request_s* request_h;
+typedef struct request_s *request_h;
 
 int _request_init(void);
 int _request_send_result(request_h req, int res);

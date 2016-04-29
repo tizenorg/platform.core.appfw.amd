@@ -18,11 +18,12 @@
 
 #include <stdbool.h>
 #include <malloc.h>
+#include <sys/mman.h>
+
+#include <glib.h>
 #include <aul.h>
 #include <wayland-client.h>
 #include <tizen-extension-client-protocol.h>
-#include <glib.h>
-#include <sys/mman.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "amd_config.h"
@@ -51,7 +52,7 @@ typedef struct _keycode_map {
 } keycode_map;
 
 static void __keyboard_keymap(void *data, struct wl_keyboard *keyboard,
-				uint32_t format, int fd, uint32_t size)
+		uint32_t format, int fd, uint32_t size)
 {
 	char *map = NULL;
 
@@ -72,37 +73,40 @@ static void __keyboard_keymap(void *data, struct wl_keyboard *keyboard,
 		return;
 	}
 
-	g_keymap = xkb_map_new_from_string(g_ctx, map, XKB_KEYMAP_FORMAT_TEXT_V1, 0);
-
+	g_keymap = xkb_map_new_from_string(g_ctx, map,
+			XKB_KEYMAP_FORMAT_TEXT_V1, 0);
 	munmap(map, size);
 	if (!g_keymap)
 		_E("Failed to get keymap from fd(%d)", fd);
 }
 
 static void __keyboard_enter(void *data, struct wl_keyboard *keyboard,
-				uint32_t serial, struct wl_surface *surface, struct wl_array *keys)
+		uint32_t serial, struct wl_surface *surface,
+		struct wl_array *keys)
 {
 	_D("serial=%d", serial);
 }
 
 static void __keyboard_leave(void *data, struct wl_keyboard *keyboard,
-				uint32_t serial, struct wl_surface *surface)
+		uint32_t serial, struct wl_surface *surface)
 {
 	_D("serial=%d", serial);
 }
 
 static void __keyboard_key(void *data, struct wl_keyboard *keyboard,
-				uint32_t serial, uint32_t time, uint32_t key, uint32_t state_w)
+		uint32_t serial, uint32_t time, uint32_t key, uint32_t state_w)
 {
-	_D("serial=%d, time=%d, key=%d, state_w=%d", serial, time, key, state_w);
+	_D("serial=%d, time=%d, key=%d, state_w=%d", serial, time, key,
+			state_w);
 }
 
 static void __keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
-				uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
-				uint32_t mods_locked, uint32_t group)
+		uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
+		uint32_t mods_locked, uint32_t group)
 {
-	_D("serial=%d, mods_depressed=%d, mods_latched=%d, mods_locked=%d, group=%d",
-		serial, mods_depressed, mods_latched, mods_locked, group);
+	_D("serial=%d, mods_depressed=%d, mods_latched=%d, mods_locked=%d, "
+			"group=%d", serial, mods_depressed, mods_latched,
+			mods_locked, group);
 }
 
 static const struct wl_keyboard_listener keyboard_listener = {
@@ -134,13 +138,15 @@ static void __global_registry_handler(void *data, struct wl_registry *registry,
 		}
 	} else if (strcmp(interface, "wl_seat") == 0) {
 		if (!seat) {
-			seat = wl_registry_bind(registry, id, &wl_seat_interface, 1);
+			seat = wl_registry_bind(registry, id,
+					&wl_seat_interface, 1);
 			if (!seat)
 				return;
 
 			_D("Succeed to bind wl_seat_interface!");
 			keyboard = wl_seat_get_keyboard(seat);
-			wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
+			wl_keyboard_add_listener(keyboard, &keyboard_listener,
+					NULL);
 			_D("keyboard = %p", keyboard);
 		}
 	}
@@ -178,7 +184,7 @@ static gboolean __timeout_handler(void *data)
 }
 
 static void __find_keycode(struct xkb_keymap *keymap, xkb_keycode_t key,
-				void *data)
+		void *data)
 {
 	keycode_map *found_keycodes = (keycode_map *)data;
 	xkb_keysym_t keysym = found_keycodes->keysym;
@@ -186,37 +192,35 @@ static void __find_keycode(struct xkb_keymap *keymap, xkb_keycode_t key,
 	const xkb_keysym_t *syms_out = NULL;
 
 	nsyms = xkb_keymap_key_get_syms_by_level(keymap, key, 0, 0, &syms_out);
-	if (nsyms && syms_out) {
-		if (*syms_out == keysym) {
-			found_keycodes->nkeycodes++;
-			found_keycodes->keycodes = realloc(found_keycodes->keycodes,
-						sizeof(int) * found_keycodes->nkeycodes);
-			found_keycodes->keycodes[found_keycodes->nkeycodes - 1] = key;
-		}
+	if (nsyms && syms_out && *syms_out == keysym) {
+		found_keycodes->nkeycodes++;
+		found_keycodes->keycodes = realloc(found_keycodes->keycodes,
+				sizeof(int) * found_keycodes->nkeycodes);
+		found_keycodes->keycodes[found_keycodes->nkeycodes - 1] = key;
 	}
 }
 
 static int __xkb_keycode_from_keysym(struct xkb_keymap *keymap,
-					xkb_keysym_t keysym,
-					xkb_keycode_t **keycodes)
+		xkb_keysym_t keysym, xkb_keycode_t **keycodes)
 {
 	keycode_map found_keycodes = {0,};
 	found_keycodes.keysym = keysym;
-	xkb_keymap_key_for_each(g_keymap, __find_keycode, &found_keycodes);
 
+	xkb_keymap_key_for_each(g_keymap, __find_keycode, &found_keycodes);
 	*keycodes = found_keycodes.keycodes;
+
 	return found_keycodes.nkeycodes;
 }
 
 static void __keygrab_request(struct tizen_keyrouter *tizen_keyrouter,
-				struct wl_surface *surface, uint32_t key, uint32_t mode)
+		struct wl_surface *surface, uint32_t key, uint32_t mode)
 {
 	tizen_keyrouter_set_keygrab(tizen_keyrouter, surface, key, mode);
 	_D("request set_keygrab (key:%d, mode:%d)!", key, mode);
 }
 
 static void __keyungrab_request(struct tizen_keyrouter *tizen_keyrouter,
-				struct wl_surface *surface, uint32_t key)
+		struct wl_surface *surface, uint32_t key)
 {
 	tizen_keyrouter_unset_keygrab(tizen_keyrouter, surface, key);
 	_D("request unset_keygrab (key:%d)!", key);
@@ -233,7 +237,8 @@ static void __do_keygrab(const char *keyname, uint32_t mode)
 	nkeycodes = __xkb_keycode_from_keysym(g_keymap, keysym, &keycodes);
 
 	for (i = 0; i < nkeycodes; i++) {
-		_D("%s's keycode is %d (nkeycode: %d)", keyname, keycodes[i], nkeycodes);
+		_D("%s's keycode is %d (nkeycode: %d)",
+				keyname, keycodes[i], nkeycodes);
 		__keygrab_request(keyrouter, NULL, keycodes[i], mode);
 	}
 	free(keycodes);
@@ -251,7 +256,8 @@ static void __do_keyungrab(const char *keyname)
 	nkeycodes = __xkb_keycode_from_keysym(g_keymap, keysym, &keycodes);
 
 	for (i = 0; i < nkeycodes; i++) {
-		_D("%s's keycode is %d (nkeycode: %d)\n", keyname, keycodes[i], nkeycodes);
+		_D("%s's keycode is %d (nkeycode: %d)\n",
+				keyname, keycodes[i], nkeycodes);
 		__keyungrab_request(keyrouter, NULL, keycodes[i]);
 	}
 	free(keycodes);
@@ -280,30 +286,30 @@ static void __xkb_fini(void)
 }
 
 static void __cb_device_add(void *data,
-				struct tizen_input_device_manager *tizen_input_device_manager,
-				uint32_t serial, const char *name, struct tizen_input_device *device,
-				struct wl_seat *seat)
+		struct tizen_input_device_manager *tizen_input_device_manager,
+		uint32_t serial, const char *name,
+		struct tizen_input_device *device, struct wl_seat *seat)
 {
 	_D("device is added!", name);
 }
 
 static void __cb_device_remove(void *data,
-				struct tizen_input_device_manager *tizen_input_device_manager,
-				uint32_t serial, const char *name, struct tizen_input_device *device,
-				struct wl_seat *seat)
+		struct tizen_input_device_manager *tizen_input_device_manager,
+		uint32_t serial, const char *name,
+		struct tizen_input_device *device, struct wl_seat *seat)
 {
 	_D("%s device is removed!", name);
 }
 
 static void __cb_error(void *data,
-			struct tizen_input_device_manager *tizen_input_device_manager,
-			uint32_t errorcode)
+		struct tizen_input_device_manager *tizen_input_device_manager,
+		uint32_t errorcode)
 {
 	_E("error: %d", errorcode);
 }
 
 static void __cb_block_expired(void *data,
-				struct tizen_input_device_manager *tizen_input_device_manager)
+		struct tizen_input_device_manager *tizen_input_device_manager)
 {
 	_D("block expired");
 }

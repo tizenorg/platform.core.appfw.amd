@@ -20,15 +20,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+
 #include <aul.h>
 #include <rua.h>
 #include <pkgmgr-info.h>
 #include <glib.h>
-#include <stdlib.h>
 #include <tzplatform_config.h>
 #include <bundle.h>
-#include <stdbool.h>
 #include <systemd/sd-daemon.h>
 #include <gio/gio.h>
 
@@ -98,7 +99,8 @@ static bool __check_restart(const char *appid)
 		_D("ri (%x)", ri);
 		_D("appid (%s)", appid);
 
-		ri->timer = g_timeout_add(10 * 1000, __restart_timeout_handler, ri);
+		ri->timer = g_timeout_add(10 * 1000, __restart_timeout_handler,
+				ri);
 	} else {
 		ri->count++;
 		_D("count (%d)", ri->count);
@@ -306,7 +308,7 @@ static void __syspopup_signal_handler(GDBusConnection *conn,
 	g_variant_get(parameters, "(ss)", &appid, &b_raw);
 	_D("syspopup launch request: %s", appid);
 
-	kb = bundle_decode((const bundle_raw *)b_raw, strlen(b_raw));
+	kb = bundle_decode((bundle_raw *)b_raw, strlen(b_raw));
 	if (kb) {
 		if (_start_app_local_with_bundle(getuid(), appid, kb) < 0)
 			_E("syspopup launch request failed: %s", appid);
@@ -451,3 +453,4 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+

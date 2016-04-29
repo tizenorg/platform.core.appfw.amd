@@ -94,9 +94,10 @@ static void __wl_listener_cb(void *data, struct wl_registry *reg,
 	for (iter = g_list_first(wl_list); iter; iter = g_list_next(iter)) {
 		listener = (struct wl_listener *)iter->data;
 		if (listener && listener->registry_listener &&
-				listener->registry_listener->global)
+				listener->registry_listener->global) {
 			listener->registry_listener->global(listener->data,
 					reg, id, interface, version);
+		}
 	}
 }
 
@@ -110,9 +111,10 @@ static void __wl_listener_remove_cb(void *data, struct wl_registry *reg,
 	while (iter) {
 		listener = (struct wl_listener *)iter->data;
 		if (listener && listener->registry_listener &&
-				listener->registry_listener->global_remove)
+				listener->registry_listener->global_remove) {
 			listener->registry_listener->global_remove(
 					listener->data, reg, id);
+		}
 
 		iter = g_list_next(iter);
 		wl_list = g_list_remove(wl_list, listener);
