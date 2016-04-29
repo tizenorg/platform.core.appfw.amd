@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -26,14 +26,14 @@ typedef enum {
 	APP_GROUP_LAUNCH_MODE_SINGLETON,
 } app_group_launch_mode;
 
-void app_group_init();
+void app_group_init(void);
 void app_group_remove(int pid);
 int app_group_get_window(int pid);
 int app_group_set_window(int pid, int wid);
 void app_group_get_leader_pids(int *cnt, int **pids);
 void app_group_get_group_pids(int leader_pid, int *cnt, int **pids);
 gboolean app_group_is_leader_pid(int pid);
-gboolean app_group_is_group_app(bundle* kb);
+gboolean app_group_is_group_app(bundle *kb);
 gboolean app_group_is_sub_app(int pid);
 void app_group_reroute(int pid);
 int app_group_get_caller_pid();
@@ -46,9 +46,12 @@ int app_group_get_fg_flag(int pid);
 int app_group_set_hint(int pid, bundle *kb);
 int app_group_find_second_leader(int lpid);
 void app_group_remove_leader_pid(int lpid);
-int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach, int *lpid, app_group_launch_mode *mode);
-void app_group_start_app(int pid, bundle *b, int lpid, gboolean can_attach, app_group_launch_mode mode);
-int app_group_find_singleton(const char *appid, int *found_pid, int *found_lpid);
+int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
+		int *lpid, app_group_launch_mode *mode);
+void app_group_start_app(int pid, bundle *b, int lpid, gboolean can_attach,
+		app_group_launch_mode mode);
+int app_group_find_singleton(const char *appid, int *found_pid,
+		int *found_lpid);
 int app_group_can_reroute(int pid);
 void app_group_lower(int pid, int *exit);
 void app_group_restart_app(int pid, bundle *b);
@@ -57,6 +60,4 @@ void app_group_get_idle_pids(int *cnt, int **pids);
 void app_group_remove_from_recycle_bin(int pid);
 int app_group_get_next_caller_pid(int pid);
 int app_group_activate_below(int pid, const char *below_appid);
-
-
 

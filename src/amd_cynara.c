@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 #define _GNU_SOURCE
 #include <malloc.h>
+
 #include <cynara-client.h>
 #include <cynara-creds-socket.h>
 #include <cynara-session.h>
@@ -31,14 +32,22 @@
 #include "amd_config.h"
 #include "amd_util.h"
 
-#define PRIVILEGE_WIDGET_VIEWER "http://tizen.org/privilege/widget.viewer"
-#define PRIVILEGE_APPMANAGER_LAUNCH "http://tizen.org/privilege/appmanager.launch"
-#define PRIVILEGE_APPMANAGER_KILL "http://tizen.org/privilege/appmanager.kill"
-#define PRIVILEGE_APPMANAGER_KILL_BGAPP "http://tizen.org/privilege/appmanager.kill.bgapp"
-#define PRIVILEGE_DOWNLOAD "http://tizen.org/privilege/download"
-#define PRIVILEGE_CALL "http://tizen.org/privilege/call"
-#define PRIVILEGE_PACKAGEMANAGER_INFO "http://tizen.org/privilege/packagemanager.info"
-#define PRIVILEGE_SYSTEM_SETTING "http://tizen.org/privilege/systemsettings.admin"
+#define PRIVILEGE_WIDGET_VIEWER \
+	"http://tizen.org/privilege/widget.viewer"
+#define PRIVILEGE_APPMANAGER_LAUNCH \
+	"http://tizen.org/privilege/appmanager.launch"
+#define PRIVILEGE_APPMANAGER_KILL \
+	"http://tizen.org/privilege/appmanager.kill"
+#define PRIVILEGE_APPMANAGER_KILL_BGAPP \
+	"http://tizen.org/privilege/appmanager.kill.bgapp"
+#define PRIVILEGE_DOWNLOAD \
+	"http://tizen.org/privilege/download"
+#define PRIVILEGE_CALL \
+	"http://tizen.org/privilege/call"
+#define PRIVILEGE_PACKAGEMANAGER_INFO \
+	"http://tizen.org/privilege/packagemanager.info"
+#define PRIVILEGE_SYSTEM_SETTING \
+	"http://tizen.org/privilege/systemsettings.admin"
 
 static cynara *r_cynara;
 
@@ -48,7 +57,8 @@ struct caller_info {
 	char *session;
 };
 
-typedef int (*checker_func)(struct caller_info *info, request_h req, void *data);
+typedef int (*checker_func)(struct caller_info *info, request_h req,
+		void *data);
 
 struct checker_info {
 	int cmd;
@@ -70,16 +80,17 @@ static const char *__convert_operation_to_privilege(const char *operation)
 
 static void __destroy_caller_info(struct caller_info *info)
 {
-	if (info) {
-		if (info->client)
-			free(info->client);
+	if (info)
+		return;
 
-		if (info->session)
-			free(info->session);
+	if (info->client)
+		free(info->client);
 
-		if (info->user)
-			free(info->user);
-	}
+	if (info->session)
+		free(info->session);
+
+	if (info->user)
+		free(info->user);
 }
 
 static int __get_caller_info_from_cynara(int sockfd, struct caller_info *info)
@@ -104,14 +115,16 @@ static int __get_caller_info_from_cynara(int sockfd, struct caller_info *info)
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT, &(info->user));
+	r = cynara_creds_socket_get_user(sockfd, USER_METHOD_DEFAULT,
+			&(info->user));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_cred_socket_get_user failed.");
 		return -1;
 	}
 
-	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT, &(info->client));
+	r = cynara_creds_socket_get_client(sockfd, CLIENT_METHOD_DEFAULT,
+			&(info->client));
 	if (r != CYNARA_API_SUCCESS) {
 		cynara_strerror(r, buf, MAX_LOCAL_BUFSZ);
 		_E("cynara_creds_socket_get_client failed.");
@@ -126,14 +139,17 @@ static int __check_privilege(struct caller_info *info, const char *privilege)
 	int ret;
 	char buf[MAX_LOCAL_BUFSZ];
 
-	ret = cynara_check(r_cynara, info->client, info->session, info->user, privilege);
+	ret = cynara_check(r_cynara, info->client, info->session, info->user,
+			privilege);
 	switch (ret) {
 	case CYNARA_API_ACCESS_ALLOWED:
-		_D("%s(%s) from user %s privilege %s allowed.", info->client, info->session, info->user, privilege);
+		_D("%s(%s) from user %s privilege %s allowed.", info->client,
+				info->session, info->user, privilege);
 		ret = 0;
 		break;
 	case CYNARA_API_ACCESS_DENIED:
-		_E("%s(%s) from user %s privilege %s denied.", info->client, info->session, info->user, privilege);
+		_E("%s(%s) from user %s privilege %s denied.", info->client,
+				info->session, info->user, privilege);
 		ret = -1;
 		break;
 	default:
@@ -151,7 +167,8 @@ static int __simple_checker(struct caller_info *info, request_h req, void *data)
 	return __check_privilege(info, (const char *)data);
 }
 
-static int __widget_viewer_checker(struct caller_info *info, request_h req, void *data)
+static int __widget_viewer_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	char *appid = NULL;
 	const char *apptype;
@@ -181,15 +198,17 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req, void
 		return -1;
 	}
 
-	if (!strcmp(apptype, APP_TYPE_WIDGET) || !strcmp(apptype, APP_TYPE_WATCH)) {
+	if (!strcmp(apptype, APP_TYPE_WIDGET) ||
+			!strcmp(apptype, APP_TYPE_WATCH))
 		return __check_privilege(info, PRIVILEGE_WIDGET_VIEWER);
-	} else {
-		_E("illegal app type of request: %s - only widget or watch apps are allowed", apptype);
-		return -1;
-	}
+
+	_E("illegal app type of request: %s - "
+			"only widget or watch apps are allowed", apptype);
+	return -1;
 }
 
-static int __appcontrol_checker(struct caller_info *info, request_h req, void *data)
+static int __appcontrol_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	bundle *appcontrol;
 	const char *op_priv = NULL;
@@ -220,7 +239,8 @@ static int __appcontrol_checker(struct caller_info *info, request_h req, void *d
 	return ret;
 }
 
-static int __com_create_checker(struct caller_info *info, request_h req, void *data)
+static int __com_create_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	char *privilege = NULL;
 	bundle *kb = _request_get_bundle(req);
@@ -232,7 +252,8 @@ static int __com_create_checker(struct caller_info *info, request_h req, void *d
 	return  __check_privilege(info, privilege);
 }
 
-static int __com_join_checker(struct caller_info *info, request_h req, void *data)
+static int __com_join_checker(struct caller_info *info, request_h req,
+		void *data)
 {
 	char *endpoint = NULL;
 	const char *privilege;
@@ -274,8 +295,10 @@ static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 	int i;
 
 	for (i = 0; i < checker_len; i++) {
-		if (checker_table[i].cmd == _request_get_cmd(req))
-			return checker_table[i].checker(info, req, checker_table[i].data);
+		if (checker_table[i].cmd == _request_get_cmd(req)) {
+			return checker_table[i].checker(info, req,
+					checker_table[i].data);
+		}
 	}
 
 	return 0;
@@ -335,3 +358,4 @@ void finish_cynara(void)
 
 	r_cynara = NULL;
 }
+

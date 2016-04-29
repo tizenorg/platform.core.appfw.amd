@@ -25,8 +25,9 @@
 typedef struct splash_image_s *splash_image_h;
 
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,
-				bundle *kb, int cmd);
+		bundle *kb, int cmd);
 void _splash_screen_send_image(splash_image_h si);
 void _splash_screen_send_pid(splash_image_h si, int pid);
 void _splash_screen_destroy_image(splash_image_h si);
 int _splash_screen_init(void);
+
