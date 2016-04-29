@@ -18,7 +18,8 @@
 
 #include "amd_appinfo.h"
 
-void _suspend_add_timer(int pid, const struct appinfo* ai);
+void _suspend_add_timer(int pid, const struct appinfo *ai);
 void _suspend_remove_timer(int pid);
 int _suspend_add_proc(int pid);
 int _suspend_remove_proc(int pid);
+

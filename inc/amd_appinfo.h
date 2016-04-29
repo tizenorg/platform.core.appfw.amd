@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Samsung Electronics Co., Ltd All Rights Reserved
+ * Copyright (c) 2015 - 2016 Samsung Electronics Co., Ltd All Rights Reserved
  *
  * Licensed under the Apache License, Version 2.0 (the License);
  * you may not use this file except in compliance with the License.
@@ -82,10 +82,13 @@ void appinfo_fini(void);
 int appinfo_insert(uid_t uid, const char *pkgid);
 struct appinfo *appinfo_find(uid_t caller_uid, const char *appid);
 const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type);
-const void *appinfo_get_ptr_value(const struct appinfo *c, enum appinfo_type type);
-int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type, int *val);
+const void *appinfo_get_ptr_value(const struct appinfo *c,
+		enum appinfo_type type);
+int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
+		int *val);
 int appinfo_set_value(struct appinfo *c, enum appinfo_type, const char *val);
 int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type, void *val);
 int appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val);
 void appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data);
 void appinfo_reload(void);
+

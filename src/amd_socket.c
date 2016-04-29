@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+
 #include <bundle.h>
 #include <systemd/sd-daemon.h>
 #include <aul_sock.h>
@@ -104,8 +105,8 @@ int _create_server_sock(void)
 	return fd;
 }
 
-static int __connect_client_sock(int fd, const struct sockaddr *saptr, socklen_t salen,
-		   int nsec)
+static int __connect_client_sock(int fd, const struct sockaddr *saptr,
+		socklen_t salen, int nsec)
 {
 	int flags;
 	int ret;
@@ -184,10 +185,11 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 	}
 
 	saddr.sun_family = AF_UNIX;
-	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s", uid, pad_type);
+	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s",
+			uid, pad_type);
  retry_con:
-	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr, sizeof(saddr),
-			100 * 1000);
+	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr,
+			sizeof(saddr), 100 * 1000);
 	if (ret < -1) {
 		_E("maybe peer not launched or peer daed\n");
 		if (retry > 0) {
@@ -255,3 +257,4 @@ void _send_result_to_client(int fd, int res)
 
 	close(fd);
 }
+
