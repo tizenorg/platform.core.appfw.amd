@@ -987,6 +987,7 @@ int _start_app(const char* appid, bundle* kb, uid_t caller_uid,
 	const char *component_type = NULL;
 	const char *process_pool = NULL;
 	const char *tep_name = NULL;
+	const char *mount_point = NULL;
 	const char *app_type = NULL;
 	const char *api_version = NULL;
 	int pid = -1;

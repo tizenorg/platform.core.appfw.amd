@@ -139,9 +139,9 @@ int _signal_send_tep_mount(char *mnt_path[])
 	}
 
 	msg = g_dbus_message_new_method_call(TEP_BUS_NAME,
-					TEP_OBJECT_PATH,
-					TEP_INTERFACE_NAME,
-					TEP_MOUNT_METHOD);
+					TZIP_OBJECT_PATH,
+					TZIP_INTERFACE_NAME,
+					TZIP_MOUNT_METHOD);
 	if (msg == NULL) {
 		_E("g_dbus_message_new_method_call() is failed.");
 		ret = -1;
@@ -169,7 +169,7 @@ func_out:
 	return ret;
 }
 
-int _signal_send_tep_unmount(const char *mnt_path)
+int _signal_send_unmount(const char *mnt_path)
 {
 	GError *err = NULL;
 	GDBusMessage *msg = NULL;
@@ -184,9 +184,9 @@ int _signal_send_tep_unmount(const char *mnt_path)
 	}
 
 	msg = g_dbus_message_new_method_call(TEP_BUS_NAME,
-					TEP_OBJECT_PATH,
-					TEP_INTERFACE_NAME,
-					TEP_UNMOUNT_METHOD);
+					TZIP_OBJECT_PATH,
+					TZIP_INTERFACE_NAME,
+					TZIP_UNMOUNT_METHOD);
 	if (msg == NULL) {
 		_E("g_dbus_message_new_method_call() is failed.");
 		return -1;

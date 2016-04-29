@@ -326,6 +326,22 @@ static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle, struct appinfo *
 	return 0;
 }
 
+static int __appinfo_add_mount_point(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
+{
+	char *mount_point = NULL;
+
+	if (pkgmgrinfo_appinfo_get_mount_point(handle, &mount_point) != PMINFO_R_OK) {
+		info->val[AIT_MOUNT_POINT] = NULL;
+	} else {
+		if (mount_point && strlen(mount_point) > 0)
+			info->val[AIT_MOUNT_POINT] = strdup(mount_point);
+		else
+			info->val[AIT_MOUNT_POINT] = NULL;
+	}
+
+	return 0;
+}
+
 static int __appinfo_add_storage_type(const pkgmgrinfo_appinfo_h handle, struct appinfo *info, void *data)
 {
 	pkgmgrinfo_installed_storage installed_storage;
@@ -567,6 +583,7 @@ static  appinfo_vft appinfo_table[AIT_MAX] = {
 	[AIT_POOL] = { __appinfo_add_pool, free },
 	[AIT_COMPTYPE] = { __appinfo_add_comptype, free },
 	[AIT_TEP] = { __appinfo_add_tep, free},
+	[AIT_MOUNT_POINT] = { __appinfo_mount_point, free},
 	[AIT_STORAGE_TYPE] = { __appinfo_add_storage_type, free },
 	[AIT_BG_CATEGORY] = { __appinfo_add_bg_category, NULL },
 	[AIT_LAUNCH_MODE] = { __appinfo_add_launch_mode, free },

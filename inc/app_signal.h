@@ -78,11 +78,11 @@
 #define PROC_TYPE_INCLUDE		"include"
 #define PROC_TYPE_WAKEUP		"wakeup"
 
-#define TEP_BUS_NAME "org.tizen.system.deviced"
-#define TEP_OBJECT_PATH "/Org/Tizen/System/DeviceD/Tzip"
-#define TEP_INTERFACE_NAME "org.tizen.system.deviced.Tzip"
-#define TEP_MOUNT_METHOD "Mount"
-#define TEP_UNMOUNT_METHOD "Unmount"
-#define TEP_IS_MOUNTED_METHOD "IsMounted"
+#define TZIP_BUS_NAME "org.tizen.system.deviced"
+#define TZIP_OBJECT_PATH "/Org/Tizen/System/DeviceD/Tzip"
+#define TZIP_INTERFACE_NAME "org.tizen.system.deviced.Tzip"
+#define TZIP_MOUNT_METHOD "Mount"
+#define TZIP_UNMOUNT_METHOD "Unmount"
+#define TZIP_IS_MOUNTED_METHOD "IsMounted"
 
 

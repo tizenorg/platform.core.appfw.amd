@@ -160,44 +160,19 @@ static bool __can_restart_app(const char *appid)
 	return false;
 }
 
-static void __send_unmount_request(int pid)
+static void __send_unmount_tep_request(const struct appinfo *ai, const char* path_app_root)
 {
-	const char *appid;
-	const char *tep_name;
-	const struct appinfo *ai;
-	char buf[PATH_MAX];
-	const char *global;
-	const char *pkgid;
 	const char *installed_storage;
-	const char *preload;
-	const char *path_app_root;
+	const char *tep_name;
+	char buf[PATH_MAX];
 	char *mnt_path = NULL;
 	struct stat link_buf;
 	int ret;
-
-	appid = _status_app_get_appid_bypid(pid);
-	if (appid == NULL)
-		return;
-
-	ai = appinfo_find(getuid(), appid);
-	if (ai == NULL)
-		return;
 
 	tep_name = appinfo_get_value(ai, AIT_TEP);
 	if (tep_name == NULL)
 		return;
 
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
-	preload = appinfo_get_value(ai, AIT_PRELOAD);
-	global = appinfo_get_value(ai, AIT_GLOBAL);
-	if (global && strncmp(global, "true", strlen("true")) == 0) {
-		if (preload && strncmp(preload, "true", strlen("true")) == 0)
-			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
-		else
-			path_app_root = PATH_GLOBAL_APP_RW_ROOT;
-	} else {
-		path_app_root = PATH_APP_ROOT;
-	}
 
 	installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
 	if (installed_storage == NULL)
@@ -218,7 +193,7 @@ static void __send_unmount_request(int pid)
 	if (mnt_path == NULL)
 		return;
 
-	ret = _signal_send_tep_unmount(mnt_path);
+	ret = _signal_send_unmount(mnt_path);
 	if (ret < 0)
 		_E("Failed to send tep unmount: %s", mnt_path);
 
@@ -234,12 +209,70 @@ static void __send_unmount_request(int pid)
 	free(mnt_path);
 }
 
+static void __send_unmount_mount_point_request(const struct appinfo *ai)
+{
+	const char *mount_point;
+	struct stat link_buf;
+	int ret;
+
+	mount_point = appinfo_get_value(ai, AIT_MOUNT_POINT);
+	if (mount_point == NULL)
+		return;
+
+	ret = _signal_send_unmount(mount_point);
+	if (ret < 0)
+		_E("Failed to send unmount package mount point: %s", mount_point);
+
+	ret = lstat(mnt_path, &link_buf);
+	if (ret == 0) {
+		ret = unlink(mount_point);
+		if (ret == 0)
+			_D("Mount install path removed");
+		else
+			_E("Failed to remove the mount install path: %s", mount_point);
+	}
+
+	free(mnt_path);
+}
+
+static void __send_unmount_requests(int pid) {
+	const struct appinfo *ai;
+	const char *appid;
+	const char *path_app_root;
+	const char *global;
+	const char *pkgid;
+	const char *preload;
+
+	appid = _status_app_get_appid_bypid(pid);
+	if (appid == NULL)
+		return;
+
+	ai = appinfo_find(getuid(), appid);
+	if (ai == NULL)
+		return;
+
+	pkgid = appinfo_get_value(ai, AIT_PKGID);
+	preload = appinfo_get_value(ai, AIT_PRELOAD);
+	global = appinfo_get_value(ai, AIT_GLOBAL);
+	if (global && strncmp(global, "true", strlen("true")) == 0) {
+		if (preload && strncmp(preload, "true", strlen("true")) == 0)
+			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
+		else
+			path_app_root = PATH_GLOBAL_APP_RW_ROOT;
+	} else {
+		path_app_root = PATH_APP_ROOT;
+	}
+
+	__send_unmount_tep_request(ai, path_app_root);
+	__send_unmount_mount_point_request(ai);
+}
+
 void _cleanup_dead_info(int pid)
 {
 	int caller_pid;
 
 	_D("pid: %d", pid);
-	__send_unmount_request(pid);
+	__send_unmount_requests(pid);
 	app_com_client_remove(pid);
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
