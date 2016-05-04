@@ -235,15 +235,12 @@ int _term_app(int pid, request_h req)
 
 	if (app_group_is_leader_pid(pid)) {
 		app_group_get_group_pids(pid, &cnt, &pids);
-		if (cnt > 0) {
-			for (i = cnt - 1 ; i >= 0; i--) {
-				if (i != 0)
-					_term_sub_app(pids[i]);
-				app_group_remove(pids[i]);
-
-			}
-			free(pids);
+		for (i = cnt - 1; i >= 0; i--) {
+			if (i != 0)
+				_term_sub_app(pids[i]);
+			app_group_remove(pids[i]);
 		}
+		free(pids);
 	}
 
 	ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID,
@@ -323,6 +320,45 @@ int _term_bgapp(int pid, request_h req)
 
 	if (ret > 0)
 		__set_reply_handler(ret, pid, req, APP_TERM_BGAPP_BY_PID);
+
+	return 0;
+}
+
+int _term_app_v2(int pid, request_h req, bool *pend)
+{
+	int dummy;
+	int ret;
+	int cnt;
+	int *pids = NULL;
+	int i;
+
+	if (app_group_is_leader_pid(pid)) {
+		app_group_get_group_pids(pid, &cnt, &pids);
+		for (i = cnt - 1; i >= 0; i--) {
+			if (i != 0)
+				_term_sub_app(pids[i]);
+			app_group_remove(pids[i]);
+		}
+		free(pids);
+	}
+
+	ret = aul_sock_send_raw(pid, getuid(), APP_TERM_BY_PID_SYNC,
+			(unsigned char *)&dummy, 0,
+			AUL_SOCK_ASYNC | AUL_SOCK_NOREPLY);
+	if (ret < 0) {
+		_D("Failed to send the terminate packet - use SIGKILL");
+		if (_send_to_sigkill(pid) < 0) {
+			_E("Failed to kill - %d\n", pid);
+			_request_send_result(req, -1);
+			return -1;
+		}
+	}
+	_D("term v2 done");
+
+	if (pend)
+		*pend = true;
+	if (ret > 0)
+		close(ret);
 
 	return 0;
 }

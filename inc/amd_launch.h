@@ -38,4 +38,5 @@ int _start_app_local(uid_t uid, const char *appid);
 int _start_app_local_with_bundle(uid_t uid, const char *appid, bundle *kb);
 int _launch_init(void);
 int _get_focused_pid(void);
+int _term_app_v2(int pid, request_h req, bool *pend);
 
