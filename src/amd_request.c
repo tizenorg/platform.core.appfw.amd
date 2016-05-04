@@ -67,6 +67,7 @@ static GHashTable *pending_table;
 struct pending_item {
 	int clifd;
 	int pid;
+	int cmd;
 	guint timer;
 	GList *pending_list;
 };
@@ -172,7 +173,8 @@ end:
 	return pid;
 }
 
-static int __app_process_by_pid(request_h req, const char *pid_str)
+static int __app_process_by_pid(request_h req, const char *pid_str,
+		bool *pending)
 {
 	int pid;
 	int ret;
@@ -246,6 +248,9 @@ static int __app_process_by_pid(request_h req, const char *pid_str)
 		break;
 	case APP_PAUSE_BY_PID:
 		ret = _pause_app(pid, req);
+		break;
+	case APP_TERM_BY_PID_SYNC:
+		ret = _term_app_v2(pid, req, pending);
 		break;
 	default:
 		_E("unknown command: %d", req->cmd);
@@ -799,6 +804,7 @@ static int __dispatch_app_start(request_h req)
 		pending_item = calloc(1, sizeof(struct pending_item));
 		pending_item->clifd = _request_remove_fd(req);
 		pending_item->pid = ret;
+		pending_item->cmd = _request_get_cmd(req);
 		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
 				__timeout_pending_item, (gpointer)pending_item);
 		g_hash_table_insert(pending_table, GINT_TO_POINTER(ret),
@@ -894,7 +900,7 @@ static int __dispatch_app_process_by_pid(request_h req)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	__app_process_by_pid(req, appid);
+	__app_process_by_pid(req, appid, NULL);
 
 	return 0;
 }
@@ -915,7 +921,7 @@ static int __dispatch_app_term_async(request_h req)
 	ai = appinfo_find(_request_get_target_uid(req), appid);
 	if (ai) {
 		appinfo_set_value(ai, AIT_STATUS, "norestart");
-		__app_process_by_pid(req, term_pid);
+		__app_process_by_pid(req, term_pid, NULL);
 	}
 
 	return 0;
@@ -931,7 +937,7 @@ static int __dispatch_app_term(request_h req)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	__app_process_by_pid(req, appid);
+	__app_process_by_pid(req, appid, NULL);
 
 	return 0;
 }
@@ -1375,6 +1381,42 @@ static int __dispatch_app_prepare_candidate_process(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_term_sync(request_h req)
+{
+	int ret;
+	int pid;
+	const char *appid;
+	bundle *kb;
+	struct pending_item *pending_item;
+	bool pending = false;
+
+	kb = req->kb;
+	if (kb == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	appid = bundle_get_val(kb, AUL_K_APPID);
+	ret = __app_process_by_pid(req, appid, &pending);
+	if (ret < 0)
+		return -1;
+
+	/* add pending list to wait app terminated successfully */
+	if (pending) {
+		pid = atoi(appid);
+		pending_item = calloc(1, sizeof(struct pending_item));
+		pending_item->clifd = _request_remove_fd(req);
+		pending_item->pid = pid;
+		pending_item->cmd = _request_get_cmd(req);
+		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
+				__timeout_pending_item, (gpointer)pending_item);
+		g_hash_table_insert(pending_table, GINT_TO_POINTER(pid),
+				pending_item);
+	}
+
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1434,6 +1476,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_START_ASYNC] = __dispatch_app_start,
 	[APP_SET_PROCESS_GROUP] = __dispatch_app_set_process_group,
 	[APP_PREPARE_CANDIDATE_PROCESS] = __dispatch_app_prepare_candidate_process,
+	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
 };
 
 static void __free_request(gpointer data)
@@ -1475,8 +1518,12 @@ static gboolean __timeout_pending_item(gpointer user_data)
 {
 	struct pending_item *item = (struct pending_item *)user_data;
 
-	if (item->clifd)
-		_send_result_to_client(item->clifd, item->pid);
+	if (item->clifd) {
+		if (item->cmd == APP_TERM_BY_PID_SYNC)
+			_send_result_to_client(item->clifd, -1);
+		else
+			_send_result_to_client(item->clifd, item->pid);
+	}
 
 	g_list_foreach(item->pending_list, __timeout_pending_request, NULL);
 
@@ -1494,6 +1541,11 @@ int _request_flush_pending_request(int pid)
 			pending_table, GINT_TO_POINTER(pid));
 	if (item == NULL)
 		return -1;
+
+	if (item->cmd == APP_TERM_BY_PID_SYNC) {
+		_send_result_to_client(item->clifd, 0);
+		item->clifd = 0;
+	}
 
 	__timeout_pending_item((gpointer)item);
 
@@ -1571,6 +1623,7 @@ static int __check_app_is_running(request_h req)
 	case APP_TERM_BY_PID_ASYNC:
 	case APP_TERM_BGAPP_BY_PID:
 	case APP_PAUSE_BY_PID:
+	case APP_TERM_BY_PID_SYNC:
 		/* get pid */
 		pid = atoi(str);
 		if (_status_app_get_appid_bypid(pid))
@@ -1588,6 +1641,7 @@ static int __check_app_is_running(request_h req)
 static int __check_request(request_h req)
 {
 	int pid;
+	int status;
 	struct pending_item *item;
 
 	if (req->opt & AUL_SOCK_NOREPLY)
@@ -1602,8 +1656,8 @@ static int __check_request(request_h req)
 	else if (pid == 0)
 		return 0;
 
-	if (_status_get_app_info_status(pid,
-				_request_get_target_uid(req)) == STATUS_DYING)
+	status = _status_get_app_info_status(pid, _request_get_target_uid(req));
+	if (status == STATUS_DYING)
 		return 0;
 
 	item = g_hash_table_lookup(pending_table, GINT_TO_POINTER(pid));
@@ -1625,7 +1679,8 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 	struct ucred cr;
 	request_h req;
 
-	if ((pkt = aul_sock_recv_pkt(fd, &clifd, &cr)) == NULL) {
+	pkt = aul_sock_recv_pkt(fd, &clifd, &cr);
+	if (pkt == NULL) {
 		_E("recv error");
 		return FALSE;
 	}
