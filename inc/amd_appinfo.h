@@ -65,6 +65,7 @@ struct appinfo_splash_image {
 	char *src;
 	char *type;
 	char *indicatordisplay;
+	char *color_depth;
 };
 
 #define APP_TYPE_SERVICE	"svcapp"

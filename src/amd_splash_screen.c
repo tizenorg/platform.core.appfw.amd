@@ -46,6 +46,7 @@ struct splash_image_s {
 	int type;
 	int rotation;
 	int indicator;
+	int color_depth;
 	guint tid;
 };
 
@@ -160,6 +161,7 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	struct appinfo_splash_image *ai_si;
 	int file_type = 0;
 	int indicator = 1;
+	int color_depth = 32;
 
 	if (!splash_screen_initialized) {
 		if (__init_splash_screen() < 0)
@@ -180,10 +182,12 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 		return NULL;
 	if (access(ai_si->src, F_OK) != 0)
 		return NULL;
-	if (strncasecmp(ai_si->type, "edj", strlen("edj")) == 0)
+	if (strcasecmp(ai_si->type, "edj") == 0)
 		file_type = 1;
-	if (strncmp(ai_si->indicatordisplay, "false", strlen("false")) == 0)
+	if (strcmp(ai_si->indicatordisplay, "false") == 0)
 		indicator = 0;
+	if (strcmp(ai_si->color_depth, "24") == 0)
+		color_depth = 24;
 
 	si = (struct splash_image_s *)calloc(1, sizeof(struct splash_image_s));
 	if (si == NULL) {
@@ -209,19 +213,28 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	si->type = file_type;
 	si->rotation = rotation.angle;
 	si->indicator = indicator;
+	si->color_depth = color_depth;
 	si->tid = g_timeout_add(3000, __splash_image_timeout_handler, si);
 
+	_D("[splash image] src: %s, type: %d, rotation: %d, "
+			"indicator-display: %d, color-depth: %d",
+			si->src, si->type, si->rotation, si->indicator,
+			si->color_depth);
 	return si;
 }
 
 void _splash_screen_send_image(splash_image_h si)
 {
+	struct wl_array options;
+
 	if (si == NULL)
 		return;
 
-	tizen_launch_image_launch(si->image, si->src, si->type,
-			si->rotation, si->indicator);
+	wl_array_init(&options);
+	tizen_launch_image_launch(si->image, si->src, si->type, si->color_depth,
+			si->rotation, si->indicator, &options);
 	wl_display_flush(display);
+	wl_array_release(&options);
 }
 
 void _splash_screen_send_pid(splash_image_h si, int pid)
