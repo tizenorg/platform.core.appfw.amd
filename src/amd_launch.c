@@ -54,6 +54,7 @@
 #include "amd_input.h"
 #include "amd_suspend.h"
 #include "amd_signal.h"
+#include "amd_extractor.h"
 
 #define DAC_ACTIVATE
 
@@ -69,16 +70,7 @@
 #define PROC_STATUS_BG	4
 #define PROC_STATUS_FOCUS	5
 
-/* SDK related defines */
-#define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
-#define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
-#define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
-#define PATH_DATA "/data"
-#define SDK_CODE_COVERAGE "CODE_COVERAGE"
-#define SDK_DYNAMIC_ANALYSIS "DYNAMIC_ANALYSIS"
-#define PATH_DA_SO "/home/developer/sdk_tools/da/da_probe.so"
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
-#define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
 
 struct fgmgr {
 	guint tid;
@@ -631,64 +623,6 @@ static int __get_pid_for_app_group(const char *appid, int pid, int caller_uid,
 	return pid;
 }
 
-static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
-		bundle *kb)
-{
-	char *mnt_path[2] = {NULL, };
-	const char *installed_storage = NULL;
-	char tep_path[PATH_MAX] = {0, };
-	const char *path_app_root = NULL;
-	const char *global = appinfo_get_value(ai, AIT_GLOBAL);
-	const char *pkgid = appinfo_get_value(ai, AIT_PKGID);
-	const char *preload = appinfo_get_value(ai, AIT_PRELOAD);
-	int ret;
-
-	SECURE_LOGD("tep name is: %s", tep_name);
-
-	if (global && strcmp("true", global) == 0) {
-		if (preload && strcmp(preload, "true") == 0)
-			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
-		else
-			path_app_root = PATH_GLOBAL_APP_RW_ROOT;
-	} else {
-		path_app_root = PATH_APP_ROOT;
-	}
-
-	installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
-	if (installed_storage == NULL)
-		return;
-
-	SECURE_LOGD("storage: %s", installed_storage);
-	if (strncmp(installed_storage, "internal", 8) == 0) {
-		mnt_path[1] = strdup(tep_name);
-		snprintf(tep_path, PATH_MAX, "%s/%s/tep/mount",
-				path_app_root, pkgid);
-		mnt_path[0] = strdup(tep_path);
-	} else if (strncmp(installed_storage, "external", 8) == 0) {
-		snprintf(tep_path, PATH_MAX, "%s/tep/%s",
-				PREFIX_EXTERNAL_STORAGE_PATH, tep_name);
-		mnt_path[1] = strdup(tep_path);
-		/* TODO : keeping tep/tep-access for now for external storage */
-		snprintf(tep_path, PATH_MAX, "%s/tep/tep-access",
-				PREFIX_EXTERNAL_STORAGE_PATH);
-		mnt_path[0] = strdup(tep_path);
-	}
-
-	if (mnt_path[0] && mnt_path[1]) {
-		bundle_add(kb, AUL_TEP_PATH, mnt_path[0]);
-		ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
-		if (ret != 1) {
-			ret = _signal_send_tep_mount(mnt_path);
-			if (ret < 0)
-				_E("dbus error %d", ret);
-		}
-	}
-	if (mnt_path[0])
-		free(mnt_path[0]);
-	if (mnt_path[1])
-		free(mnt_path[1]);
-}
-
 static void __prepare_to_suspend_services(int pid)
 {
 	int dummy;
@@ -1013,7 +947,6 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 	const char *pkg_id = NULL;
 	const char *component_type = NULL;
 	const char *process_pool = NULL;
-	const char *tep_name = NULL;
 	const char *app_type = NULL;
 	const char *api_version = NULL;
 	int pid = -1;
@@ -1139,9 +1072,8 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 	if (share_handle == NULL)
 		_D("No sharable path : %d %s", caller_pid, appid);
 
-	tep_name = appinfo_get_value(ai, AIT_TEP);
-	if (tep_name != NULL)
-		__send_mount_request(ai, tep_name, kb);
+	_amd_extractor_mount(ai, kb, _amd_extractor_mountable_tep);
+	_amd_extractor_mount(ai, kb, _amd_extractor_mountable_tpk);
 
 	if (pid > 0)
 		callee_status = _status_get_app_info_status(pid, target_uid);
