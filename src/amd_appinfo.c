@@ -508,7 +508,7 @@ static int __appinfo_add_root_path(const pkgmgrinfo_appinfo_h handle,
 
 static int __add_splash_screen_list_cb(const char *src, const char *type,
 		const char *orientation, const char *indicatordisplay,
-		const char *operation, void *user_data)
+		const char *operation, const char *color_depth, void *user_data)
 {
 	struct appinfo *info = (struct appinfo *)user_data;
 	struct appinfo_splash_screen *splash_screen;
@@ -525,6 +525,7 @@ static int __add_splash_screen_list_cb(const char *src, const char *type,
 	splash_image->src = strdup(src);
 	splash_image->type = strdup(type);
 	splash_image->indicatordisplay = strdup(indicatordisplay);
+	splash_image->color_depth = strdup(color_depth);
 	if (*operation == '\0')
 		key = strdup("launch-effect");
 	else
