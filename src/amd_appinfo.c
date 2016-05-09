@@ -374,6 +374,25 @@ static int __appinfo_add_tep(const pkgmgrinfo_appinfo_h handle,
 	return 0;
 }
 
+static int __appinfo_add_mountable_pkg(const pkgmgrinfo_appinfo_h handle,
+		struct appinfo *info, void *data)
+{
+	int ret;
+	char *tpk_name = NULL;
+
+	ret = pkgmgrinfo_appinfo_get_zip_mount_file(handle, &tpk_name);
+	if (ret != PMINFO_R_OK) {
+		info->val[AIT_MOUNTABLE_PKG] = NULL;
+	} else {
+		if (tpk_name && strlen(tpk_name) > 0)
+			info->val[AIT_MOUNTABLE_PKG] = strdup(tpk_name);
+		else
+			info->val[AIT_MOUNTABLE_PKG] = NULL;
+	}
+
+	return 0;
+}
+
 static int __appinfo_add_storage_type(const pkgmgrinfo_appinfo_h handle,
 		struct appinfo *info, void *data)
 {
@@ -651,7 +670,8 @@ static  appinfo_vft appinfo_table[AIT_MAX] = {
 	[AIT_STATUS] = { __appinfo_add_status, free },
 	[AIT_POOL] = { __appinfo_add_pool, free },
 	[AIT_COMPTYPE] = { __appinfo_add_comptype, free },
-	[AIT_TEP] = { __appinfo_add_tep, free},
+	[AIT_TEP] = { __appinfo_add_tep, free },
+	[AIT_MOUNTABLE_PKG] = { __appinfo_add_mountable_pkg, free },
 	[AIT_STORAGE_TYPE] = { __appinfo_add_storage_type, free },
 	[AIT_BG_CATEGORY] = { __appinfo_add_bg_category, NULL },
 	[AIT_LAUNCH_MODE] = { __appinfo_add_launch_mode, free },

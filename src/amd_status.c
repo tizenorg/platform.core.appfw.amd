@@ -643,6 +643,21 @@ char *_status_app_get_appid_bypid(int pid)
 	return NULL;
 }
 
+int _status_get_process_cnt(const char *appid)
+{
+	GSList *iter;
+	app_status_info_t *info_t;
+	int cnt = 0;
+
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
+		info_t = (app_status_info_t *)iter->data;
+		if (info_t && strcmp(info_t->appid, appid) == 0)
+			cnt++;
+	}
+
+	return cnt;
+}
+
 int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 {
 	GSList *iter;
