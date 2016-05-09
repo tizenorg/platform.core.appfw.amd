@@ -42,6 +42,7 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status,
 void _status_check_service_only(int pid, uid_t uid,
 		void (*send_event_to_svc_core)(int));
 char *_status_app_get_appid_bypid(int pid);
+int _status_get_process_cnt(const char *appid);
 int _status_get_appid_bypid(int fd, int pid);
 int _status_get_pkgid_bypid(int fd, int pid);
 int _status_terminate_apps(const char *appid, uid_t uid);
