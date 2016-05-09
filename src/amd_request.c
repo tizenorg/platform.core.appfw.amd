@@ -787,12 +787,18 @@ static int __dispatch_app_start(request_h req)
 	bool pending = false;
 	struct pending_item *pending_item;
 	bundle *kb;
+	bool bg_launch = false;
+	const char *str;
 
 	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
 	__set_effective_appid(_request_get_target_uid(req), kb);
+
+	str = bundle_get_val(kb, AUL_SVC_K_BG_LAUNCH);
+	if (str && strcmp(str, "enable") == 0)
+		bg_launch = true;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
 	ret = _start_app(appid, kb, req->uid, req, &pending);
@@ -816,8 +822,10 @@ static int __dispatch_app_start(request_h req)
 				pending_item);
 	}
 
-	if (ret > 0 && __add_rua_info(req, kb, appid) < 0)
-		return -1;
+	if (ret > 0 && bg_launch == false) {
+		if (__add_rua_info(req, kb, appid) < 0)
+			return -1;
+	}
 
 	return 0;
 }
