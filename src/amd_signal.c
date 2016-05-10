@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
 #include <sys/stat.h>
 
 #include <gio/gio.h>
-#include <app_signal.h>
 
+#include "app_signal.h"
+#include "amd_config.h"
 #include "amd_util.h"
 #include "amd_signal.h"
+
+#define MAX_LABEL_BUFSZ 1024
 
 static GDBusConnection *conn;
 
@@ -121,13 +125,20 @@ int _signal_send_proc_prelaunch(const char *appid, const char *pkgid,
 	return 0;
 }
 
-int _signal_send_tep_mount(char *mnt_path[])
+int _signal_send_tep_mount(char *mnt_path[], const char *pkgid)
 {
 	GError *err = NULL;
 	GDBusMessage *msg = NULL;
 	int ret = 0;
 	int rv = 0;
 	struct stat link_buf = {0,};
+	GVariant *param;
+	char buf[MAX_LABEL_BUFSZ];
+
+	if (pkgid == NULL) {
+		_E("Invalid parameter");
+		return -1;
+	}
 
 	if (!conn) {
 		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
@@ -154,8 +165,10 @@ int _signal_send_tep_mount(char *mnt_path[])
 		ret = -1;
 		goto func_out;
 	}
-	g_dbus_message_set_body(msg,
-			g_variant_new("(ss)", mnt_path[0], mnt_path[1]));
+
+	snprintf(buf, sizeof(buf), "User::Pkg::%s::RO", pkgid);
+	param = g_variant_new("(sss)", mnt_path[0], mnt_path[1], buf);
+	g_dbus_message_set_body(msg, param);
 
 	if (g_dbus_connection_send_message(conn,
 					msg,

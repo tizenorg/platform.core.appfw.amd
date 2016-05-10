@@ -714,7 +714,7 @@ static void __send_mount_request(const struct appinfo *ai, const char *tep_name,
 		bundle_add(kb, AUL_TEP_PATH, mnt_path[0]);
 		ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
 		if (ret != 1) {
-			ret = _signal_send_tep_mount(mnt_path);
+			ret = _signal_send_tep_mount(mnt_path, pkgid);
 			if (ret < 0)
 				_E("dbus error %d", ret);
 		}
