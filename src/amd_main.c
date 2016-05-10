@@ -48,15 +48,11 @@
 #include "amd_input.h"
 #include "amd_signal.h"
 #include "amd_wayland.h"
+#include "amd_extractor.h"
 
-#define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
 #define AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL "syspopup_launch_request"
-#define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
-#define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
-#define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
-#define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
 
 struct restart_info {
 	char *appid;
@@ -150,86 +146,13 @@ static bool __can_restart_app(const char *appid)
 	return false;
 }
 
-static void __send_unmount_request(int pid)
-{
-	const char *appid;
-	const char *tep_name;
-	const struct appinfo *ai;
-	char buf[PATH_MAX];
-	const char *global;
-	const char *pkgid;
-	const char *installed_storage;
-	const char *preload;
-	const char *path_app_root;
-	char *mnt_path = NULL;
-	struct stat link_buf;
-	int ret;
-
-	appid = _status_app_get_appid_bypid(pid);
-	if (appid == NULL)
-		return;
-
-	ai = appinfo_find(getuid(), appid);
-	if (ai == NULL)
-		return;
-
-	tep_name = appinfo_get_value(ai, AIT_TEP);
-	if (tep_name == NULL)
-		return;
-
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
-	preload = appinfo_get_value(ai, AIT_PRELOAD);
-	global = appinfo_get_value(ai, AIT_GLOBAL);
-	if (global && strncmp(global, "true", strlen("true")) == 0) {
-		if (preload && strncmp(preload, "true", strlen("true")) == 0)
-			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
-		else
-			path_app_root = PATH_GLOBAL_APP_RW_ROOT;
-	} else {
-		path_app_root = PATH_APP_ROOT;
-	}
-
-	installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
-	if (installed_storage == NULL)
-		return;
-
-	SECURE_LOGD("storage: %s", installed_storage);
-	if (strncmp(installed_storage, "internal", strlen("internal")) == 0) {
-		snprintf(buf, sizeof(buf), "%s/%s/tep/mount", path_app_root,
-				pkgid);
-		mnt_path = strdup(buf);
-	} else if (strncmp(installed_storage, "external",
-				strlen("external")) == 0) {
-		snprintf(buf, sizeof(buf), "%s/tep/tep-access",
-				PREFIX_EXTERNAL_STORAGE_PATH);
-		mnt_path = strdup(buf);
-	}
-
-	if (mnt_path == NULL)
-		return;
-
-	ret = _signal_send_tep_unmount(mnt_path);
-	if (ret < 0)
-		_E("Failed to send tep unmount: %s", mnt_path);
-
-	ret = lstat(mnt_path, &link_buf);
-	if (ret == 0) {
-		ret = unlink(mnt_path);
-		if (ret == 0)
-			_D("Symbolic link removed");
-		else
-			_E("Failed to remove the link: %s", mnt_path);
-	}
-
-	free(mnt_path);
-}
-
 void _cleanup_dead_info(int pid)
 {
 	int caller_pid;
 
 	_D("pid: %d", pid);
-	__send_unmount_request(pid);
+	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tep_paths);
+	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tpk_paths);
 	app_com_client_remove(pid);
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
