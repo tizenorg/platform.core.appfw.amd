@@ -118,7 +118,7 @@ int _signal_send_proc_prelaunch(const char *appid, const char *pkgid,
 		return -1;
 	}
 
-	_W("send a prelaunch signal done: "
+	_W("send a prelaunch signal done: ",
 			"appid(%s) pkgid(%s) attribute(%x) category(%x)",
 			appid, pkgid, attribute, category);
 
