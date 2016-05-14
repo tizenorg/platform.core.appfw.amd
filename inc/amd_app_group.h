@@ -36,7 +36,6 @@ gboolean app_group_is_leader_pid(int pid);
 gboolean app_group_is_group_app(bundle *kb);
 gboolean app_group_is_sub_app(int pid);
 void app_group_reroute(int pid);
-int app_group_get_caller_pid();
 void app_group_clear_top(int pid);
 int app_group_get_leader_pid(int pid);
 void app_group_set_dead_pid(int pid);

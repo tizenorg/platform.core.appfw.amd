@@ -17,10 +17,6 @@
 #define _GNU_SOURCE
 #include <stdbool.h>
 #include <signal.h>
-#include <bundle.h>
-#include <bundle_internal.h>
-#include <aul.h>
-#include <glib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -29,8 +25,13 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pkgmgr-info.h>
 #include <poll.h>
+
+#include <glib.h>
+#include <bundle.h>
+#include <bundle_internal.h>
+#include <aul.h>
+#include <pkgmgr-info.h>
 #include <tzplatform_config.h>
 #include <cert-svc/ccert.h>
 #include <cert-svc/cinstance.h>
@@ -77,7 +78,7 @@ struct fgmgr {
 	int pid;
 };
 
-static GList *_fgmgr_list;
+static GList *fgmgr_list;
 static int __pid_of_last_launched_ui_app;
 static int __focused_pid;
 
@@ -287,7 +288,7 @@ int _term_bgapp(int pid, request_h req)
 			status = _status_get_app_info_status(pids[cnt - 1],
 					getuid());
 			if (status == STATUS_BG) {
-				for (i = cnt - 1 ; i >= 0; i--) {
+				for (i = cnt - 1; i >= 0; i--) {
 					if (i != 0)
 						_term_sub_app(pids[i]);
 					app_group_remove(pids[i]);
@@ -417,7 +418,7 @@ struct reply_info {
 
 static gboolean __reply_handler(gpointer data)
 {
-	struct reply_info *r_info = (struct reply_info *) data;;
+	struct reply_info *r_info = (struct reply_info *) data;
 	int fd = r_info->gpollfd->fd;
 	int len;
 	int res = 0;
@@ -817,7 +818,7 @@ static gboolean __fg_timeout_handler(gpointer data)
 
 	_status_update_app_info_list(fg->pid, STATUS_BG, TRUE, getuid());
 
-	_fgmgr_list = g_list_remove(_fgmgr_list, fg);
+	fgmgr_list = g_list_remove(fgmgr_list, fg);
 	free(fg);
 
 	return FALSE;
@@ -834,7 +835,7 @@ static void __add_fgmgr_list(int pid)
 	fg->pid = pid;
 	fg->tid = g_timeout_add(5000, __fg_timeout_handler, fg);
 
-	_fgmgr_list = g_list_append(_fgmgr_list, fg);
+	fgmgr_list = g_list_append(fgmgr_list, fg);
 }
 
 static void __del_fgmgr_list(int pid)
@@ -845,11 +846,11 @@ static void __del_fgmgr_list(int pid)
 	if (pid < 0)
 		return;
 
-	for (iter = _fgmgr_list; iter != NULL; iter = g_list_next(iter)) {
+	for (iter = fgmgr_list; iter != NULL; iter = g_list_next(iter)) {
 		fg = (struct fgmgr *)iter->data;
 		if (fg->pid == pid) {
 			g_source_remove(fg->tid);
-			_fgmgr_list = g_list_remove(_fgmgr_list, fg);
+			fgmgr_list = g_list_remove(fgmgr_list, fg);
 			free(fg);
 			return;
 		}
@@ -1133,8 +1134,8 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 		bg_allowed = false;
 
 	if (bg_allowed) {
-		_D("[__SUSPEND__] allowed background, appid: %s, "
-				"bg category: 0x%x, app type: %s, "
+		_D("[__SUSPEND__] allowed background, appid: %s, ",
+				"bg category: 0x%x, app type: %s, ",
 				"api version: %s",
 				appid, bg_category, component_type,
 				appinfo_get_value(ai, AIT_API_VERSION));
@@ -1149,18 +1150,18 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 
 	if (pid > 0 && callee_status != STATUS_DYING) {
 		if (caller_pid == pid) {
-			SECURE_LOGD("caller process & callee process are same. "
-					"[%s:%d]", appid, pid);
+			SECURE_LOGD("caller process & callee process ",
+					"are same. [%s:%d]", appid, pid);
 			pid = -ELOCALLAUNCH_ID;
 			_request_send_result(req, pid);
 		} else {
 			aul_send_app_resume_request_signal(pid, appid, pkg_id,
 					component_type);
 			_suspend_remove_timer(pid);
-			if (!bg_allowed && component_type &&
-					strcmp(component_type,
-						APP_TYPE_SERVICE) == 0)
-				__prepare_to_wake_services(pid);
+			if (!bg_allowed && component_type) {
+				if (!strcmp(component_type, APP_TYPE_SERVICE))
+					__prepare_to_wake_services(pid);
+			}
 
 			ret = __nofork_processing(cmd, pid, kb, req);
 			if (ret < 0) {
