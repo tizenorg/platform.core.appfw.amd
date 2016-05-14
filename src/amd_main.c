@@ -313,7 +313,7 @@ static int __init(void)
 	_wayland_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
-		 _E("__syspopup_dbus_signal_handler_init failed");
+		_E("__syspopup_dbus_signal_handler_init failed");
 
 	b = bundle_create();
 	if (b == NULL) {
@@ -324,7 +324,7 @@ static int __init(void)
 	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK,
 			getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
 	if (r != 0)
-		 _E("failed to make default slots");
+		_E("failed to make default slots");
 
 	bundle_free(b);
 	return 0;

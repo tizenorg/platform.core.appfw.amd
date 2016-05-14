@@ -20,8 +20,9 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
-#include <glib.h>
 #include <dirent.h>
+
+#include <glib.h>
 #include <package-manager.h>
 #include <pkgmgr-info.h>
 #include <vconf.h>
@@ -657,35 +658,118 @@ static int __appinfo_add_enablement(const pkgmgrinfo_appinfo_h handle,
 }
 
 static  appinfo_vft appinfo_table[AIT_MAX] = {
-	[AIT_NAME] = { NULL, NULL },
-	[AIT_EXEC] = { __appinfo_add_exec, free },
-	[AIT_PKGTYPE] = { __appinfo_add_pkgtype, free },
-	[AIT_ONBOOT] = { __appinfo_add_onboot, free },
-	[AIT_RESTART] = { __appinfo_add_restart, NULL },
-	[AIT_MULTI] = { __appinfo_add_multi, free },
-	[AIT_HWACC] = { __appinfo_add_hwacc, free },
-	[AIT_PERM] = { __appinfo_add_perm, free },
-	[AIT_PKGID] = { __appinfo_add_pkgid, free },
-	[AIT_PRELOAD] = { __appinfo_add_preload, free },
-	[AIT_STATUS] = { __appinfo_add_status, free },
-	[AIT_POOL] = { __appinfo_add_pool, free },
-	[AIT_COMPTYPE] = { __appinfo_add_comptype, free },
-	[AIT_TEP] = { __appinfo_add_tep, free },
-	[AIT_MOUNTABLE_PKG] = { __appinfo_add_mountable_pkg, free },
-	[AIT_STORAGE_TYPE] = { __appinfo_add_storage_type, free },
-	[AIT_BG_CATEGORY] = { __appinfo_add_bg_category, NULL },
-	[AIT_LAUNCH_MODE] = { __appinfo_add_launch_mode, free },
-	[AIT_GLOBAL] = { __appinfo_add_global, free },
-	[AIT_EFFECTIVE_APPID] = { __appinfo_add_effective_appid, free },
-	[AIT_TASKMANAGE] = { __appinfo_add_taskmanage, free },
-	[AIT_VISIBILITY] = { NULL, free },
-	[AIT_APPTYPE] = { __appinfo_add_apptype, free },
-	[AIT_ROOT_PATH] = { __appinfo_add_root_path, free },
-	[AIT_SPLASH_SCREEN] = { __appinfo_add_splash_screens, __appinfo_remove_splash_screen },
-	[AIT_SPLASH_SCREEN_DISPLAY] = { __appinfo_add_splash_screen_display, NULL },
-	[AIT_API_VERSION] = { __appinfo_add_api_version, free },
-	[AIT_ENABLEMENT] = { __appinfo_add_enablement, NULL },
-
+	[AIT_NAME] = {
+		.constructor = NULL,
+		.destructor = NULL
+	},
+	[AIT_EXEC] = {
+		.constructor = __appinfo_add_exec,
+		.destructor = free
+	},
+	[AIT_PKGTYPE] = {
+		.constructor = __appinfo_add_pkgtype,
+		.destructor = free
+	},
+	[AIT_ONBOOT] = {
+		.constructor = __appinfo_add_onboot,
+		.destructor = free
+	},
+	[AIT_RESTART] = {
+		.constructor = __appinfo_add_restart,
+		.destructor = NULL
+	},
+	[AIT_MULTI] = {
+		.constructor = __appinfo_add_multi,
+		.destructor = free
+	},
+	[AIT_HWACC] = {
+		.constructor = __appinfo_add_hwacc,
+		.destructor = free
+	},
+	[AIT_PERM] = {
+		.constructor = __appinfo_add_perm,
+		.destructor = free
+	},
+	[AIT_PKGID] = {
+		.constructor = __appinfo_add_pkgid,
+		.destructor = free
+	},
+	[AIT_PRELOAD] = {
+		.constructor = __appinfo_add_preload,
+		.destructor = free
+	},
+	[AIT_STATUS] = {
+		.constructor = __appinfo_add_status,
+		.destructor = free
+	},
+	[AIT_POOL] = {
+		.constructor = __appinfo_add_pool,
+		.destructor = free
+	},
+	[AIT_COMPTYPE] = {
+		.constructor = __appinfo_add_comptype,
+		.destructor = free
+	},
+	[AIT_TEP] = {
+		.constructor = __appinfo_add_tep,
+		.destructor = free
+	},
+	[AIT_MOUNTABLE_PKG] = {
+		.constructor = __appinfo_add_mountable_pkg,
+		.destructor = free
+	},
+	[AIT_STORAGE_TYPE] = {
+		.constructor = __appinfo_add_storage_type,
+		.destructor = free
+	},
+	[AIT_BG_CATEGORY] = {
+		.constructor = __appinfo_add_bg_category,
+		.destructor = NULL
+	},
+	[AIT_LAUNCH_MODE] = {
+		.constructor = __appinfo_add_launch_mode,
+		.destructor = free
+	},
+	[AIT_GLOBAL] = {
+		.constructor = __appinfo_add_global,
+		.destructor = free
+	},
+	[AIT_EFFECTIVE_APPID] = {
+		.constructor = __appinfo_add_effective_appid,
+		.destructor = free
+	},
+	[AIT_TASKMANAGE] = {
+		.constructor = __appinfo_add_taskmanage,
+		.destructor = free
+	},
+	[AIT_VISIBILITY] = {
+		.constructor = NULL,
+		.destructor = free
+	},
+	[AIT_APPTYPE] = {
+		.constructor = __appinfo_add_apptype,
+		.destructor = free
+	},
+	[AIT_ROOT_PATH] = {
+		.constructor = __appinfo_add_root_path,
+		.destructor = free
+	},
+	[AIT_SPLASH_SCREEN] = {
+		.constructor = __appinfo_add_splash_screens,
+		.destructor = __appinfo_remove_splash_screen
+	},
+	[AIT_SPLASH_SCREEN_DISPLAY] = {
+		.constructor = __appinfo_add_splash_screen_display,
+		.destructor = NULL
+	},
+	[AIT_API_VERSION] = {
+		.constructor = __appinfo_add_api_version,
+		.destructor = free
+	},
+	[AIT_ENABLEMENT] = {
+		.constructor = __appinfo_add_enablement,
+		.destructor = NULL
+	},
 };
 
 static void __appinfo_remove_handler(gpointer data)
@@ -1082,8 +1166,10 @@ int appinfo_init(void)
 
 	if (fgets(buf, sizeof(buf), fp) != NULL) {
 		tmp = strstr(buf, "gles");
-		if (tmp != NULL)
-			sscanf(tmp, "gles=%d", &gles);
+		if (tmp != NULL) {
+			if (sscanf(tmp, "gles=%d", &gles) != 1)
+				_E("Failed to convert input format");
+		}
 	}
 	fclose(fp);
 
