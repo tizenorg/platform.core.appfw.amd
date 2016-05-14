@@ -326,21 +326,21 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
 	r = security_manager_private_sharing_req_set_owner_appid(
 			h->shared_info->handle, owner_appid);
 	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_set_owner_appid(,%s) "
-				"return %d", owner_appid, r);
+		_E("security_manager_private_sharing_req_set_owner_appid(,%s)",
+				" return %d", owner_appid, r);
 	}
 
 	r = security_manager_private_sharing_req_set_target_appid(
 			h->shared_info->handle, appid);
 	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_set_target_appid(,%s) "
-				"return %d", appid, r);
+		_E("security_manager_private_sharing_req_set_target_appid(,%s)",
+				" return %d", appid, r);
 	}
 
 	r = security_manager_private_sharing_req_add_paths(
 			h->shared_info->handle, (const char **)path_array, len);
 	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_add_paths() "
+		_E("security_manager_private_sharing_req_add_paths() ",
 				"return %d", r);
 	}
 
@@ -348,7 +348,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
 	r = security_manager_private_sharing_apply(h->shared_info->handle);
 	_D("security_manager_private_sharing_apply --");
 	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_apply() "
+		_E("security_manager_private_sharing_apply() ",
 				"returned an error %d", r);
 		_temporary_permission_destroy(h);
 		h = NULL;

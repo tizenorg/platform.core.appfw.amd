@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2016 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -120,10 +120,11 @@ static int __connect_client_sock(int fd, const struct sockaddr *saptr,
 	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
 	error = 0;
-	if ((ret = connect(fd, (struct sockaddr *)saptr, salen)) < 0) {
+	ret = connect(fd, (struct sockaddr *)saptr, salen);
+	if (ret < 0) {
 		if (errno != EAGAIN && errno != EINPROGRESS) {
 			fcntl(fd, F_SETFL, flags);
-			return (-2);
+			return -2;
 		}
 	}
 
@@ -137,29 +138,29 @@ static int __connect_client_sock(int fd, const struct sockaddr *saptr,
 	timeout.tv_sec = 0;
 	timeout.tv_usec = nsec;
 
-	if ((ret = select(fd + 1, &readfds, &writefds, NULL,
-			nsec ? &timeout : NULL)) == 0) {
+	ret = select(fd + 1, &readfds, &writefds, NULL, nsec ? &timeout : NULL);
+	if (ret == 0) {
 		close(fd);	/* timeout */
 		errno = ETIMEDOUT;
-		return (-1);
+		return -1;
 	}
 
 	if (FD_ISSET(fd, &readfds) || FD_ISSET(fd, &writefds)) {
 		len = sizeof(error);
 		if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
-			return (-1);	/* Solaris pending error */
+			return -1;	/* Solaris pending error */
 	} else
-		return (-1);	/* select error: sockfd not set*/
+		return -1;	/* select error: sockfd not set*/
 
- done:
+done:
 	(void)fcntl(fd, F_SETFL, flags);
 	if (error) {
 		close(fd);
 		errno = error;
-		return (-1);
+		return -1;
 	}
 
-	return (0);
+	return 0;
 }
 
 static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
@@ -187,7 +188,7 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 	saddr.sun_family = AF_UNIX;
 	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s",
 			uid, pad_type);
- retry_con:
+retry_con:
 	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr,
 			sizeof(saddr), 100 * 1000);
 	if (ret < -1) {

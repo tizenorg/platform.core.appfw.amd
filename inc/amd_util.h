@@ -40,8 +40,8 @@
 #define MAX_PACKAGE_STR_SIZE 512
 #define MAX_PACKAGE_APP_PATH_SIZE 512
 
-#define GSLIST_FOREACH_SAFE(list, l, l_next)   \
-	for (l = list,                            \
+#define GSLIST_FOREACH_SAFE(list, l, l_next)		\
+	for (l = list,					\
 			l_next = g_slist_next(l);       \
 			l;                              \
 			l = l_next,                     \

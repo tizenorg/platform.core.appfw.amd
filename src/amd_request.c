@@ -307,7 +307,7 @@ static gboolean __add_history_handler(gpointer user_data)
 		return FALSE;
 
 	if (!pkt->is_group_app) {
-		ai = (struct appinfo *)appinfo_find(pkt->uid, pkt->appid);;
+		ai = (struct appinfo *)appinfo_find(pkt->uid, pkt->appid);
 		app_path = (char *)appinfo_get_value(ai, AIT_EXEC);
 
 		memset((void *)&rec, 0, sizeof(rec));
@@ -963,16 +963,10 @@ static int __dispatch_app_all_running_info(request_h req)
 
 static int __dispatch_app_is_running(request_h req)
 {
-	char *appid = NULL;
+	char appid[MAX_PACKAGE_STR_SIZE];
 	int ret;
 
-	appid = malloc(MAX_PACKAGE_STR_SIZE);
-	if (appid == NULL) {
-		_E("out of memory");
-		_request_send_result(req, -1);
-		return -1;
-	}
-	strncpy(appid, (const char *)req->data, MAX_PACKAGE_STR_SIZE-1);
+	snprintf(appid, sizeof(appid), "%s", (const char *)req->data);
 	ret = _status_app_is_running(appid, _request_get_target_uid(req));
 	SECURE_LOGD("APP_IS_RUNNING : %s : %d", appid, ret);
 	_request_send_result(req, ret);
@@ -1163,9 +1157,7 @@ static int __dispatch_app_com_join(request_h req)
 	}
 
 	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
-
 	ret = app_com_join(endpoint, getpgid(req->pid), filter);
-
 	_request_send_result(req, ret);
 
 	return 0;
@@ -1305,8 +1297,7 @@ static int __dispatch_app_unset_app_control_default_app(request_h req)
 	char appid[MAX_PACKAGE_STR_SIZE];
 	int ret;
 
-	snprintf(appid, MAX_PACKAGE_STR_SIZE - 1, "%s",
-			(const char *)req->data);
+	snprintf(appid, sizeof(appid), "%s", (const char *)req->data);
 
 	ret = aul_svc_unset_defapp_for_uid(appid, _request_get_target_uid(req));
 	if (ret < 0) {
@@ -1481,11 +1472,14 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
-	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
-	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
+	[APP_SET_APP_CONTROL_DEFAULT_APP] =
+			__dispatch_app_set_app_control_default_app,
+	[APP_UNSET_APP_CONTROL_DEFAULT_APP] =
+			__dispatch_app_unset_app_control_default_app,
 	[APP_START_ASYNC] = __dispatch_app_start,
 	[APP_SET_PROCESS_GROUP] = __dispatch_app_set_process_group,
-	[APP_PREPARE_CANDIDATE_PROCESS] = __dispatch_app_prepare_candidate_process,
+	[APP_PREPARE_CANDIDATE_PROCESS] =
+			__dispatch_app_prepare_candidate_process,
 	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
 };
 
