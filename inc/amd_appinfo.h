@@ -17,8 +17,9 @@
 #pragma once
 
 #include <sys/types.h>
-#include <glib.h>
 #include <stdbool.h>
+
+#include <glib.h>
 
 #define AIT_START 0
 enum appinfo_type {
