@@ -18,17 +18,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <glib.h>
-#include <aul.h>
 #include <string.h>
 #include <linux/limits.h>
-#include <gio/gio.h>
-#include <vconf.h>
-#include <time.h>
-#include <aul_sock.h>
-#include <aul_proc.h>
 #include <sys/inotify.h>
 #include <ctype.h>
+#include <time.h>
+
+#include <glib.h>
+#include <aul.h>
+#include <gio/gio.h>
+#include <vconf.h>
+#include <aul_sock.h>
+#include <aul_proc.h>
 
 #include "amd_config.h"
 #include "amd_status.h"
@@ -65,10 +66,10 @@ typedef struct _app_status_info_t {
 	GList *shared_info_list;
 } app_status_info_t;
 
-static GSList *app_status_info_list = NULL;
-static GHashTable *pkg_status_info_table = NULL;
-static int limit_bg_uiapps = 0;
-static GSList *running_uiapp_list = NULL;
+static GSList *app_status_info_list;
+static GHashTable *pkg_status_info_table;
+static int limit_bg_uiapps;
+static GSList *running_uiapp_list;
 static GIOChannel *socket_io;
 static guint socket_wid;
 
@@ -232,13 +233,14 @@ static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo,
 static void __remove_all_shared_info(app_status_info_t *info_t)
 {
 	GList *list;
+	shared_info_t *sit;
 
 	if (!info_t || !(info_t->shared_info_list))
 		return;
 
 	list = info_t->shared_info_list;
 	while (list) {
-		shared_info_t *sit = (shared_info_t *)list->data;
+		sit = (shared_info_t *)list->data;
 		if (sit) {
 			if (sit->owner_appid)
 				free(sit->owner_appid);
@@ -312,19 +314,18 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
 		info_t = (app_status_info_t *)iter->data;
 		if (pid == info_t->pid) {
-			if (uid == info_t->uid) {
+			if (uid == info_t->uid)
 				return 0;
-			} else {
-				/*
-				 * PID is unique so if it is exist
-				 * but user value is not correct remove it.
-				 */
-				app_status_info_list = g_slist_remove(
-						app_status_info_list, info_t);
-				__remove_pkg_info(info_t->pkgid, info_t, uid);
-				__destroy_app_status_info(info_t);
-				break;
-			}
+
+			/*
+			 * PID is unique so if it is exist
+			 * but user value is not correct remove it.
+			 */
+			app_status_info_list = g_slist_remove(
+					app_status_info_list, info_t);
+			__remove_pkg_info(info_t->pkgid, info_t, uid);
+			__destroy_app_status_info(info_t);
+			break;
 		}
 	}
 
@@ -866,31 +867,29 @@ static gint __compare_app_status_info_for_sorting(gconstpointer p1,
 	int *app_group_pids1;
 	int *app_group_pids2;
 
-	if (info_t1->timestamp > info_t2->timestamp) {
+	if (info_t1->timestamp > info_t2->timestamp)
 		return 1;
-	} else if (info_t1->timestamp < info_t2->timestamp) {
+	if (info_t1->timestamp < info_t2->timestamp)
 		return -1;
-	} else {
-		app_group_get_group_pids(info_t1->lpid,
-				&app_group_cnt1, &app_group_pids1);
-		app_group_get_group_pids(info_t2->lpid,
-				&app_group_cnt2, &app_group_pids2);
-		free(app_group_pids1);
-		free(app_group_pids2);
 
-		if (app_group_cnt1 < app_group_cnt2) {
-			return 1;
-		} else if (app_group_cnt1 > app_group_cnt2) {
-			return -1;
-		} else {
-			if (info_t1->fg_count > info_t2->fg_count)
-				return 1;
-			else if (info_t1->fg_count < info_t2->fg_count)
-				return -1;
-			else
-				return 0;
-		}
-	}
+	app_group_get_group_pids(info_t1->lpid,
+			&app_group_cnt1, &app_group_pids1);
+	app_group_get_group_pids(info_t2->lpid,
+			&app_group_cnt2, &app_group_pids2);
+	free(app_group_pids1);
+	free(app_group_pids2);
+
+	if (app_group_cnt1 < app_group_cnt2)
+		return 1;
+	if (app_group_cnt1 > app_group_cnt2)
+		return -1;
+
+	if (info_t1->fg_count > info_t2->fg_count)
+		return 1;
+	if (info_t1->fg_count < info_t2->fg_count)
+		return -1;
+
+	return 0;
 }
 
 static void __cleanup_bg_uiapps(int n)
@@ -1021,7 +1020,7 @@ int _status_init(void)
 	ret = vconf_notify_key_changed(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS,
 			__vconf_cb, NULL);
 	if (ret != 0) {
-		_E("Unable to register callback "
+		_E("Unable to register callback ",
 				"for VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS");
 	}
 
