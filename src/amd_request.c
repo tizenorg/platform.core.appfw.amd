@@ -307,7 +307,7 @@ static gboolean __add_history_handler(gpointer user_data)
 		return FALSE;
 
 	if (!pkt->is_group_app) {
-		ai = (struct appinfo *)appinfo_find(pkt->uid, pkt->appid);;
+		ai = (struct appinfo *)appinfo_find(pkt->uid, pkt->appid);
 		app_path = (char *)appinfo_get_value(ai, AIT_EXEC);
 
 		memset((void *)&rec, 0, sizeof(rec));
@@ -1481,11 +1481,14 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
-	[APP_SET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_set_app_control_default_app,
-	[APP_UNSET_APP_CONTROL_DEFAULT_APP] = __dispatch_app_unset_app_control_default_app,
+	[APP_SET_APP_CONTROL_DEFAULT_APP] =
+			__dispatch_app_set_app_control_default_app,
+	[APP_UNSET_APP_CONTROL_DEFAULT_APP] =
+			__dispatch_app_unset_app_control_default_app,
 	[APP_START_ASYNC] = __dispatch_app_start,
 	[APP_SET_PROCESS_GROUP] = __dispatch_app_set_process_group,
-	[APP_PREPARE_CANDIDATE_PROCESS] = __dispatch_app_prepare_candidate_process,
+	[APP_PREPARE_CANDIDATE_PROCESS] =
+			__dispatch_app_prepare_candidate_process,
 	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
 };
 

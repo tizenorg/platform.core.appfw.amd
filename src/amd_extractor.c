@@ -135,10 +135,12 @@ static void __free_set(gpointer data)
 	g_hash_table_destroy((GHashTable *)data);
 }
 
-static void __prepare_map()
+static void __prepare_map(void)
 {
-	if (mount_point_hash == NULL)
-		mount_point_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free, __free_set);
+	if (mount_point_hash == NULL) {
+		mount_point_hash = g_hash_table_new_full(g_str_hash,
+				g_str_equal, free, __free_set);
+	}
 }
 
 static void __put_mount_path(const struct appinfo *ai, const char *str)
@@ -148,9 +150,9 @@ static void __put_mount_path(const struct appinfo *ai, const char *str)
 
 	__prepare_map();
 	set = g_hash_table_lookup(mount_point_hash, str);
-
 	if (set == NULL) {
-		set = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+		set = g_hash_table_new_full(g_str_hash, g_str_equal,
+				free, NULL);
 		if (set == NULL)
 			return;
 		g_hash_table_insert(mount_point_hash, strdup(str), set);
@@ -169,7 +171,6 @@ static bool __is_unmountable(const char *appid, const char *key)
 
 	__prepare_map();
 	set  = g_hash_table_lookup(mount_point_hash, key);
-
 	if (set == NULL)
 		return false;
 
@@ -180,7 +181,8 @@ static bool __is_unmountable(const char *appid, const char *key)
 	return true;
 }
 
-void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_mountable mountable)
+void _amd_extractor_mount(const struct appinfo *ai, bundle *kb,
+		_amd_extractor_mountable mountable)
 {
 	char **mnt_path = NULL;
 	int ret;
@@ -192,14 +194,16 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 	bool dup = false;
 	const char *pkgid = NULL;
 
-	if ((mnt_path = mountable(ai)) == NULL)
+	mnt_path = mountable(ai);
+	if (mnt_path == NULL)
 		return;
 
 	if (mnt_path[0] && mnt_path[1]) {
 		array = bundle_get_str_array(kb, AUL_TEP_PATH, &len);
 		if (array == NULL) {
 			default_array[0] = mnt_path[0];
-			bundle_add_str_array(kb, AUL_TEP_PATH, default_array, 1);
+			bundle_add_str_array(kb, AUL_TEP_PATH,
+					default_array, 1);
 		} else {
 			for (i = 0; i < len; i++) {
 				if (strcmp(mnt_path[0], array[i]) == 0) {
@@ -209,13 +213,14 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 			}
 
 			if (!dup) {
-				new_array = malloc(sizeof(char*) * (len + 1));
+				new_array = malloc(sizeof(char *) * (len + 1));
 				for (i = 0; i < len; i++)
 					new_array[i] = strdup(array[i]);
 				new_array[len] = strdup(mnt_path[0]);
 				bundle_del(kb, AUL_TEP_PATH);
 				bundle_add_str_array(kb, AUL_TEP_PATH,
-						(const char **)new_array, len + 1);
+						(const char **)new_array,
+						len + 1);
 				__free_path(new_array, len + 1);
 			}
 		}
@@ -225,10 +230,12 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 		if (ret != 1) {
 			pkgid = appinfo_get_value(ai, AIT_PKGID);
 			ret = _signal_send_tep_mount(mnt_path, pkgid);
-			if (ret < 0)
+			if (ret < 0) {
 				_E("dbus error %d", ret);
-			else
-				_D("Mount request was sent %s %s", mnt_path[0], mnt_path[1]);
+			} else {
+				_D("Mount request was sent %s %s",
+						mnt_path[0], mnt_path[1]);
+			}
 		}
 	}
 
@@ -251,7 +258,8 @@ void _amd_extractor_unmount(int pid, _amd_extractor_mountable mountable)
 	if (ai == NULL)
 		return;
 
-	if ((mnt_path = mountable(ai)) == NULL)
+	mnt_path = mountable(ai);
+	if (mnt_path == NULL)
 		return;
 
 	if (!__is_unmountable(appid, mnt_path[0]))

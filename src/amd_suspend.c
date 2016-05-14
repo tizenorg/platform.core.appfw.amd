@@ -26,11 +26,12 @@ typedef struct proc_info {
 	guint timer_id;
 } proc_info_t;
 
-static GHashTable *proc_info_tbl = NULL;
+static GHashTable *proc_info_tbl;
 
 static void __destroy_proc_info_value(gpointer data)
 {
 	proc_info_t *proc = (proc_info_t *)data;
+
 	if (proc)
 		free(proc);
 }
