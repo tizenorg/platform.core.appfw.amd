@@ -1427,6 +1427,46 @@ static int __dispatch_app_term_sync(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_get_status_by_appid(request_h req)
+{
+	int status;
+	int pid;
+	uid_t uid;
+	const char *appid;
+	bundle *kb;
+
+	kb = _request_get_bundle(req);
+	if (kb == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	uid = _request_get_target_uid(req);
+	appid = bundle_get_val(kb, AUL_K_APPID);
+	if (appid == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	pid = _status_app_is_running(appid, uid);
+	if (pid <= 0) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	if (_get_focused_pid() == pid) {
+		_request_send_result(req, STATUS_FOCUS);
+		_D("appid: %s, pid: %d, status: %d", appid, pid, STATUS_FOCUS);
+		return 0;
+	}
+
+	status = _status_get_app_info_status(pid, uid);
+	_request_send_result(req, status);
+	_D("appid: %s, pid: %d, status: %d", appid, pid, status);
+
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1487,6 +1527,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_SET_PROCESS_GROUP] = __dispatch_app_set_process_group,
 	[APP_PREPARE_CANDIDATE_PROCESS] = __dispatch_app_prepare_candidate_process,
 	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
+	[APP_GET_STATUS_BY_APPID] = __dispatch_app_get_status_by_appid,
 };
 
 static void __free_request(gpointer data)
