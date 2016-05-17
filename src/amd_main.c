@@ -120,11 +120,11 @@ static bool __can_restart_app(const char *appid)
 	int val = 0;
 
 	_D("appid: %s", appid);
-	ai = appinfo_find(getuid(), appid);
+	ai = _appinfo_find(getuid(), appid);
 	if (!ai)
 		return false;
 
-	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
 	if (!component_type)
 		return false;
 
@@ -132,13 +132,13 @@ static bool __can_restart_app(const char *appid)
 				strlen(APP_TYPE_SERVICE)) != 0)
 		return false;
 
-	pkg_status = appinfo_get_value(ai, AIT_STATUS);
+	pkg_status = _appinfo_get_value(ai, AIT_STATUS);
 	if (pkg_status && strncmp(pkg_status, "blocking", 8) == 0) {
-		appinfo_set_value(ai, AIT_STATUS, "restart");
+		_appinfo_set_value(ai, AIT_STATUS, "restart");
 	} else if (pkg_status && strncmp(pkg_status, "norestart", 9) == 0) {
-		appinfo_set_value(ai, AIT_STATUS, "installed");
+		_appinfo_set_value(ai, AIT_STATUS, "installed");
 	} else {
-		r = appinfo_get_int_value(ai, AIT_RESTART, &val);
+		r = _appinfo_get_int_value(ai, AIT_RESTART, &val);
 		if (r == 0 && val && __check_restart(appid))
 			return true;
 	}
@@ -151,31 +151,32 @@ void _cleanup_dead_info(int pid)
 	int caller_pid;
 
 	_D("pid: %d", pid);
-	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tep_paths);
-	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tpk_paths);
-	app_com_client_remove(pid);
-	if (app_group_is_leader_pid(pid)) {
+
+	_extractor_unmount(pid, _extractor_mountable_get_tep_paths);
+	_extractor_unmount(pid, _extractor_mountable_get_tpk_paths);
+	_app_com_client_remove(pid);
+	if (_app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
-		if (app_group_find_second_leader(pid) == -1) {
-			app_group_clear_top(pid);
-			app_group_set_dead_pid(pid);
-			app_group_remove(pid);
+		if (_app_group_find_second_leader(pid) == -1) {
+			_app_group_clear_top(pid);
+			_app_group_set_dead_pid(pid);
+			_app_group_remove(pid);
 		} else {
-			app_group_remove_leader_pid(pid);
+			_app_group_remove_leader_pid(pid);
 		}
-	} else if (app_group_is_sub_app(pid)) {
+	} else if (_app_group_is_sub_app(pid)) {
 		_W("app_group_sub_app, pid: %d", pid);
-		caller_pid = app_group_get_next_caller_pid(pid);
-		if (app_group_can_reroute(pid)
+		caller_pid = _app_group_get_next_caller_pid(pid);
+		if (_app_group_can_reroute(pid)
 				|| (caller_pid > 0 && caller_pid != pid)) {
 			_W("app_group reroute");
-			app_group_reroute(pid);
+			_app_group_reroute(pid);
 		} else {
 			_W("app_group clear top");
-			app_group_clear_top(pid);
+			_app_group_clear_top(pid);
 		}
-		app_group_set_dead_pid(pid);
-		app_group_remove(pid);
+		_app_group_set_dead_pid(pid);
+		_app_group_remove(pid);
 	}
 
 	_temporary_permission_drop(pid, getuid());
@@ -206,7 +207,7 @@ static int __app_dead_handler(int pid, void *data)
 	_request_flush_pending_request(pid);
 
 	if (restart)
-		_start_app_local(getuid(), appid);
+		_launch_start_app_local(getuid(), appid);
 	if (appid)
 		free(appid);
 
@@ -224,6 +225,7 @@ static void __syspopup_signal_handler(GDBusConnection *conn,
 	gchar *appid = NULL;
 	gchar *b_raw = NULL;
 	bundle *kb;
+	int ret;
 
 	if (g_strcmp0(signal_name, AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL) != 0)
 		return;
@@ -233,7 +235,8 @@ static void __syspopup_signal_handler(GDBusConnection *conn,
 
 	kb = bundle_decode((bundle_raw *)b_raw, strlen(b_raw));
 	if (kb) {
-		if (_start_app_local_with_bundle(getuid(), appid, kb) < 0)
+		ret = _launch_start_app_local_with_bundle(getuid(), appid, kb);
+		if (ret < 0)
 			_E("syspopup launch request failed: %s", appid);
 
 		bundle_free(kb);
@@ -282,8 +285,8 @@ static int __init(void)
 	int r;
 	bundle *b;
 
-	if (appinfo_init()) {
-		_E("appinfo_init failed");
+	if (_appinfo_init()) {
+		_E("_appinfo_init failed");
 		return -1;
 	}
 
@@ -294,7 +297,7 @@ static int __init(void)
 
 	restart_tbl = g_hash_table_new(g_str_hash, g_str_equal);
 
-	r = init_cynara();
+	r = _cynara_init();
 	if (r != 0) {
 		_E("cynara initialize failed.");
 		return -1;
@@ -302,11 +305,11 @@ static int __init(void)
 
 	_request_init();
 	_status_init();
-	app_group_init();
+	_app_group_init();
 	r = rua_delete_history_from_db(NULL);
 	_D("rua_delete_history : %d", r);
 
-	app_com_broker_init();
+	_app_com_broker_init();
 	_launch_init();
 	_splash_screen_init();
 	_input_init();
@@ -351,7 +354,8 @@ static void __finish(void)
 {
 	_wayland_finish();
 	_input_fini();
-	app_com_broker_fini();
+	_app_com_broker_fini();
+	_cynara_finish();
 }
 
 int main(int argc, char *argv[])

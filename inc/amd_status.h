@@ -23,12 +23,14 @@
 #include <aul.h>
 #include <security-manager.h>
 
+#include "amd_appinfo.h"
+
 typedef struct _shared_info_t {
 	char *owner_appid;
 	private_sharing_req *handle;
 } shared_info_t;
 
-int _status_add_app_info_list(const char *appid, const char *app_path, int pid,
+int _status_add_app_info_list(const struct appinfo *ai, int pid,
 		bool is_subapp, uid_t uid);
 int _status_update_app_info_list(int pid, int status, bool force, uid_t uid);
 int _status_remove_app_info_list_with_uid(uid_t uid);

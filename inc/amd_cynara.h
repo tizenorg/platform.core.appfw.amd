@@ -14,9 +14,14 @@
  * limitations under the License.
  */
 
+#ifndef __AMD_CYNARA_H__
+#define __AMD_CYNARA_H__
+
 #include "amd_request.h"
 
-int init_cynara(void);
-void finish_cynara(void);
-int check_privilege_by_cynara(request_h req);
+int _cynara_init(void);
+void _cynara_finish(void);
+int _cynara_check_privilege(request_h req);
+
+#endif /* __AMD_CYNARA_H__ */
 
