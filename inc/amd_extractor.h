@@ -17,21 +17,14 @@
 #pragma once
 
 #include <bundle.h>
+
 #include "amd_appinfo.h"
 
-typedef char **(*_amd_extractor_mountable)(const struct appinfo *ai);
+enum ex_type {
+	EX_TEP,
+	EX_TPK,
+};
 
-char **_amd_extractor_mountable_get_tep_paths(const struct appinfo *ai);
-char **_amd_extractor_mountable_get_tpk_paths(const struct appinfo *ai);
-void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_mountable mountable);
-void _amd_extractor_unmount(int pid, _amd_extractor_mountable mountable);
-
-
-
-
-
-
-
-
-
+void _extractor_mount(const struct appinfo *ai, bundle *kb, int type);
+void _extractor_unmount(int pid, int type);
 
