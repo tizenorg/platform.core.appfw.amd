@@ -158,8 +158,8 @@ static GList *__add_valid_uri(GList *paths, int caller_pid, const char *appid,
 		return paths;
 	}
 
-	ai = appinfo_find(uid, owner_appid);
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
+	ai = _appinfo_find(uid, owner_appid);
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
 
 	if (__can_share(path, pkgid, uid) != 0) {
 		_E("__can_share() returned an error");
@@ -190,8 +190,8 @@ static GList *__add_valid_key_for_data_selected(GList *paths, int caller_pid,
 		return paths;
 	}
 
-	ai = appinfo_find(uid, owner_appid);
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
+	ai = _appinfo_find(uid, owner_appid);
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
 	if (pkgid == NULL) {
 		_E("pkgid was null");
 		return paths;
@@ -225,9 +225,8 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 			break;
 		}
 
-		ai = appinfo_find(uid, owner_appid);
-		pkgid = appinfo_get_value(ai, AIT_PKGID);
-
+		ai = _appinfo_find(uid, owner_appid);
+		pkgid = _appinfo_get_value(ai, AIT_PKGID);
 		if (pkgid == NULL) {
 			_E("pkgid was null");
 			break;
@@ -240,7 +239,6 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 
 		paths = g_list_append(paths, strdup(path));
 		break;
-
 	case BUNDLE_TYPE_STR_ARRAY:
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
 		if (!path_array || len <= 0) {
@@ -248,8 +246,8 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 			break;
 		}
 
-		ai = appinfo_find(uid, owner_appid);
-		pkgid = appinfo_get_value(ai, AIT_PKGID);
+		ai = _appinfo_find(uid, owner_appid);
+		pkgid = _appinfo_get_value(ai, AIT_PKGID);
 		if (pkgid == NULL) {
 			_E("pkgid was null");
 			break;
@@ -383,27 +381,27 @@ int _temporary_permission_destroy(shared_info_h handle)
 {
 	int r;
 
-	if (handle) {
-		if (handle->shared_info) { /* back out */
-			_D("revoke permission %s : %s",
-					handle->shared_info->owner_appid,
-					handle->appid);
-			r = security_manager_private_sharing_drop(
-					handle->shared_info->handle);
-			if (r != SECURITY_MANAGER_SUCCESS)
-				_E("revoke error %d", r);
+	if (handle == NULL)
+		return -1;
 
-			security_manager_private_sharing_req_free(
-					handle->shared_info->handle);
-			free(handle->shared_info->owner_appid);
-		}
+	if (handle->shared_info) { /* back out */
+		_D("revoke permission %s : %s",
+				handle->shared_info->owner_appid,
+				handle->appid);
+		r = security_manager_private_sharing_drop(
+				handle->shared_info->handle);
+		if (r != SECURITY_MANAGER_SUCCESS)
+			_E("revoke error %d", r);
 
-		free(handle->appid);
-		free(handle);
-		return 0;
+		security_manager_private_sharing_req_free(
+				handle->shared_info->handle);
+		free(handle->shared_info->owner_appid);
 	}
 
-	return -1;
+	free(handle->appid);
+	free(handle);
+
+	return 0;
 }
 
 int _temporary_permission_drop(int pid, uid_t uid)
