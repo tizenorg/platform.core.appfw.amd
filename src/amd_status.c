@@ -295,18 +295,19 @@ static void __update_leader_app_info(int lpid)
 	}
 }
 
-int _status_add_app_info_list(const char *appid, const char *app_path,
-		int pid, bool is_subapp, uid_t uid)
+int _status_add_app_info_list(const struct appinfo *ai, int pid,
+		bool is_subapp, uid_t uid)
 {
 	GSList *iter;
 	GSList *iter_next;
 	app_status_info_t *info_t;
-	const struct appinfo *ai;
-	const char *component_type = NULL;
-	const char *pkgid = NULL;
-	const char *taskmanage = NULL;
+	const char *component_type;
+	const char *pkgid;
+	const char *taskmanage;
+	const char *appid;
+	const char *app_path;
 
-	if (!appid || !app_path)
+	if (ai == NULL)
 		return -1;
 
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
@@ -328,8 +329,6 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 		}
 	}
 
-	ai = appinfo_find(uid, appid);
-
 	info_t = malloc(sizeof(app_status_info_t));
 	if (info_t == NULL) {
 		_E("out of memory");
@@ -338,8 +337,16 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 
 	memset(info_t, 0, sizeof(app_status_info_t));
 
+	appid = appinfo_get_value(ai, AIT_NAME);
+	if (appid == NULL)
+		goto error;
+
 	info_t->appid = strdup(appid);
 	if (info_t->appid == NULL)
+		goto error;
+
+	app_path = appinfo_get_value(ai, AIT_EXEC);
+	if (app_path == NULL)
 		goto error;
 
 	info_t->app_path = strdup(app_path);
