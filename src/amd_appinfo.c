@@ -248,9 +248,9 @@ static int __appinfo_add_hwacc(const pkgmgrinfo_appinfo_h handle,
 
 	info->val[AIT_HWACC] = strdup(
 				(gles == 0 ||
-				 hwacc == PMINFO_HWACCELERATION_NOT_USE_GL) ?
+				 hwacc == PMINFO_HWACCELERATION_OFF) ?
 				"NOT_USE" :
-				(hwacc == PMINFO_HWACCELERATION_USE_GL) ?
+				(hwacc == PMINFO_HWACCELERATION_ON) ?
 				"USE" :
 				"SYS");
 
