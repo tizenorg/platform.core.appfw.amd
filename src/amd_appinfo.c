@@ -767,14 +767,14 @@ static void __handle_onboot(void *user_data, const char *appid,
 		return;
 
 	if (!strcmp(info->val[AIT_ONBOOT], "true")) {
-		ret = appinfo_get_int_value(info, AIT_ENABLEMENT, &enable);
+		ret = _appinfo_get_int_value(info, AIT_ENABLEMENT, &enable);
 		if (ret == 0 && !(enable & APP_ENABLEMENT_MASK_ACTIVE))
 			return;
 
 		if (_status_app_is_running(appid, uid) > 0)
 			return;
 		_D("start app %s from user %d by onboot", appid, uid);
-		_start_app_local(uid, info->val[AIT_NAME]);
+		_launch_start_app_local(uid, info->val[AIT_NAME]);
 	}
 }
 
@@ -782,7 +782,7 @@ static gboolean __onboot_cb(gpointer data)
 {
 	uid_t uid = (uid_t)(intptr_t)data;
 
-	appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
+	_appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
 
 	return FALSE;
 }
@@ -882,8 +882,8 @@ static void __appinfo_delete_on_event(uid_t uid, const char *pkgid)
 
 static void __appinfo_insert_on_event(uid_t uid, const char *pkgid)
 {
-	appinfo_insert(uid, pkgid);
-	appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
+	_appinfo_insert(uid, pkgid);
+	_appinfo_foreach(uid, __handle_onboot, (void *)(intptr_t)uid);
 }
 
 static int __package_event_cb(uid_t target_uid, int req_id,
@@ -898,7 +898,7 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 	if (!strcasecmp(key, "start")) {
 		if (!strcasecmp(val, "uninstall") ||
 				!strcasecmp(val, "update"))
-			appinfo_foreach(target_uid, __appinfo_set_blocking_cb,
+			_appinfo_foreach(target_uid, __appinfo_set_blocking_cb,
 					(void *)pkgid);
 		g_hash_table_insert(pkg_pending, strdup(pkgid), strdup(val));
 	}
@@ -909,7 +909,7 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 			return 0;
 
 		if (!strcasecmp(op, "uninstall") || !strcasecmp(op, "update"))
-			appinfo_foreach(target_uid, __appinfo_unset_blocking_cb,
+			_appinfo_foreach(target_uid, __appinfo_unset_blocking_cb,
 					(void *)pkgid);
 		g_hash_table_remove(pkg_pending, pkgid);
 	}
@@ -985,25 +985,25 @@ static int __package_app_event_cb(uid_t target_uid, int req_id,
 	struct app_event_info *ei;
 
 	_D("appid:%s, key:%s, val:%s, req_id: %d", appid, key, val, req_id);
-	ai = appinfo_find(target_uid, appid);
+	ai = _appinfo_find(target_uid, appid);
 	if (!ai)
 		return 0;
 
 	if (!strcasecmp(key, "start")) {
 		if (!strcasecmp(val, "enable_global_app_for_uid") ||
 				!strcasecmp(val, "enable_app")) {
-			appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
+			_appinfo_get_int_value(ai, AIT_ENABLEMENT, &old);
 			old |= APP_ENABLEMENT_MASK_REQUEST;
-			appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
+			_appinfo_set_int_value(ai, AIT_ENABLEMENT, old);
 			__add_app_event_info(req_id, AIT_ENABLEMENT);
 		} else if (!strcasecmp(val, "disable_global_app_for_uid") ||
 				!strcasecmp(val, "disable_app")) {
 			__add_app_event_info(req_id, AIT_ENABLEMENT);
 		} else if (!strcasecmp(val, "enable_app_splash_screen")) {
-			appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY,
+			_appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY,
 					&old);
 			old |= APP_ENABLEMENT_MASK_REQUEST;
-			appinfo_set_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY,
+			_appinfo_set_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY,
 					old);
 			__add_app_event_info(req_id, AIT_SPLASH_SCREEN_DISPLAY);
 		} else if (!strcasecmp(val, "disable_app_splash_screen")) {
@@ -1017,9 +1017,9 @@ static int __package_app_event_cb(uid_t target_uid, int req_id,
 		if (!strcasecmp(val, "ok")) {
 			if (ei->type == AIT_ENABLEMENT ||
 					ei->type == AIT_SPLASH_SCREEN_DISPLAY) {
-				appinfo_get_int_value(ai, ei->type, &old);
+				_appinfo_get_int_value(ai, ei->type, &old);
 				old >>= 1;
-				appinfo_set_int_value(ai, ei->type, old);
+				_appinfo_set_int_value(ai, ei->type, old);
 				if (ei->type == AIT_ENABLEMENT &&
 					!(old & APP_ENABLEMENT_MASK_ACTIVE)) {
 					_E("terminate apps: %s", appid);
@@ -1030,9 +1030,9 @@ static int __package_app_event_cb(uid_t target_uid, int req_id,
 		} else if (!strcasecmp(val, "fail")) {
 			if (ei->type == AIT_ENABLEMENT ||
 					ei->type == AIT_SPLASH_SCREEN_DISPLAY) {
-				appinfo_get_int_value(ai, ei->type, &old);
+				_appinfo_get_int_value(ai, ei->type, &old);
 				old &= APP_ENABLEMENT_MASK_ACTIVE;
-				appinfo_set_int_value(ai, ei->type, old);
+				_appinfo_set_int_value(ai, ei->type, old);
 			}
 		}
 		__remove_app_event_info(ei);
@@ -1067,7 +1067,7 @@ static void __fini_package_event_handler(void)
 	pkgmgr_client_free(pc);
 }
 
-int appinfo_init(void)
+int _appinfo_init(void)
 {
 	FILE *fp;
 	char buf[4096] = {0,};
@@ -1102,26 +1102,26 @@ int appinfo_init(void)
 	 */
 	appinfo = __add_user_appinfo(getuid());
 	if (appinfo == NULL) {
-		appinfo_fini();
+		_appinfo_fini();
 		return -1;
 	}
 
 	if (__init_package_event_handler()) {
-		appinfo_fini();
+		_appinfo_fini();
 		return -1;
 	}
 
 	return 0;
 }
 
-void appinfo_fini(void)
+void _appinfo_fini(void)
 {
 	g_hash_table_destroy(user_tbl);
 	g_hash_table_destroy(pkg_pending);
 	__fini_package_event_handler();
 }
 
-struct appinfo *appinfo_find(uid_t caller_uid, const char *appid)
+struct appinfo *_appinfo_find(uid_t caller_uid, const char *appid)
 {
 	struct user_appinfo *info;
 
@@ -1133,7 +1133,7 @@ struct appinfo *appinfo_find(uid_t caller_uid, const char *appid)
 	return g_hash_table_lookup(info->tbl, appid);
 }
 
-int appinfo_insert(uid_t uid, const char *pkgid)
+int _appinfo_insert(uid_t uid, const char *pkgid)
 {
 	int ret;
 	struct user_appinfo *info;
@@ -1181,12 +1181,12 @@ static void __reload_appinfo(gpointer key, gpointer value, gpointer user_data)
 	_D("reloaded appinfo table for uid %d", info->uid);
 }
 
-void appinfo_reload(void)
+void _appinfo_reload(void)
 {
 	g_hash_table_foreach(user_tbl, __reload_appinfo, NULL);
 }
 
-const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
+const char *_appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 {
 	if (!c) {
 		errno = EINVAL;
@@ -1200,7 +1200,7 @@ const char *appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 	return c->val[type];
 }
 
-const void *appinfo_get_ptr_value(const struct appinfo *c,
+const void *_appinfo_get_ptr_value(const struct appinfo *c,
 		enum appinfo_type type)
 {
 	if (!c) {
@@ -1215,7 +1215,7 @@ const void *appinfo_get_ptr_value(const struct appinfo *c,
 	return c->val[type];
 }
 
-int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
+int _appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
 		int *val)
 {
 	if (!c) {
@@ -1232,7 +1232,7 @@ int appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
 	return 0;
 }
 
-int appinfo_set_value(struct appinfo *c, enum appinfo_type type,
+int _appinfo_set_value(struct appinfo *c, enum appinfo_type type,
 		const char *val)
 {
 	if (!c || !val) {
@@ -1252,7 +1252,7 @@ int appinfo_set_value(struct appinfo *c, enum appinfo_type type,
 	return 0;
 }
 
-int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type type, void *val)
+int _appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type type, void *val)
 {
 	if (!c || !val) {
 		errno = EINVAL;
@@ -1271,7 +1271,7 @@ int appinfo_set_ptr_value(struct appinfo *c, enum appinfo_type type, void *val)
 	return 0;
 }
 
-int appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val)
+int _appinfo_set_int_value(struct appinfo *c, enum appinfo_type type, int val)
 {
 	if (!c) {
 		errno = EINVAL;
@@ -1303,7 +1303,7 @@ static void __iter_cb(gpointer key, gpointer value, gpointer user_data)
 	cbi->cb(cbi->cb_data, key, value);
 }
 
-void appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
+void _appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
 {
 	struct user_appinfo *info;
 	struct _cbinfo cbi;
