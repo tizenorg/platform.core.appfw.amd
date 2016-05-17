@@ -17,16 +17,16 @@
 #ifndef __AMD_APP_COM_H__
 #define __AMD_APP_COM_H__
 
-int app_com_broker_init(void);
-int app_com_broker_fini(void);
-int app_com_client_remove(int cpid);
-int app_com_add_endpoint(const char *endpoint, unsigned int propagate,
+int _app_com_broker_init(void);
+int _app_com_broker_fini(void);
+int _app_com_client_remove(int cpid);
+int _app_com_add_endpoint(const char *endpoint, unsigned int propagate,
 		const char *assoc_priv);
-int app_com_remove_endpoint(const char *endpoint);
-int app_com_join(const char *endpoint, int cpid, const char *filter);
-int app_com_send(const char *endpoint, int cpid, bundle *envelope);
-int app_com_leave(const char *endpoint, int cpid);
-const char *app_com_get_privilege(const char *endpoint);
+int _app_com_remove_endpoint(const char *endpoint);
+int _app_com_join(const char *endpoint, int cpid, const char *filter);
+int _app_com_send(const char *endpoint, int cpid, bundle *envelope);
+int _app_com_leave(const char *endpoint, int cpid);
+const char *_app_com_get_privilege(const char *endpoint);
 
 #endif /* __AMD_APP_COM_H__ */
 

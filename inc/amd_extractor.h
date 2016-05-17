@@ -19,19 +19,8 @@
 #include <bundle.h>
 #include "amd_appinfo.h"
 
-typedef char **(*_amd_extractor_mountable)(const struct appinfo *ai);
-
-char **_amd_extractor_mountable_get_tep_paths(const struct appinfo *ai);
-char **_amd_extractor_mountable_get_tpk_paths(const struct appinfo *ai);
-void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_mountable mountable);
-void _amd_extractor_unmount(int pid, _amd_extractor_mountable mountable);
-
-
-
-
-
-
-
-
-
+char **_extractor_mountable_get_tep_paths(const struct appinfo *ai);
+char **_extractor_mountable_get_tpk_paths(const struct appinfo *ai);
+void _extractor_mount(const struct appinfo *ai, bundle *kb, char **mnt_path);
+void _extractor_unmount(int pid, char **mnt_path);
 

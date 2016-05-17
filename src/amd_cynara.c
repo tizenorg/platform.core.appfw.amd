@@ -186,13 +186,13 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 		return -1;
 	}
 
-	appinfo = appinfo_find(_request_get_target_uid(req), appid);
+	appinfo = _appinfo_find(_request_get_target_uid(req), appid);
 	if (!appinfo) {
 		_E("can not resolve appinfo of %s. request denied.", appid);
 		return -1;
 	}
 
-	apptype = appinfo_get_value(appinfo, AIT_COMPTYPE);
+	apptype = _appinfo_get_value(appinfo, AIT_COMPTYPE);
 	if (!apptype) {
 		_E("can not resolve apptype of %s. request denied.", appid);
 		return -1;
@@ -263,7 +263,7 @@ static int __com_join_checker(struct caller_info *info, request_h req,
 	if (!endpoint)
 		return -1;
 
-	privilege = app_com_get_privilege(endpoint);
+	privilege = _app_com_get_privilege(endpoint);
 	if (!privilege)
 		return 0; /* non-privileged */
 
