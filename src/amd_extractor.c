@@ -46,8 +46,8 @@ static const char *__get_app_root_path(const struct appinfo *ai)
 	const char *global;
 	const char *preload;
 
-	preload = appinfo_get_value(ai, AIT_PRELOAD);
-	global = appinfo_get_value(ai, AIT_GLOBAL);
+	preload = _appinfo_get_value(ai, AIT_PRELOAD);
+	global = _appinfo_get_value(ai, AIT_GLOBAL);
 	if (global && strncmp(global, "true", strlen("true")) == 0) {
 		if (preload && strncmp(preload, "true", strlen("true")) == 0)
 			path_app_root = PATH_GLOBAL_APP_RO_ROOT;
@@ -60,20 +60,34 @@ static const char *__get_app_root_path(const struct appinfo *ai)
 	return path_app_root;
 }
 
-char **_amd_extractor_mountable_get_tep_paths(const struct appinfo *ai)
+char **_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 {
-	char tep_path[PATH_MAX] = {0, };
-	char **mnt_path = NULL;
-	const char *pkgid = appinfo_get_value(ai, AIT_PKGID);
-	const char *installed_storage = appinfo_get_value(ai, AIT_STORAGE_TYPE);
-	const char *tep_name = appinfo_get_value(ai, AIT_TEP);
+	char tep_path[PATH_MAX];
+	char **mnt_path;
+	const char *pkgid;
+	const char *installed_storage;
+	const char *tep_name;
 
-	if (tep_name == NULL || installed_storage == NULL || pkgid == NULL)
+	if (ai == NULL)
+		return NULL;
+
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
+	if (pkgid == NULL)
+		return NULL;
+
+	installed_storage = _appinfo_get_value(ai, AIT_STORAGE_TYPE);
+	if (installed_storage == NULL)
+		return NULL;
+
+	tep_name = _appinfo_get_value(ai, AIT_TEP);
+	if (tep_name == NULL)
 		return NULL;
 
 	mnt_path = (char **)malloc(sizeof(char *) * 2);
-	if (mnt_path == NULL)
+	if (mnt_path == NULL) {
+		_E("out of memory");
 		return NULL;
+	}
 
 	SECURE_LOGD("storage: %s", installed_storage);
 	if (strncmp(installed_storage, "internal", 8) == 0) {
@@ -94,19 +108,29 @@ char **_amd_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 	return mnt_path;
 }
 
-char **_amd_extractor_mountable_get_tpk_paths(const struct appinfo *ai)
+char **_extractor_mountable_get_tpk_paths(const struct appinfo *ai)
 {
-	char mount_point[PATH_MAX] = {0, };
-	char **mnt_path = NULL;
-	const char *pkgid = appinfo_get_value(ai, AIT_PKGID);
-	const char *tpk = appinfo_get_value(ai, AIT_MOUNTABLE_PKG);
+	char mount_point[PATH_MAX];
+	char **mnt_path;
+	const char *pkgid;
+	const char *tpk;
 
-	if (tpk == NULL || pkgid == NULL)
+	if (ai == NULL)
+		return NULL;
+
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
+	if (pkgid == NULL)
+		return NULL;
+
+	tpk = _appinfo_get_value(ai, AIT_MOUNTABLE_PKG);
+	if (tpk == NULL)
 		return NULL;
 
 	mnt_path = (char **)malloc(sizeof(char *) * 2);
-	if (mnt_path == NULL)
+	if (mnt_path == NULL) {
+		_E("out of memory");
 		return NULL;
+	}
 
 	mnt_path[1] = strdup(tpk);
 	snprintf(mount_point, PATH_MAX, "%s/%s/.pkg",
@@ -135,10 +159,12 @@ static void __free_set(gpointer data)
 	g_hash_table_destroy((GHashTable *)data);
 }
 
-static void __prepare_map()
+static void __prepare_map(void)
 {
-	if (mount_point_hash == NULL)
-		mount_point_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free, __free_set);
+	if (mount_point_hash == NULL) {
+		mount_point_hash = g_hash_table_new_full(g_str_hash,
+				g_str_equal, free, __free_set);
+	}
 }
 
 static void __put_mount_path(const struct appinfo *ai, const char *str)
@@ -148,15 +174,15 @@ static void __put_mount_path(const struct appinfo *ai, const char *str)
 
 	__prepare_map();
 	set = g_hash_table_lookup(mount_point_hash, str);
-
 	if (set == NULL) {
-		set = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
+		set = g_hash_table_new_full(g_str_hash, g_str_equal,
+				free, NULL);
 		if (set == NULL)
 			return;
 		g_hash_table_insert(mount_point_hash, strdup(str), set);
 	}
 
-	appid = appinfo_get_value(ai, AIT_NAME);
+	appid = _appinfo_get_value(ai, AIT_NAME);
 	g_hash_table_insert(set, strdup(appid), NULL);
 }
 
@@ -180,9 +206,9 @@ static bool __is_unmountable(const char *appid, const char *key)
 	return true;
 }
 
-void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_mountable mountable)
+void _extractor_mount(const struct appinfo *ai, bundle *kb,
+		_extractor_mountable mountable)
 {
-	char **mnt_path = NULL;
 	int ret;
 	const char **array = NULL;
 	int len = 0;
@@ -191,8 +217,10 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 	int i;
 	bool dup = false;
 	const char *pkgid = NULL;
+	char **mnt_path;
 
-	if ((mnt_path = mountable(ai)) == NULL)
+	mnt_path = mountable(ai);
+	if (mnt_path == NULL)
 		return;
 
 	if (mnt_path[0] && mnt_path[1]) {
@@ -223,7 +251,7 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 		__put_mount_path(ai, mnt_path[0]);
 		ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
 		if (ret != 1) {
-			pkgid = appinfo_get_value(ai, AIT_PKGID);
+			pkgid = _appinfo_get_value(ai, AIT_PKGID);
 			ret = _signal_send_tep_mount(mnt_path, pkgid);
 			if (ret < 0)
 				_E("dbus error %d", ret);
@@ -235,23 +263,24 @@ void _amd_extractor_mount(const struct appinfo *ai, bundle *kb, _amd_extractor_m
 	__free_path(mnt_path, 2);
 }
 
-void _amd_extractor_unmount(int pid, _amd_extractor_mountable mountable)
+void _extractor_unmount(int pid, _extractor_mountable mountable)
 {
 	const char *appid;
 	const struct appinfo *ai;
 	struct stat link_buf;
 	int ret;
-	char **mnt_path = NULL;
+	char **mnt_path;
 
 	appid = _status_app_get_appid_bypid(pid);
 	if (appid == NULL)
 		return;
 
-	ai = appinfo_find(getuid(), appid);
+	ai = _appinfo_find(getuid(), appid);
 	if (ai == NULL)
 		return;
 
-	if ((mnt_path = mountable(ai)) == NULL)
+	mnt_path = mountable(ai);
+	if (mnt_path == NULL)
 		return;
 
 	if (!__is_unmountable(appid, mnt_path[0]))

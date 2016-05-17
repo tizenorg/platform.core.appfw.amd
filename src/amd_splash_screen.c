@@ -97,7 +97,7 @@ static int __app_can_launch_splash_image(const struct appinfo *ai,
 	const char *fake_effect;
 	int display;
 
-	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strncmp(component_type, APP_TYPE_SERVICE,
 				strlen(APP_TYPE_SERVICE)) == 0) {
 		_D("component_type: %s", component_type);
@@ -108,7 +108,7 @@ static int __app_can_launch_splash_image(const struct appinfo *ai,
 	if (fake_effect && strncmp(fake_effect, "OFF", strlen("OFF")) == 0)
 		return -1;
 
-	appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, &display);
+	_appinfo_get_int_value(ai, AIT_SPLASH_SCREEN_DISPLAY, &display);
 	if (!(display & APP_ENABLEMENT_MASK_ACTIVE))
 		return -1;
 
@@ -122,7 +122,7 @@ static struct appinfo_splash_image *__get_splash_image_info(
 	const char *operation;
 	GHashTable *tbl;
 
-	ai_ss = appinfo_get_ptr_value(ai, AIT_SPLASH_SCREEN);
+	ai_ss = _appinfo_get_ptr_value(ai, AIT_SPLASH_SCREEN);
 	if (ai_ss == NULL)
 		return NULL;
 
