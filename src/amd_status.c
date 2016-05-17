@@ -195,9 +195,6 @@ static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo,
 		return;
 	}
 
-	ai = appinfo_find(caller_uid, appinfo->appid);
-	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-
 	pkginfo = (pkg_status_info_t *)g_hash_table_lookup(
 			pkg_status_info_table, pkgid);
 	if (pkginfo == NULL) {
@@ -205,6 +202,8 @@ static void __remove_pkg_info(const char *pkgid, app_status_info_t *appinfo,
 		return;
 	}
 
+	ai = _appinfo_find(caller_uid, appinfo->appid);
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strcmp(component_type, APP_TYPE_SERVICE) == 0) {
 		if (pkginfo->svc_list) {
 			pkginfo->svc_list = g_slist_remove(pkginfo->svc_list,
@@ -295,18 +294,19 @@ static void __update_leader_app_info(int lpid)
 	}
 }
 
-int _status_add_app_info_list(const char *appid, const char *app_path,
-		int pid, bool is_subapp, uid_t uid)
+int _status_add_app_info_list(const struct appinfo *ai, int pid,
+		bool is_subapp, uid_t uid)
 {
 	GSList *iter;
 	GSList *iter_next;
 	app_status_info_t *info_t;
-	const struct appinfo *ai;
-	const char *component_type = NULL;
-	const char *pkgid = NULL;
-	const char *taskmanage = NULL;
+	const char *component_type;
+	const char *pkgid;
+	const char *taskmanage;
+	const char *appid;
+	const char *app_path;
 
-	if (!appid || !app_path)
+	if (ai == NULL)
 		return -1;
 
 	GSLIST_FOREACH_SAFE(app_status_info_list, iter, iter_next) {
@@ -328,8 +328,6 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 		}
 	}
 
-	ai = appinfo_find(uid, appid);
-
 	info_t = malloc(sizeof(app_status_info_t));
 	if (info_t == NULL) {
 		_E("out of memory");
@@ -338,21 +336,29 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 
 	memset(info_t, 0, sizeof(app_status_info_t));
 
+	appid = _appinfo_get_value(ai, AIT_NAME);
+	if (appid == NULL)
+		goto error;
+
 	info_t->appid = strdup(appid);
 	if (info_t->appid == NULL)
+		goto error;
+
+	app_path = _appinfo_get_value(ai, AIT_EXEC);
+	if (app_path == NULL)
 		goto error;
 
 	info_t->app_path = strdup(app_path);
 	if (info_t->app_path == NULL)
 		goto error;
 
-	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strcmp(component_type, APP_TYPE_SERVICE) == 0)
 		info_t->status = STATUS_SERVICE;
 	else
 		info_t->status = STATUS_LAUNCHING;
 
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
 	if (pkgid == NULL)
 		goto error;
 
@@ -363,11 +369,11 @@ int _status_add_app_info_list(const char *appid, const char *app_path,
 	if (info_t->pkgid == NULL)
 		goto error;
 
-	info_t->lpid = app_group_get_leader_pid(pid);
+	info_t->lpid = _app_group_get_leader_pid(pid);
 	info_t->timestamp = time(NULL) / 10;
 	info_t->fg_count = 0;
 
-	taskmanage = appinfo_get_value(ai, AIT_TASKMANAGE);
+	taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
 	if (taskmanage && strcmp(taskmanage, "true") == 0
 			&& info_t->lpid > 0
 			&& info_t->is_subapp == false) {
@@ -423,7 +429,7 @@ int _status_update_app_info_list(int pid, int status, bool force, uid_t uid)
 		}
 	}
 
-	app_group_set_status(pid, status, force);
+	_app_group_set_status(pid, status, force);
 
 	return 0;
 }
@@ -479,7 +485,7 @@ int _status_get_app_info_status(int pid, uid_t uid)
 			return info_t->status;
 	}
 
-	return app_group_get_status(pid);
+	return _app_group_get_status(pid);
 }
 
 static gint __find_app_bypid(gconstpointer app_data, gconstpointer pid_data)
@@ -517,8 +523,8 @@ void _status_find_service_apps(int pid, uid_t uid, enum app_status status,
 	while (svc_list) {
 		svc_info_t = (app_status_info_t *)svc_list->data;
 		if (svc_info_t) {
-			ai = appinfo_find(uid, svc_info_t->appid);
-			bg_allowed = (intptr_t)appinfo_get_value(ai,
+			ai = _appinfo_find(uid, svc_info_t->appid);
+			bg_allowed = (intptr_t)_appinfo_get_value(ai,
 					AIT_BG_CATEGORY);
 			if (!bg_allowed) {
 				send_event_to_svc_core(svc_info_t->pid);
@@ -565,8 +571,8 @@ void _status_check_service_only(int pid, uid_t uid,
 	if (ui_cnt == 0) {
 		appid = _status_app_get_appid_bypid(pid);
 		if (appid) {
-			ai = appinfo_find(uid, appid);
-			bg_allowed = (intptr_t)appinfo_get_value(ai,
+			ai = _appinfo_find(uid, appid);
+			bg_allowed = (intptr_t)_appinfo_get_value(ai,
 					AIT_BG_CATEGORY);
 			if (!bg_allowed) {
 				send_event_to_svc_core(pid);
@@ -671,7 +677,7 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 			continue;
 
 		if (cmd != APP_ALL_RUNNING_INFO &&
-			app_group_is_sub_app(info_t->pid))
+			_app_group_is_sub_app(info_t->pid))
 			continue;
 
 		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->pid);
@@ -720,7 +726,7 @@ static inline int __find_pid_by_appid(const char *dname, const char *appid,
 
 	if (strncmp(appid, (char *)priv, MAX_LOCAL_BUFSZ-1) == 0) {
 		pid = atoi(dname);
-		if (pid != getpgid(pid) || app_group_is_sub_app(pid))
+		if (pid != getpgid(pid) || _app_group_is_sub_app(pid))
 			pid = 0;
 	}
 
@@ -735,7 +741,7 @@ int _status_app_is_running_v2(const char *appid, uid_t caller_uid)
 	if (appid == NULL)
 		return -1;
 
-	ai = appinfo_find(caller_uid, appid);
+	ai = _appinfo_find(caller_uid, appid);
 	if (ai == NULL)
 		return -1;
 
@@ -810,13 +816,13 @@ static int __get_pkgid_bypid(int pid, char *pkgid, int len)
 		return -1;
 	}
 
-	ai = appinfo_find(uid, appid);
+	ai = _appinfo_find(uid, appid);
 	if (ai == NULL) {
 		free(appid);
 		return -1;
 	}
 
-	snprintf(pkgid, len, "%s", appinfo_get_value(ai, AIT_PKGID));
+	snprintf(pkgid, len, "%s", _appinfo_get_value(ai, AIT_PKGID));
 	free(appid);
 
 	return 0;
@@ -871,9 +877,9 @@ static gint __compare_app_status_info_for_sorting(gconstpointer p1,
 	} else if (info_t1->timestamp < info_t2->timestamp) {
 		return -1;
 	} else {
-		app_group_get_group_pids(info_t1->lpid,
+		_app_group_get_group_pids(info_t1->lpid,
 				&app_group_cnt1, &app_group_pids1);
-		app_group_get_group_pids(info_t2->lpid,
+		_app_group_get_group_pids(info_t2->lpid,
 				&app_group_cnt2, &app_group_pids2);
 		free(app_group_pids1);
 		free(app_group_pids2);

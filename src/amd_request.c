@@ -201,14 +201,14 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 		return -1;
 	}
 
-	ai = appinfo_find(target_uid, appid);
+	ai = _appinfo_find(target_uid, appid);
 	if (ai == NULL) {
 		_request_send_result(req, -1);
 		return -1;
 	}
 
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
-	type = appinfo_get_value(ai, AIT_COMPTYPE);
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
+	type = _appinfo_get_value(ai, AIT_COMPTYPE);
 
 	if (req->cmd == APP_RESUME_BY_PID || req->cmd == APP_PAUSE_BY_PID)
 		aul_send_app_resume_request_signal(pid, appid, pkgid, type);
@@ -273,20 +273,20 @@ static void __set_effective_appid(uid_t uid, bundle *kb)
 	if (appid == NULL)
 		return;
 
-	ai = appinfo_find(uid, appid);
+	ai = _appinfo_find(uid, appid);
 	if (ai == NULL)
 		return;
 
-	effective_appid = appinfo_get_value(ai, AIT_EFFECTIVE_APPID);
+	effective_appid = _appinfo_get_value(ai, AIT_EFFECTIVE_APPID);
 	if (effective_appid == NULL)
 		return;
 
-	effective_ai = appinfo_find(uid, effective_appid);
+	effective_ai = _appinfo_find(uid, effective_appid);
 	if (effective_ai == NULL)
 		return;
 
-	pkgid = appinfo_get_value(ai, AIT_PKGID);
-	effective_pkgid = appinfo_get_value(effective_ai, AIT_PKGID);
+	pkgid = _appinfo_get_value(ai, AIT_PKGID);
+	effective_pkgid = _appinfo_get_value(effective_ai, AIT_PKGID);
 	if (pkgid && effective_pkgid && strcmp(pkgid, effective_pkgid) == 0) {
 		_D("use effective appid instead of the real appid");
 		bundle_del(kb, AUL_K_APPID);
@@ -307,8 +307,8 @@ static gboolean __add_history_handler(gpointer user_data)
 		return FALSE;
 
 	if (!pkt->is_group_app) {
-		ai = (struct appinfo *)appinfo_find(pkt->uid, pkt->appid);;
-		app_path = (char *)appinfo_get_value(ai, AIT_EXEC);
+		ai = (struct appinfo *)_appinfo_find(pkt->uid, pkt->appid);;
+		app_path = (char *)_appinfo_get_value(ai, AIT_EXEC);
 
 		memset((void *)&rec, 0, sizeof(rec));
 
@@ -385,7 +385,7 @@ static int __add_rua_info(request_h req, bundle *kb, const char *appid)
 
 	}
 	rua_stat_item->uid = _request_get_target_uid(req);
-	rua_stat_item->is_group_app = app_group_is_group_app(kb);
+	rua_stat_item->is_group_app = _app_group_is_group_app(kb);
 	strncpy(rua_stat_item->appid, appid, 511);
 
 	g_timeout_add(1500, __add_history_handler, rua_stat_item);
@@ -629,7 +629,7 @@ static int __dispatch_app_group_get_window(request_h req)
 
 	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	wid = app_group_get_window(pid);
+	wid = _app_group_get_window(pid);
 	_request_send_result(req, wid);
 
 	return 0;
@@ -643,7 +643,7 @@ static int __dispatch_app_group_set_window(request_h req)
 
 	bundle_get_str(req->kb, AUL_K_WID, &buf);
 	wid = atoi(buf);
-	ret = app_group_set_window(req->pid, wid);
+	ret = _app_group_set_window(req->pid, wid);
 	_request_send_result(req, ret);
 
 	return ret;
@@ -657,7 +657,7 @@ static int __dispatch_app_group_get_fg_flag(request_h req)
 
 	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	fg = app_group_get_fg_flag(pid);
+	fg = _app_group_get_fg_flag(pid);
 	_request_send_result(req, fg);
 
 	return 0;
@@ -665,7 +665,7 @@ static int __dispatch_app_group_get_fg_flag(request_h req)
 
 static int __dispatch_app_group_clear_top(request_h req)
 {
-	app_group_clear_top(req->pid);
+	_app_group_clear_top(req->pid);
 	_request_send_result(req, 0);
 
 	return 0;
@@ -679,7 +679,7 @@ static int __dispatch_app_group_get_leader_pid(request_h req)
 
 	bundle_get_str(req->kb, AUL_K_PID, &buf);
 	pid = atoi(buf);
-	lpid = app_group_get_leader_pid(pid);
+	lpid = _app_group_get_leader_pid(pid);
 	_request_send_result(req, lpid);
 
 	return 0;
@@ -691,7 +691,7 @@ static int __dispatch_app_group_get_leader_pids(request_h req)
 	int *pids;
 	unsigned char empty[1] = {0,};
 
-	app_group_get_leader_pids(&cnt, &pids);
+	_app_group_get_leader_pids(&cnt, &pids);
 
 	if (pids == NULL || cnt == 0) {
 		_request_send_raw(req, APP_GROUP_GET_LEADER_PIDS, empty, 0);
@@ -712,8 +712,7 @@ static int __dispatch_app_group_get_idle_pids(request_h req)
 	int *pids;
 	unsigned char empty[1] = {0,};
 
-	app_group_get_idle_pids(&cnt, &pids);
-
+	_app_group_get_idle_pids(&cnt, &pids);
 	if (pids == NULL || cnt == 0) {
 		_request_send_raw(req, APP_GROUP_GET_IDLE_PIDS, empty, 0);
 	} else {
@@ -738,7 +737,7 @@ static int __dispatch_app_group_get_group_pids(request_h req)
 	bundle_get_str(req->kb, AUL_K_LEADER_PID, &buf);
 	leader_pid = atoi(buf);
 
-	app_group_get_group_pids(leader_pid, &cnt, &pids);
+	_app_group_get_group_pids(leader_pid, &cnt, &pids);
 	if (pids == NULL || cnt == 0) {
 		_request_send_raw(req, APP_GROUP_GET_GROUP_PIDS, empty, 0);
 	} else {
@@ -756,7 +755,7 @@ static int __dispatch_app_group_lower(request_h req)
 {
 	int ret = 0;
 
-	app_group_lower(req->pid, &ret);
+	_app_group_lower(req->pid, &ret);
 	_request_send_result(req, ret);
 
 	return ret;
@@ -774,7 +773,7 @@ static int __dispatch_app_group_activate_below(request_h req)
 	}
 
 	bundle_get_str(req->kb, AUL_K_APPID, &buf);
-	ret = app_group_activate_below(req->pid, buf);
+	ret = _app_group_activate_below(req->pid, buf);
 	_request_send_result(req, ret);
 
 	return 0;
@@ -795,7 +794,7 @@ static int __dispatch_app_start(request_h req)
 	__set_effective_appid(_request_get_target_uid(req), kb);
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	ret = _start_app(appid, kb, req->uid, req, &pending);
+	ret = _launch_start_app(appid, req, &pending);
 	if (ret <= 0)
 		_input_unlock();
 
@@ -923,9 +922,9 @@ static int __dispatch_app_term_async(request_h req)
 
 	term_pid = bundle_get_val(kb, AUL_K_APPID);
 	appid = _status_app_get_appid_bypid(atoi(term_pid));
-	ai = appinfo_find(_request_get_target_uid(req), appid);
+	ai = _appinfo_find(_request_get_target_uid(req), appid);
 	if (ai) {
-		appinfo_set_value(ai, AIT_STATUS, "norestart");
+		_appinfo_set_value(ai, AIT_STATUS, "norestart");
 		__app_process_by_pid(req, term_pid, NULL);
 	}
 
@@ -1020,8 +1019,8 @@ static int __dispatch_app_status_update(request_h req)
 	status = (int *)req->data;
 	if (*status == STATUS_NORESTART) {
 		appid = _status_app_get_appid_bypid(req->pid);
-		ai = appinfo_find(_request_get_target_uid(req), appid);
-		appinfo_set_value((struct appinfo *)ai, AIT_STATUS,
+		ai = _appinfo_find(_request_get_target_uid(req), appid);
+		_appinfo_set_value((struct appinfo *)ai, AIT_STATUS,
 				"norestart");
 	} else if (*status != STATUS_VISIBLE && *status != STATUS_BG) {
 		_status_update_app_info_list(req->pid, *status, FALSE,
@@ -1090,7 +1089,7 @@ static int __dispatch_agent_dead_signal(request_h req)
 static int __dispatch_amd_reload_appinfo(request_h req)
 {
 	_D("AMD_RELOAD_APPINFO");
-	appinfo_reload();
+	_appinfo_reload();
 	_request_send_result(req, 0);
 
 	return 0;
@@ -1130,13 +1129,13 @@ static int __dispatch_app_com_create(request_h req)
 	_D("endpoint: %s propagate: %x privilege: %s",
 			endpoint, propagate, privilege);
 
-	ret = app_com_add_endpoint(endpoint, propagate, privilege);
+	ret = _app_com_add_endpoint(endpoint, propagate, privilege);
 	if (ret == AUL_APP_COM_R_ERROR_OK ||
 			ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
-		ret = app_com_join(endpoint, getpgid(req->pid), NULL);
+		ret = _app_com_join(endpoint, getpgid(req->pid), NULL);
 		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
 			_E("illegal access: remove endpoint");
-			app_com_remove_endpoint(endpoint);
+			_app_com_remove_endpoint(endpoint);
 		}
 	}
 
@@ -1164,7 +1163,7 @@ static int __dispatch_app_com_join(request_h req)
 
 	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
 
-	ret = app_com_join(endpoint, getpgid(req->pid), filter);
+	ret = _app_com_join(endpoint, getpgid(req->pid), filter);
 
 	_request_send_result(req, ret);
 
@@ -1187,7 +1186,7 @@ static int __dispatch_app_com_send(request_h req)
 		return 0;
 	}
 
-	ret = app_com_send(endpoint, getpgid(req->pid), kb);
+	ret = _app_com_send(endpoint, getpgid(req->pid), kb);
 	_request_send_result(req, ret);
 
 	return 0;
@@ -1209,7 +1208,7 @@ static int __dispatch_app_com_leave(request_h req)
 		return 0;
 	}
 
-	ret = app_com_leave(endpoint, getpgid(req->pid));
+	ret = _app_com_leave(endpoint, getpgid(req->pid));
 	_request_send_result(req, ret);
 
 	return 0;
@@ -1220,7 +1219,6 @@ static int __dispatch_app_register_pid(request_h req)
 	bundle *kb;
 	const struct appinfo *ai;
 	const char *appid;
-	const char *app_path;
 	const char *component_type;
 	const char *pid_str;
 	int pid;
@@ -1249,15 +1247,14 @@ static int __dispatch_app_register_pid(request_h req)
 
 	_D("appid: %s, pid: %d", appid, pid);
 
-	ai = appinfo_find(_request_get_target_uid(req), appid);
-	app_path = appinfo_get_value(ai, AIT_EXEC);
-	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0)
-		app_group_start_app(pid, kb, pid,
-				FALSE, APP_GROUP_LAUNCH_MODE_SINGLE);
+	ai = _appinfo_find(_request_get_target_uid(req), appid);
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
+	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0) {
+		_app_group_start_app(pid, kb, pid, FALSE,
+				APP_GROUP_LAUNCH_MODE_SINGLE);
+	}
 
-	_status_add_app_info_list(appid, app_path, pid, false,
-			_request_get_target_uid(req));
+	_status_add_app_info_list(ai, pid, false, _request_get_target_uid(req));
 
 	return 0;
 }
@@ -1359,8 +1356,8 @@ static int __dispatch_app_set_process_group(request_h req)
 		return -1;
 	}
 
-	ai = appinfo_find(_request_get_target_uid(req), child_appid);
-	child_pkgid = appinfo_get_value(ai, AIT_PKGID);
+	ai = _appinfo_find(_request_get_target_uid(req), child_appid);
+	child_pkgid = _appinfo_get_value(ai, AIT_PKGID);
 	ret = aul_send_app_group_signal(owner_pid, child_pid, child_pkgid);
 
 	_request_send_result(req, ret);
@@ -1801,13 +1798,15 @@ bundle *_request_get_bundle(request_h req)
 	return req->kb;
 }
 
-request_h _request_create_local(int cmd, int uid, int pid)
+request_h _request_create_local(int cmd, int uid, int pid, bundle *kb)
 {
 	request_h req;
 
 	req = (request_h)malloc(sizeof(struct request_s));
-	if (req == NULL)
+	if (req == NULL) {
+		_E("out of memory");
 		return NULL;
+	}
 
 	req->clifd = -1;
 	req->pid = pid;
@@ -1817,13 +1816,19 @@ request_h _request_create_local(int cmd, int uid, int pid)
 	req->cmd = cmd;
 	req->len = 0;
 	req->opt = AUL_SOCK_NONE;
-	req->kb = NULL;
+	req->kb = bundle_dup(kb);
 
 	return req;
 }
 
 void _request_free_local(request_h req)
 {
+	if (req == NULL)
+		return;
+
+	if (req->kb)
+		bundle_free(req->kb);
+
 	free(req);
 }
 
@@ -1844,6 +1849,11 @@ int _request_remove_fd(request_h req)
 uid_t _request_get_target_uid(request_h req)
 {
 	return req->t_uid;
+}
+
+uid_t _request_get_uid(request_h req)
+{
+	return req->uid;
 }
 
 int _request_send_raw(request_h req, int cmd, unsigned char *data, int len)
