@@ -265,7 +265,7 @@ static void __prepare_to_wake_services(int pid)
 		_E("error on wake service for pid: %d", pid);
 }
 
-static void __set_flag(GList *list, int cpid, int flag, gboolean force)
+static void __set_flag(GList *list, int cpid, int flag, bool force)
 {
 	app_group_context_t *ac;
 	const struct appinfo *ai;
@@ -275,7 +275,7 @@ static void __set_flag(GList *list, int cpid, int flag, gboolean force)
 
 	while (list) {
 		ac = (app_group_context_t *)list->data;
-		if (ac && (ac->fg != flag || force == TRUE)) {
+		if (ac && (ac->fg != flag || force == true)) {
 			appid = _status_app_get_appid_bypid(ac->pid);
 			ai = appinfo_find(getuid(), appid);
 			pkgid = appinfo_get_value(ai, AIT_PKGID);
@@ -317,7 +317,7 @@ static void __set_flag(GList *list, int cpid, int flag, gboolean force)
 	}
 }
 
-static void __set_fg_flag(int cpid, int flag, gboolean force)
+static void __set_fg_flag(int cpid, int flag, bool force)
 {
 	int lpid = app_group_get_leader_pid(cpid);
 	GHashTableIter iter;
@@ -1020,7 +1020,7 @@ int app_group_get_status(int pid)
 }
 
 static void __set_status(app_group_context_t *ac, app_group_context_t *last_ac,
-		int lpid, int pid, int status, gboolean force)
+		int lpid, int pid, int status, bool force)
 {
 	const char *appid;
 	const char *pkgid;
@@ -1047,7 +1047,7 @@ static void __set_status(app_group_context_t *ac, app_group_context_t *last_ac,
 	}
 }
 
-int app_group_set_status(int pid, int status, gboolean force)
+int app_group_set_status(int pid, int status, bool force)
 {
 	GHashTableIter iter;
 	gpointer key;
@@ -1185,16 +1185,16 @@ void app_group_remove_leader_pid(int lpid)
 	}
 }
 
-int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
+int app_group_can_start_app(const char *appid, bundle *b, bool *can_attach,
 				int *lpid, app_group_launch_mode *mode)
 {
 	const char *val;
 	int caller_pid;
 	int caller_wid;
 
-	*can_attach = FALSE;
+	*can_attach = false;
 	if (__can_attach_window(b, appid, mode)) {
-		*can_attach = TRUE;
+		*can_attach = true;
 		val = bundle_get_val(b, AUL_K_ORG_CALLER_PID);
 		if (val == NULL)
 			val = bundle_get_val(b, AUL_K_CALLER_PID);
@@ -1211,14 +1211,14 @@ int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
 			if (caller_wid == 0) {
 				_D("caller window wasn't ready");
 				if (__can_be_leader(b))
-					*can_attach = FALSE;
+					*can_attach = false;
 				else
-					*can_attach = TRUE;
+					*can_attach = true;
 			}
 		} else {
 			_E("no lpid");
 			if (__can_be_leader(b))
-				*can_attach = FALSE;
+				*can_attach = false;
 			else
 				return -1;
 		}
@@ -1227,7 +1227,7 @@ int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
 	return 0;
 }
 
-void app_group_start_app(int pid, bundle *b, int lpid, gboolean can_attach,
+void app_group_start_app(int pid, bundle *b, int lpid, bool can_attach,
 		app_group_launch_mode mode)
 {
 	int caller_pid = __get_caller_pid(b);

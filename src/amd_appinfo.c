@@ -774,7 +774,7 @@ static void __handle_onboot(void *user_data, const char *appid,
 		if (_status_app_is_running(appid, uid) > 0)
 			return;
 		_D("start app %s from user %d by onboot", appid, uid);
-		_start_app_local(uid, info->val[AIT_NAME]);
+		_launch_start_app_local(uid, info->val[AIT_NAME]);
 	}
 }
 

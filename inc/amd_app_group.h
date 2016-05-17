@@ -16,7 +16,8 @@
 
 #pragma once
 
-#include <glib.h>
+#include <stdbool.h>
+
 #include <bundle.h>
 
 typedef enum {
@@ -41,14 +42,14 @@ void app_group_clear_top(int pid);
 int app_group_get_leader_pid(int pid);
 void app_group_set_dead_pid(int pid);
 int app_group_get_status(int pid);
-int app_group_set_status(int pid, int status, gboolean force);
+int app_group_set_status(int pid, int status, bool force);
 int app_group_get_fg_flag(int pid);
 int app_group_set_hint(int pid, bundle *kb);
 int app_group_find_second_leader(int lpid);
 void app_group_remove_leader_pid(int lpid);
-int app_group_can_start_app(const char *appid, bundle *b, gboolean *can_attach,
+int app_group_can_start_app(const char *appid, bundle *b, bool *can_attach,
 		int *lpid, app_group_launch_mode *mode);
-void app_group_start_app(int pid, bundle *b, int lpid, gboolean can_attach,
+void app_group_start_app(int pid, bundle *b, int lpid, bool can_attach,
 		app_group_launch_mode mode);
 int app_group_find_singleton(const char *appid, int *found_pid,
 		int *found_lpid);

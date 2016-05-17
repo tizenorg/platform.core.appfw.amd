@@ -795,7 +795,7 @@ static int __dispatch_app_start(request_h req)
 	__set_effective_appid(_request_get_target_uid(req), kb);
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	ret = _start_app(appid, kb, req->uid, req, &pending);
+	ret = _launch_start_app(appid, req, &pending);
 	if (ret <= 0)
 		_input_unlock();
 
@@ -1220,7 +1220,6 @@ static int __dispatch_app_register_pid(request_h req)
 	bundle *kb;
 	const struct appinfo *ai;
 	const char *appid;
-	const char *app_path;
 	const char *component_type;
 	const char *pid_str;
 	int pid;
@@ -1250,14 +1249,13 @@ static int __dispatch_app_register_pid(request_h req)
 	_D("appid: %s, pid: %d", appid, pid);
 
 	ai = appinfo_find(_request_get_target_uid(req), appid);
-	app_path = appinfo_get_value(ai, AIT_EXEC);
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0)
-		app_group_start_app(pid, kb, pid,
-				FALSE, APP_GROUP_LAUNCH_MODE_SINGLE);
+	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0) {
+		app_group_start_app(pid, kb, pid, FALSE,
+				APP_GROUP_LAUNCH_MODE_SINGLE);
+	}
 
-	_status_add_app_info_list(appid, app_path, pid, false,
-			_request_get_target_uid(req));
+	_status_add_app_info_list(ai, pid, false, _request_get_target_uid(req));
 
 	return 0;
 }
@@ -1801,13 +1799,15 @@ bundle *_request_get_bundle(request_h req)
 	return req->kb;
 }
 
-request_h _request_create_local(int cmd, int uid, int pid)
+request_h _request_create_local(int cmd, int uid, int pid, bundle *kb)
 {
 	request_h req;
 
 	req = (request_h)malloc(sizeof(struct request_s));
-	if (req == NULL)
+	if (req == NULL) {
+		_E("out of memory");
 		return NULL;
+	}
 
 	req->clifd = -1;
 	req->pid = pid;
@@ -1817,13 +1817,19 @@ request_h _request_create_local(int cmd, int uid, int pid)
 	req->cmd = cmd;
 	req->len = 0;
 	req->opt = AUL_SOCK_NONE;
-	req->kb = NULL;
+	req->kb = bundle_dup(kb);
 
 	return req;
 }
 
 void _request_free_local(request_h req)
 {
+	if (req == NULL)
+		return;
+
+	if (req->kb)
+		bundle_free(req->kb);
+
 	free(req);
 }
 
@@ -1844,6 +1850,11 @@ int _request_remove_fd(request_h req)
 uid_t _request_get_target_uid(request_h req)
 {
 	return req->t_uid;
+}
+
+uid_t _request_get_uid(request_h req)
+{
+	return req->uid;
 }
 
 int _request_send_raw(request_h req, int cmd, unsigned char *data, int len)

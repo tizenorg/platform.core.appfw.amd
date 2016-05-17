@@ -149,10 +149,17 @@ static bool __can_restart_app(const char *appid)
 void _cleanup_dead_info(int pid)
 {
 	int caller_pid;
+	const char *appid;
+	const struct appinfo *ai;
 
 	_D("pid: %d", pid);
-	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tep_paths);
-	_amd_extractor_unmount(pid, _amd_extractor_mountable_get_tpk_paths);
+	appid = _status_app_get_appid_bypid(pid);
+	if (appid == NULL)
+		return;
+
+	ai = appinfo_find(getuid(), appid);
+	_extractor_unmount(pid, _extractor_mountable_get_tep_paths(ai));
+	_extractor_unmount(pid, _extractor_mountable_get_tpk_paths(ai));
 	app_com_client_remove(pid);
 	if (app_group_is_leader_pid(pid)) {
 		_W("app_group_leader_app, pid: %d", pid);
@@ -206,7 +213,7 @@ static int __app_dead_handler(int pid, void *data)
 	_request_flush_pending_request(pid);
 
 	if (restart)
-		_start_app_local(getuid(), appid);
+		_launch_start_app_local(getuid(), appid);
 	if (appid)
 		free(appid);
 
@@ -224,6 +231,7 @@ static void __syspopup_signal_handler(GDBusConnection *conn,
 	gchar *appid = NULL;
 	gchar *b_raw = NULL;
 	bundle *kb;
+	int ret;
 
 	if (g_strcmp0(signal_name, AUL_SP_DBUS_LAUNCH_REQUEST_SIGNAL) != 0)
 		return;
@@ -233,7 +241,8 @@ static void __syspopup_signal_handler(GDBusConnection *conn,
 
 	kb = bundle_decode((bundle_raw *)b_raw, strlen(b_raw));
 	if (kb) {
-		if (_start_app_local_with_bundle(getuid(), appid, kb) < 0)
+		ret = _launch_start_app_local_with_bundle(getuid(), appid, kb);
+		if (ret < 0)
 			_E("syspopup launch request failed: %s", appid);
 
 		bundle_free(kb);

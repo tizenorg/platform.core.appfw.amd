@@ -383,27 +383,27 @@ int _temporary_permission_destroy(shared_info_h handle)
 {
 	int r;
 
-	if (handle) {
-		if (handle->shared_info) { /* back out */
-			_D("revoke permission %s : %s",
-					handle->shared_info->owner_appid,
-					handle->appid);
-			r = security_manager_private_sharing_drop(
-					handle->shared_info->handle);
-			if (r != SECURITY_MANAGER_SUCCESS)
-				_E("revoke error %d", r);
+	if (handle == NULL)
+		return -1;
 
-			security_manager_private_sharing_req_free(
-					handle->shared_info->handle);
-			free(handle->shared_info->owner_appid);
-		}
+	if (handle->shared_info) { /* back out */
+		_D("revoke permission %s : %s",
+				handle->shared_info->owner_appid,
+				handle->appid);
+		r = security_manager_private_sharing_drop(
+				handle->shared_info->handle);
+		if (r != SECURITY_MANAGER_SUCCESS)
+			_E("revoke error %d", r);
 
-		free(handle->appid);
-		free(handle);
-		return 0;
+		security_manager_private_sharing_req_free(
+				handle->shared_info->handle);
+		free(handle->shared_info->owner_appid);
 	}
 
-	return -1;
+	free(handle->appid);
+	free(handle);
+
+	return 0;
 }
 
 int _temporary_permission_drop(int pid, uid_t uid)
