@@ -1220,7 +1220,6 @@ static int __dispatch_app_register_pid(request_h req)
 	bundle *kb;
 	const struct appinfo *ai;
 	const char *appid;
-	const char *app_path;
 	const char *component_type;
 	const char *pid_str;
 	int pid;
@@ -1250,14 +1249,13 @@ static int __dispatch_app_register_pid(request_h req)
 	_D("appid: %s, pid: %d", appid, pid);
 
 	ai = appinfo_find(_request_get_target_uid(req), appid);
-	app_path = appinfo_get_value(ai, AIT_EXEC);
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0)
-		app_group_start_app(pid, kb, pid,
-				FALSE, APP_GROUP_LAUNCH_MODE_SINGLE);
+	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0) {
+		app_group_start_app(pid, kb, pid, FALSE,
+				APP_GROUP_LAUNCH_MODE_SINGLE);
+	}
 
-	_status_add_app_info_list(appid, app_path, pid, false,
-			_request_get_target_uid(req));
+	_status_add_app_info_list(ai, pid, false, _request_get_target_uid(req));
 
 	return 0;
 }

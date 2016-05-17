@@ -567,10 +567,9 @@ static int __nofork_processing(int cmd, int pid, bundle *kb, request_h req)
 }
 
 static int __compare_signature(const struct appinfo *ai, int cmd,
-		uid_t caller_uid, const char *appid, char *caller_appid, int fd)
+		uid_t caller_uid, const char *appid, const char *caller_appid)
 {
 	const char *permission;
-	int ret;
 	const struct appinfo *caller_ai;
 	const char *preload;
 	pkgmgrinfo_cert_compare_result_type_e compare_result;
@@ -595,11 +594,9 @@ static int __compare_signature(const struct appinfo *ai, int cmd,
 						caller_appid, appid,
 						&compare_result);
 			}
-			if (compare_result != PMINFO_CERT_COMPARE_MATCH) {
-				ret = -EILLEGALACCESS;
-				_send_result_to_client(fd, ret);
-				return ret;
-			}
+
+			if (compare_result != PMINFO_CERT_COMPARE_MATCH)
+				return -EILLEGALACCESS;
 		}
 	}
 
@@ -951,11 +948,18 @@ static int __check_ver(const char *required, const char *actual)
 static int __get_prelaunch_attribute(const struct appinfo *ai)
 {
 	int attribute_val = RESOURCED_BACKGROUND_MANAGEMENT_ATTRIBUTE;
-	const char *attribute_str;
+	const char *api_version;
 
-	attribute_str = appinfo_get_value(ai, AIT_API_VERSION);
-	if (attribute_str && __check_ver("2.4", attribute_str))
+	api_version = appinfo_get_value(ai, AIT_API_VERSION);
+	if (api_version && __check_ver("2.4", api_version))
 		attribute_val |= RESOURCED_API_VER_2_4_ATTRIBUTE;
+
+	_D("api-version: %s", api_version);
+	_D("prelaunch attribute %d%d%d%d(2)",
+			(attribute_val & 0x8) >> 3,
+			(attribute_val & 0x4) >> 2,
+			(attribute_val & 0x2) >> 1,
+			(attribute_val & 0x1));
 
 	return attribute_val;
 }
@@ -965,10 +969,142 @@ static int __get_background_category(const struct appinfo *ai)
 	int category = 0x0;
 
 	category = (intptr_t)appinfo_get_value(ai, AIT_BG_CATEGORY);
-	if (category > 0)
-		return category;
+
+	_D("background category: %#x", category);
+
+	return category;
+}
+
+static bool __is_allowed_background(const char *component_type, int bg_category)
+{
+	bool bg_allowed = false;
+
+	/*
+	 * 2.4 bg-categorized (uiapp || svcapp) || watch || widget -> bg allowed
+	 * 2.3 uiapp -> not allowed, 2.3 svcapp -> bg allowed
+	 */
+	if (!strcmp(component_type, APP_TYPE_UI) ||
+			!strcmp(component_type, APP_TYPE_SERVICE)) {
+		if (bg_category)
+			bg_allowed = true;
+	} else {
+		bg_allowed = true;
+	}
+
+	return bg_allowed;
+}
+
+static void __set_caller_appinfo(const char *caller_appid, int caller_pid,
+		uid_t caller_uid, bundle *kb)
+{
+	char buf[MAX_PID_STR_BUFSZ];
+
+	snprintf(buf, sizeof(buf), "%d", caller_pid);
+	bundle_del(kb, AUL_K_CALLER_PID);
+	bundle_add(kb, AUL_K_CALLER_PID, buf);
+
+	snprintf(buf, sizeof(buf), "%d", caller_uid);
+	bundle_del(kb, AUL_K_CALLER_UID);
+	bundle_add(kb, AUL_K_CALLER_UID, buf);
+
+	if (caller_appid) {
+		bundle_del(kb, AUL_K_CALLER_APPID);
+		bundle_add(kb, AUL_K_CALLER_APPID, caller_appid);
+	}
+}
+
+static const char *__get_caller_appid(int caller_pid)
+{
+	char *caller_appid;
+
+	caller_appid = _status_app_get_appid_bypid(caller_pid);
+	if (caller_appid == NULL)
+		caller_appid = _status_app_get_appid_bypid(getpgid(caller_pid));
+
+	return caller_appid;
+}
+
+static int __check_executable(const struct appinfo *ai)
+{
+	const char *status;
+	int enable;
+	int ret;
+
+	status = appinfo_get_value(ai, AIT_STATUS);
+	if (status == NULL)
+		return -1;
+
+	if (strcmp(status, "blocking") == 0) {
+		_D("Blocking");
+		return -EREJECTED;
+	}
+
+	ret = appinfo_get_int_value(ai, AIT_ENABLEMENT, &enable);
+	if (ret == 0 && !(enable & APP_ENABLEMENT_MASK_ACTIVE)) {
+		_D("Disabled");
+		return -EREJECTED;
+	}
 
 	return 0;
+}
+
+static void __set_appinfo_for_launchpad(const struct appinfo *ai, bundle *kb)
+{
+	const char *str;
+
+	str = appinfo_get_value(ai, AIT_HWACC);
+	if (str) {
+		bundle_del(kb, AUL_K_HWACC);
+		bundle_add(kb, AUL_K_HWACC, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_ROOT_PATH);
+	if (str) {
+		bundle_del(kb, AUL_K_ROOT_PATH);
+		bundle_add(kb, AUL_K_ROOT_PATH, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_EXEC);
+	if (str) {
+		bundle_del(kb, AUL_K_EXEC);
+		bundle_add(kb, AUL_K_EXEC, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_PKGTYPE);
+	if (str) {
+		bundle_del(kb, AUL_K_PACKAGETYPE);
+		bundle_add(kb, AUL_K_PACKAGETYPE, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_PKGID);
+	if (str) {
+		bundle_del(kb, AUL_K_PKGID);
+		bundle_add(kb, AUL_K_PKGID, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_POOL);
+	if (str) {
+		bundle_del(kb, AUL_K_INTERNAL_POOL);
+		bundle_add(kb, AUL_K_INTERNAL_POOL, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_COMPTYPE);
+	if (str) {
+		bundle_del(kb, AUL_K_COMP_TYPE);
+		bundle_add(kb, AUL_K_COMP_TYPE, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_APPTYPE);
+	if (str) {
+		bundle_del(kb, AUL_K_APP_TYPE);
+		bundle_add(kb, AUL_K_APP_TYPE, str);
+	}
+
+	str = appinfo_get_value(ai, AIT_API_VERSION);
+	if (str) {
+		bundle_del(kb, AUL_K_API_VERSION);
+		bundle_add(kb, AUL_K_API_VERSION, str);
+	}
 }
 
 int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
@@ -976,20 +1112,11 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 {
 	int ret;
 	const struct appinfo *ai;
-	const char *status;
-	const char *multiple = NULL;
-	const char *app_path = NULL;
-	const char *pkg_type = NULL;
-	const char *pkg_id = NULL;
-	const char *component_type = NULL;
-	const char *process_pool = NULL;
-	const char *app_type = NULL;
-	const char *api_version = NULL;
+	const char *multiple;
+	const char *pkg_id;
+	const char *component_type;
 	int pid = -1;
-	char tmpbuf[MAX_PID_STR_BUFSZ];
-	const char *hwacc;
-	const char *root_path;
-	char *caller_appid;
+	const char *caller_appid;
 	int lpid = -1;
 	int callee_status = -1;
 	gboolean can_attach = FALSE;
@@ -1001,7 +1128,6 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
 	splash_image_h si;
-	int enable = 1;
 	int prelaunch_attribute;
 	int bg_category;
 	bool bg_allowed = false;
@@ -1009,25 +1135,10 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 
 	traceBegin(TTRACE_TAG_APPLICATION_MANAGER, "AMD:START_APP");
 
-	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_pid);
-	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
-
-	snprintf(tmpbuf, MAX_PID_STR_BUFSZ, "%d", caller_uid);
-	bundle_add(kb, AUL_K_CALLER_UID, tmpbuf);
-
 	_D("_start_app: caller pid=%d uid=%d", caller_pid, caller_uid);
 
 	if (cmd == APP_START_RES)
 		bundle_add(kb, AUL_K_WAIT_RESULT, "1");
-
-	caller_appid = _status_app_get_appid_bypid(caller_pid);
-	if (caller_appid != NULL) {
-		bundle_add(kb, AUL_K_CALLER_APPID, caller_appid);
-	} else {
-		caller_appid = _status_app_get_appid_bypid(getpgid(caller_pid));
-		if (caller_appid != NULL)
-			bundle_add(kb, AUL_K_CALLER_APPID, caller_appid);
-	}
 
 	ai = appinfo_find(target_uid, appid);
 	if (ai == NULL) {
@@ -1037,50 +1148,37 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 		return -1;
 	}
 
-	status = appinfo_get_value(ai, AIT_STATUS);
-	if (status == NULL) {
-		_request_send_result(req, -1);
+	ret = __check_executable(ai);
+	if (ret < 0) {
+		_request_send_result(req, ret);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return -1;
 	}
 
-	if (!strcmp(status, "blocking")) {
-		_D("blocking");
-		_request_send_result(req, -EREJECTED);
-		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
-		return -EREJECTED;
-	}
+	caller_appid = __get_caller_appid(caller_pid);
+	__set_caller_appinfo(caller_appid, caller_pid, caller_uid, kb);
 
-
-	ret = appinfo_get_int_value(ai, AIT_ENABLEMENT, &enable);
-	if (ret == 0 && !(enable & APP_ENABLEMENT_MASK_ACTIVE)) {
-		_D("Disabled");
-		_request_send_result(req, -EREJECTED);
-		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
-		return -EREJECTED;
-	}
-
-	app_path = appinfo_get_value(ai, AIT_EXEC);
-	pkg_type = appinfo_get_value(ai, AIT_PKGTYPE);
-	pkg_id = appinfo_get_value(ai, AIT_PKGID);
-	process_pool = appinfo_get_value(ai, AIT_POOL);
-	app_type = appinfo_get_value(ai, AIT_APPTYPE);
-	api_version = appinfo_get_value(ai, AIT_API_VERSION);
-
-	ret = __compare_signature(ai, cmd, target_uid, appid, caller_appid,
-			_request_get_fd(req));
-	if (ret != 0) {
+	ret = __compare_signature(ai, cmd, target_uid, appid, caller_appid);
+	if (ret < 0) {
 		_request_send_result(req, ret);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
 		return ret;
 	}
 
+	pkg_id = appinfo_get_value(ai, AIT_PKGID);
 	multiple = appinfo_get_value(ai, AIT_MULTI);
-	if (!multiple || strncmp(multiple, "false", 5) == 0)
+	if (!multiple || strcmp(multiple, "false") == 0)
 		pid = _status_app_is_running(appid, target_uid);
 
 	component_type = appinfo_get_value(ai, AIT_COMPTYPE);
-	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0) {
+	if (component_type == NULL) {
+		_E("Failed to get component type: %s", appid);
+		_request_send_result(req, -1);
+		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
+		return -1;
+	}
+
+	if (!strcmp(component_type, APP_TYPE_UI)) {
 		pid = __get_pid_for_app_group(appid, pid, target_uid, kb,
 				&lpid, &can_attach, &new_process, &launch_mode,
 				&is_subapp);
@@ -1090,16 +1188,13 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 			return pid;
 		}
 		_input_lock();
-	} else if (component_type &&
-			strcmp(component_type, APP_TYPE_SERVICE) == 0) {
-		if (caller_appid) {
-			ret = __check_execute_permission(pkg_id, caller_appid,
-					target_uid, kb);
-			if (ret != 0) {
-				_request_send_result(req, ret);
-				traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
-				return ret;
-			}
+	} else if (caller_appid && !strcmp(component_type, APP_TYPE_SERVICE)) {
+		ret = __check_execute_permission(pkg_id, caller_appid,
+				target_uid, kb);
+		if (ret < 0) {
+			_request_send_result(req, ret);
+			traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
+			return ret;
 		}
 	}
 
@@ -1114,38 +1209,14 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 	if (pid > 0)
 		callee_status = _status_get_app_info_status(pid, target_uid);
 
-	prelaunch_attribute =  __get_prelaunch_attribute(ai);
+	prelaunch_attribute = __get_prelaunch_attribute(ai);
 	bg_category = __get_background_category(ai);
-
-	/*
-	 * 2.4 bg-categorized (uiapp || svcapp) || watch || widget -> bg allowed
-	 * 2.3 uiapp -> not allowed, 2.3 svcapp -> bg allowed
-	 */
-	if (component_type && bg_category &&
-			((strcmp(component_type, APP_TYPE_UI) == 0) ||
-			 (strcmp(component_type, APP_TYPE_SERVICE) == 0)))
-		bg_allowed = true;
-	else if (component_type &&
-			((strcmp(component_type, APP_TYPE_WATCH) == 0) ||
-			 (strcmp(component_type, APP_TYPE_WIDGET) == 0)))
-		bg_allowed = true;
-	else
-		bg_allowed = false;
-
+	bg_allowed = __is_allowed_background(component_type, bg_category);
 	if (bg_allowed) {
-		_D("[__SUSPEND__] allowed background, appid: %s, "
-				"bg category: 0x%x, app type: %s, "
-				"api version: %s",
-				appid, bg_category, component_type,
-				appinfo_get_value(ai, AIT_API_VERSION));
+		_D("[__SUSPEND__] allowed background, appid: %s, app-type: %s",
+				appid, component_type);
 		bundle_add(kb, AUL_K_ALLOWED_BG, "ALLOWED_BG");
 	}
-
-	_D("prelaunch attribute %d%d%d%d(2) for %s",
-			(prelaunch_attribute & 0x8) >> 3,
-			(prelaunch_attribute & 0x4) >> 2,
-			(prelaunch_attribute & 0x2) >> 1,
-			prelaunch_attribute & 0x1, appid);
 
 	if (pid > 0 && callee_status != STATUS_DYING) {
 		if (caller_pid == pid) {
@@ -1157,9 +1228,8 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 			aul_send_app_resume_request_signal(pid, appid, pkg_id,
 					component_type);
 			_suspend_remove_timer(pid);
-			if (!bg_allowed && component_type &&
-					strcmp(component_type,
-						APP_TYPE_SERVICE) == 0)
+			if (!bg_allowed &&
+				!strcmp(component_type, APP_TYPE_SERVICE))
 				__prepare_to_wake_services(pid);
 
 			ret = __nofork_processing(cmd, pid, kb, req);
@@ -1176,35 +1246,7 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 			_cleanup_dead_info(pid);
 		}
 
-		hwacc = appinfo_get_value(ai, AIT_HWACC);
-		root_path = appinfo_get_value(ai, AIT_ROOT_PATH);
-
-		bundle_del(kb, AUL_K_HWACC);
-		bundle_add(kb, AUL_K_HWACC, hwacc);
-
-		bundle_del(kb, AUL_K_ROOT_PATH);
-		bundle_add(kb, AUL_K_ROOT_PATH, root_path);
-
-		bundle_del(kb, AUL_K_EXEC);
-		bundle_add(kb, AUL_K_EXEC, app_path);
-
-		bundle_del(kb, AUL_K_PACKAGETYPE);
-		bundle_add(kb, AUL_K_PACKAGETYPE, pkg_type);
-
-		bundle_del(kb, AUL_K_PKGID);
-		bundle_add(kb, AUL_K_PKGID, pkg_id);
-
-		bundle_del(kb, AUL_K_INTERNAL_POOL);
-		bundle_add(kb, AUL_K_INTERNAL_POOL, process_pool);
-
-		bundle_del(kb, AUL_K_COMP_TYPE);
-		bundle_add(kb, AUL_K_COMP_TYPE, component_type);
-
-		bundle_del(kb, AUL_K_APP_TYPE);
-		bundle_add(kb, AUL_K_APP_TYPE, app_type);
-
-		bundle_del(kb, AUL_K_API_VERSION);
-		bundle_add(kb, AUL_K_API_VERSION, api_version);
+		__set_appinfo_for_launchpad(ai, kb);
 
 		if (bundle_get_type(kb, AUL_K_SDK) != BUNDLE_TYPE_NONE)
 			pad_type = DEBUG_LAUNCHPAD_SOCK;
@@ -1212,31 +1254,27 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 		si = _splash_screen_create_image(ai, kb, cmd);
 		_splash_screen_send_image(si);
 
-		_signal_send_proc_prelaunch(appid, pkg_id, prelaunch_attribute,
-				bg_category);
+		_signal_send_proc_prelaunch(appid, pkg_id,
+				prelaunch_attribute, bg_category);
 
 		pid = _send_cmd_to_launchpad(pad_type, target_uid,
 				PAD_CMD_LAUNCH, kb);
 		if (pid > 0) {
 			*pending = true;
 			_splash_screen_send_pid(si, pid);
-
 			_suspend_add_proc(pid);
-
-			aul_send_app_launch_request_signal(pid, appid, pkg_id,
-					component_type);
+			aul_send_app_launch_request_signal(pid, appid,
+					pkg_id, component_type);
 		} else {
 			_splash_screen_destroy_image(si);
 		}
 
-		if (bg_allowed && component_type &&
-				strcmp(component_type, APP_TYPE_SERVICE) == 0)
+		if (bg_allowed && !strcmp(component_type, APP_TYPE_SERVICE))
 			g_idle_add(__check_service_only, GINT_TO_POINTER(pid));
 	}
 
 	if (pid > 0) {
-		if (component_type &&
-				strcmp(component_type, APP_TYPE_UI) == 0) {
+		if (strcmp(component_type, APP_TYPE_UI) == 0) {
 			if (new_process) {
 				_D("add app group info");
 				__pid_of_last_launched_ui_app = pid;
@@ -1247,8 +1285,7 @@ int _start_app(const char *appid, bundle *kb, uid_t caller_uid, request_h req,
 				app_group_restart_app(pid, kb);
 			}
 		}
-		_status_add_app_info_list(appid, app_path, pid, is_subapp,
-				target_uid);
+		_status_add_app_info_list(ai, pid, is_subapp, target_uid);
 	}
 
 	if (share_handle) {
