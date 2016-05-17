@@ -22,7 +22,6 @@
 #include <aul_app_com.h>
 
 #include "amd_util.h"
-#include "amd_cynara.h"
 #include "amd_app_com.h"
 
 struct endpoint_info {
@@ -62,7 +61,7 @@ static void __free_endpoint(struct endpoint_info *info)
 	g_free(info);
 }
 
-int app_com_broker_init(void)
+int _app_com_broker_init(void)
 {
 	if (!endpoint_tbl) {
 		endpoint_tbl = g_hash_table_new(g_str_hash, g_str_equal);
@@ -97,7 +96,7 @@ static void __remove_cpid(gpointer key, gpointer value, gpointer user_data)
 	g_list_free((GList *)value);
 }
 
-int app_com_broker_fini(void)
+int _app_com_broker_fini(void)
 {
 	if (cpid_tbl) {
 		g_hash_table_foreach(cpid_tbl, __remove_cpid, NULL);
@@ -113,7 +112,7 @@ int app_com_broker_fini(void)
 	return 0;
 }
 
-int app_com_add_endpoint(const char *endpoint, unsigned int propagate,
+int _app_com_add_endpoint(const char *endpoint, unsigned int propagate,
 		const char *assoc_priv)
 {
 	struct endpoint_info *info;
@@ -147,7 +146,7 @@ int app_com_add_endpoint(const char *endpoint, unsigned int propagate,
 	return AUL_APP_COM_R_ERROR_OK;
 }
 
-int app_com_remove_endpoint(const char *endpoint)
+int _app_com_remove_endpoint(const char *endpoint)
 {
 	struct endpoint_info *info;
 
@@ -200,7 +199,7 @@ static struct client_info *__add_client(struct endpoint_info *info,
 	return c;
 }
 
-int app_com_join(const char *endpoint, int cpid, const char *filter)
+int _app_com_join(const char *endpoint, int cpid, const char *filter)
 {
 	struct endpoint_info *info;
 
@@ -218,7 +217,7 @@ int app_com_join(const char *endpoint, int cpid, const char *filter)
 	return AUL_APP_COM_R_ERROR_OK;
 }
 
-const char *app_com_get_privilege(const char *endpoint)
+const char *_app_com_get_privilege(const char *endpoint)
 {
 	struct endpoint_info *info;
 
@@ -237,7 +236,7 @@ static int __check_filter(const char *filter, int cpid, int rpid, bundle *b)
 	return 0;
 }
 
-int app_com_send(const char *endpoint, int cpid, bundle *envelope)
+int _app_com_send(const char *endpoint, int cpid, bundle *envelope)
 {
 	struct endpoint_info *info;
 	GList *client_head;
@@ -319,7 +318,7 @@ static void __remove_client(struct endpoint_info *info, int cpid)
 	}
 }
 
-int app_com_leave(const char *endpoint, int cpid)
+int _app_com_leave(const char *endpoint, int cpid)
 {
 	struct endpoint_info *info;
 
@@ -334,7 +333,7 @@ int app_com_leave(const char *endpoint, int cpid)
 	return AUL_APP_COM_R_ERROR_OK;
 }
 
-int app_com_client_remove(int cpid)
+int _app_com_client_remove(int cpid)
 {
 	GList *client_list;
 	struct endpoint_info *info;
