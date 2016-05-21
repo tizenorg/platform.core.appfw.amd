@@ -26,11 +26,12 @@ typedef struct proc_info {
 	guint timer_id;
 } proc_info_t;
 
-static GHashTable *proc_info_tbl = NULL;
+static GHashTable *proc_info_tbl;
 
 static void __destroy_proc_info_value(gpointer data)
 {
 	proc_info_t *proc = (proc_info_t *)data;
+
 	if (proc)
 		free(proc);
 }
@@ -54,7 +55,7 @@ void _suspend_fini(void)
 
 proc_info_t *__create_proc_info(int pid)
 {
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 
 	if (pid < 1) {
 		_E("invalid pid");
@@ -75,7 +76,7 @@ proc_info_t *__create_proc_info(int pid)
 
 proc_info_t *__find_proc_info(int pid)
 {
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 
 	if (pid < 1) {
 		_E("invalid pid");
@@ -122,7 +123,7 @@ int _suspend_add_proc(int pid)
 
 int _suspend_remove_proc(int pid)
 {
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 
 	if (pid < 1) {
 		_E("invalid pid");
@@ -143,7 +144,7 @@ int _suspend_remove_proc(int pid)
 
 static gboolean __send_suspend_hint(gpointer data)
 {
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 	int pid = GPOINTER_TO_INT(data);
 
 	proc = __find_proc_info(pid);
@@ -158,7 +159,7 @@ static gboolean __send_suspend_hint(gpointer data)
 void _suspend_add_timer(int pid, const struct appinfo *ai)
 {
 	int bg_allowed = 0x00;
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 
 	bg_allowed = (intptr_t)_appinfo_get_value(ai, AIT_BG_CATEGORY);
 	if (bg_allowed)
@@ -179,7 +180,7 @@ void _suspend_add_timer(int pid, const struct appinfo *ai)
 
 void _suspend_remove_timer(int pid)
 {
-	proc_info_t *proc = NULL;
+	proc_info_t *proc;
 
 	proc = __find_proc_info(pid);
 	if (proc && proc->timer_id > 0) {

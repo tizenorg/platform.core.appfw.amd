@@ -216,10 +216,6 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	si->color_depth = color_depth;
 	si->tid = g_timeout_add(3000, __splash_image_timeout_handler, si);
 
-	_D("[splash image] src: %s, type: %d, rotation: %d, "
-			"indicator-display: %d, color-depth: %d",
-			si->src, si->type, si->rotation, si->indicator,
-			si->color_depth);
 	return si;
 }
 
