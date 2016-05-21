@@ -431,7 +431,7 @@ struct reply_info {
 
 static gboolean __reply_handler(gpointer data)
 {
-	struct reply_info *r_info = (struct reply_info *) data;;
+	struct reply_info *r_info = (struct reply_info *)data;
 	int fd = r_info->gpollfd->fd;
 	int len;
 	int res = 0;

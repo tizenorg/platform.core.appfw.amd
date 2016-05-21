@@ -33,9 +33,9 @@
 
 #define TIMEOUT_VAL 1000
 
-static bool listener_added = false;
-static bool locked = false;
-static bool init_done = false;
+static bool listener_added;
+static bool locked;
+static bool init_done;
 static guint timer;
 static struct tizen_keyrouter *keyrouter;
 static struct tizen_input_device_manager *input_devmgr;
@@ -96,15 +96,15 @@ static void __keyboard_leave(void *data, struct wl_keyboard *keyboard,
 static void __keyboard_key(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, uint32_t time, uint32_t key, uint32_t state_w)
 {
-	_D("serial=%d, time=%d, key=%d, state_w=%d", serial, time, key,
-			state_w);
+	_D("serial=%d, time=%d, key=%d, state_w=%d",
+			serial, time, key, state_w);
 }
 
 static void __keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
 		uint32_t mods_locked, uint32_t group)
 {
-	_D("serial=%d, mods_depressed=%d, mods_latched=%d, mods_locked=%d, "
+	_D("serial=%d, mods_depressed=%d, mods_latched=%d mods_locked=%d, "
 			"group=%d", serial, mods_depressed, mods_latched,
 			mods_locked, group);
 }
@@ -204,8 +204,8 @@ static int __xkb_keycode_from_keysym(struct xkb_keymap *keymap,
 		xkb_keysym_t keysym, xkb_keycode_t **keycodes)
 {
 	keycode_map found_keycodes = {0,};
-	found_keycodes.keysym = keysym;
 
+	found_keycodes.keysym = keysym;
 	xkb_keymap_key_for_each(g_keymap, __find_keycode, &found_keycodes);
 	*keycodes = found_keycodes.keycodes;
 

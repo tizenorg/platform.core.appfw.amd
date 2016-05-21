@@ -82,13 +82,14 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 	int ret;
 
 	ret = bundle_get_str(kb, AUL_K_ORG_CALLER_PID, &org_caller);
-	if (ret == BUNDLE_ERROR_NONE) {
-		org_caller_pid = atoi(org_caller);
-		appid = _status_app_get_appid_bypid(caller_pid);
-		if (appid && (strcmp(APP_SELECTOR, appid) == 0 ||
-					strcmp(SHARE_PANEL, appid) == 0))
-			caller_pid = org_caller_pid;
-	}
+	if (ret != BUNDLE_ERROR_NONE)
+		return caller_pid;
+
+	org_caller_pid = atoi(org_caller);
+	appid = _status_app_get_appid_bypid(caller_pid);
+	if (appid && (strcmp(APP_SELECTOR, appid) == 0 ||
+			strcmp(SHARE_PANEL, appid) == 0))
+		caller_pid = org_caller_pid;
 
 	return caller_pid;
 }
@@ -280,6 +281,10 @@ static char **__convert_list_to_array(GList *list)
 		return NULL;
 
 	array = (char **)g_malloc(sizeof(char *) * len);
+	if (array == NULL) {
+		_E("out of memory");
+		return NULL;
+	}
 
 	while (list) {
 		array[i] = g_strdup(list->data);
@@ -323,31 +328,24 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
 
 	r = security_manager_private_sharing_req_set_owner_appid(
 			h->shared_info->handle, owner_appid);
-	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_set_owner_appid(,%s) "
-				"return %d", owner_appid, r);
-	}
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("Failed to set owner appid(%s) %d", owner_appid, r);
 
 	r = security_manager_private_sharing_req_set_target_appid(
 			h->shared_info->handle, appid);
-	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_set_target_appid(,%s) "
-				"return %d", appid, r);
-	}
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("Failed to set target appid(%s) %d", appid, r);
 
 	r = security_manager_private_sharing_req_add_paths(
 			h->shared_info->handle, (const char **)path_array, len);
-	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_req_add_paths() "
-				"return %d", r);
-	}
+	if (r != SECURITY_MANAGER_SUCCESS)
+		_E("Failed to add paths %d", r);
 
 	_D("security_manager_private_sharing_apply ++");
 	r = security_manager_private_sharing_apply(h->shared_info->handle);
 	_D("security_manager_private_sharing_apply --");
 	if (r != SECURITY_MANAGER_SUCCESS) {
-		_E("security_manager_private_sharing_apply() "
-				"returned an error %d", r);
+		_E("Failed to apply private sharing %d", r);
 		_temporary_permission_destroy(h);
 		h = NULL;
 	}
@@ -366,15 +364,16 @@ int _temporary_permission_apply(int pid, uid_t uid, shared_info_h handle)
 {
 	int ret;
 
-	if (handle) {
-		ret = _status_add_shared_info(pid, uid, handle->shared_info);
-		if (ret != 0)
-			return ret;
-		handle->shared_info = NULL;
-		return 0;
-	}
+	if (handle == NULL)
+		return -1;
 
-	return -1;
+	ret = _status_add_shared_info(pid, uid, handle->shared_info);
+	if (ret != 0)
+		return ret;
+
+	handle->shared_info = NULL;
+
+	return 0;
 }
 
 int _temporary_permission_destroy(shared_info_h handle)
@@ -424,6 +423,7 @@ int _temporary_permission_drop(int pid, uid_t uid)
 		security_manager_private_sharing_req_free(sit->handle);
 		list = g_list_next(list);
 	}
+
 	return _status_clear_shared_info_list(pid, uid);
 }
 

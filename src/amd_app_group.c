@@ -887,8 +887,7 @@ bool _app_group_is_sub_app(int pid)
 	gpointer key;
 	gpointer value;
 	GList *list;
-	GList *found;;
-
+	GList *found;
 
 	g_hash_table_iter_init(&iter, app_group_hash);
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
@@ -1353,6 +1352,7 @@ static void __restart_app(app_group_context_t *ac, int pid, bundle *b)
 {
 	const char *pid_str;
 	int cwid;
+
 	ac->caller_pid = __get_caller_pid(b);
 
 	if (ac->can_shift) {
