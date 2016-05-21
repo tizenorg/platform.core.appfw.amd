@@ -223,40 +223,52 @@ void _extractor_mount(const struct appinfo *ai, bundle *kb,
 	if (mnt_path == NULL)
 		return;
 
-	if (mnt_path[0] && mnt_path[1]) {
-		array = bundle_get_str_array(kb, AUL_TEP_PATH, &len);
-		if (array == NULL) {
-			default_array[0] = mnt_path[0];
-			bundle_add_str_array(kb, AUL_TEP_PATH, default_array, 1);
-		} else {
-			for (i = 0; i < len; i++) {
-				if (strcmp(mnt_path[0], array[i]) == 0) {
-					dup = true;
-					break;
-				}
-			}
+	if (!mnt_path[0] || !mnt_path[1]) {
+		__free_path(mnt_path, 2);
+		return;
+	}
 
-			if (!dup) {
-				new_array = malloc(sizeof(char*) * (len + 1));
-				for (i = 0; i < len; i++)
-					new_array[i] = strdup(array[i]);
-				new_array[len] = strdup(mnt_path[0]);
-				bundle_del(kb, AUL_TEP_PATH);
-				bundle_add_str_array(kb, AUL_TEP_PATH,
-						(const char **)new_array, len + 1);
-				__free_path(new_array, len + 1);
+	array = bundle_get_str_array(kb, AUL_TEP_PATH, &len);
+	if (array == NULL) {
+		default_array[0] = mnt_path[0];
+		bundle_add_str_array(kb, AUL_TEP_PATH,
+				     default_array, 1);
+	} else {
+		for (i = 0; i < len; i++) {
+			if (strcmp(mnt_path[0], array[i]) == 0) {
+				dup = true;
+				break;
 			}
 		}
 
-		__put_mount_path(ai, mnt_path[0]);
-		ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
-		if (ret != 1) {
-			pkgid = _appinfo_get_value(ai, AIT_PKGID);
-			ret = _signal_send_tep_mount(mnt_path, pkgid);
-			if (ret < 0)
-				_E("dbus error %d", ret);
-			else
-				_D("Mount request was sent %s %s", mnt_path[0], mnt_path[1]);
+		if (!dup) {
+			new_array = malloc(sizeof(char *) * (len + 1));
+			if (new_array == NULL) {
+				_E("out of memory");
+				__free_path(mnt_path, 2);
+				return;
+			}
+
+			for (i = 0; i < len; i++)
+				new_array[i] = strdup(array[i]);
+			new_array[len] = strdup(mnt_path[0]);
+			bundle_del(kb, AUL_TEP_PATH);
+			bundle_add_str_array(kb, AUL_TEP_PATH,
+					(const char **)new_array, len + 1);
+			__free_path(new_array, len + 1);
+		}
+	}
+
+	__put_mount_path(ai, mnt_path[0]);
+	ret = aul_is_tep_mount_dbus_done(mnt_path[0]);
+	if (ret != 1) {
+		pkgid = _appinfo_get_value(ai, AIT_PKGID);
+		ret = _signal_send_tep_mount(mnt_path, pkgid);
+		if (ret < 0) {
+			_E("dbus error %d", ret);
+		} else {
+			_D("Mount request was sent %s %s",
+					mnt_path[0], mnt_path[1]);
 		}
 	}
 

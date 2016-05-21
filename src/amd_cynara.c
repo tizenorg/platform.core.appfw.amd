@@ -68,7 +68,9 @@ struct checker_info {
 
 static const char *__convert_operation_to_privilege(const char *operation)
 {
-	if (!strcmp(operation, AUL_SVC_OPERATION_DOWNLOAD))
+	if (operation == NULL)
+		return NULL;
+	else if (!strcmp(operation, AUL_SVC_OPERATION_DOWNLOAD))
 		return PRIVILEGE_DOWNLOAD;
 	else if (!strcmp(operation, AUL_SVC_OPERATION_CALL))
 		return PRIVILEGE_CALL;
@@ -204,6 +206,7 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 
 	_E("illegal app type of request: %s - "
 			"only widget or watch apps are allowed", apptype);
+
 	return -1;
 }
 
@@ -220,18 +223,16 @@ static int __appcontrol_checker(struct caller_info *info, request_h req,
 		return 0;
 
 	ret = bundle_get_str(appcontrol, AUL_SVC_K_OPERATION, &op);
-
-	if (op && ret == BUNDLE_ERROR_NONE)
+	if (ret == BUNDLE_ERROR_NONE)
 		op_priv = __convert_operation_to_privilege(op);
 
 	if (op_priv) {
-		if (!strcmp(op_priv, PRIVILEGE_WIDGET_VIEWER)) {
+		if (!strcmp(op_priv, PRIVILEGE_WIDGET_VIEWER))
 			return __widget_viewer_checker(info, req, data);
-		} else {
-			ret = __check_privilege(info, op_priv);
-			if (ret < 0)
-				return ret;
-		}
+
+		ret = __check_privilege(info, op_priv);
+		if (ret < 0)
+			return ret;
 	}
 
 	ret = __check_privilege(info, PRIVILEGE_APPMANAGER_LAUNCH);
@@ -249,7 +250,7 @@ static int __com_create_checker(struct caller_info *info, request_h req,
 	if (!privilege)
 		return 0; /* non-privileged */
 
-	return  __check_privilege(info, privilege);
+	return __check_privilege(info, privilege);
 }
 
 static int __com_join_checker(struct caller_info *info, request_h req,
@@ -271,22 +272,86 @@ static int __com_join_checker(struct caller_info *info, request_h req,
 }
 
 static struct checker_info checker_table[] = {
-	{APP_OPEN, __appcontrol_checker, NULL},
-	{APP_RESUME, __appcontrol_checker, NULL},
-	{APP_START, __appcontrol_checker, NULL},
-	{APP_START_RES, __appcontrol_checker, NULL},
-	{APP_TERM_BY_PID_WITHOUT_RESTART, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
-	{APP_TERM_BY_PID_ASYNC, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
-	{APP_TERM_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
-	{APP_KILL_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
-	{APP_TERM_BGAPP_BY_PID, __simple_checker, PRIVILEGE_APPMANAGER_KILL_BGAPP},
-	{APP_ALL_RUNNING_INFO, __simple_checker, PRIVILEGE_PACKAGEMANAGER_INFO},
-	{APP_COM_JOIN, __com_create_checker, NULL},
-	{APP_COM_CREATE, __com_join_checker, NULL},
-	{APP_SET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
-	{APP_UNSET_APP_CONTROL_DEFAULT_APP, __simple_checker, PRIVILEGE_SYSTEM_SETTING},
-	{APP_START_ASYNC, __appcontrol_checker, NULL},
-	{APP_TERM_BY_PID_SYNC, __simple_checker, PRIVILEGE_APPMANAGER_KILL},
+	{
+		.cmd = APP_OPEN,
+		.checker = __appcontrol_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_RESUME,
+		.checker = __appcontrol_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_START,
+		.checker = __appcontrol_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_START_RES,
+		.checker = __appcontrol_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_TERM_BY_PID_WITHOUT_RESTART,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL
+	},
+	{
+		.cmd = APP_TERM_BY_PID_ASYNC,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL
+	},
+	{
+		.cmd = APP_TERM_BY_PID,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL
+	},
+	{
+		.cmd = APP_KILL_BY_PID,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL
+	},
+	{
+		.cmd = APP_TERM_BGAPP_BY_PID,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL_BGAPP
+	},
+	{
+		.cmd = APP_ALL_RUNNING_INFO,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_PACKAGEMANAGER_INFO
+	},
+	{
+		.cmd = APP_COM_JOIN,
+		.checker = __com_create_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_COM_CREATE,
+		.checker = __com_join_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_SET_APP_CONTROL_DEFAULT_APP,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_SYSTEM_SETTING
+	},
+	{
+		.cmd = APP_UNSET_APP_CONTROL_DEFAULT_APP,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_SYSTEM_SETTING
+	},
+	{
+		.cmd = APP_START_ASYNC,
+		.checker = __appcontrol_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_TERM_BY_PID_SYNC,
+		.checker = __simple_checker,
+		.data = PRIVILEGE_APPMANAGER_KILL
+	},
 };
 
 static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
@@ -294,11 +359,13 @@ static int checker_len = sizeof(checker_table) / sizeof(struct checker_info);
 static int __check_privilege_by_checker(request_h req, struct caller_info *info)
 {
 	int i;
+	int ret;
 
 	for (i = 0; i < checker_len; i++) {
 		if (checker_table[i].cmd == _request_get_cmd(req)) {
-			return checker_table[i].checker(info, req,
+			ret = checker_table[i].checker(info, req,
 					checker_table[i].data);
+			return ret;
 		}
 	}
 
@@ -327,7 +394,7 @@ int _cynara_check_privilege(request_h req)
 
 	r = __get_caller_info_from_cynara(_request_get_fd(req), &info);
 	if (r < 0) {
-		_E("failed to get caller info");
+		_E("Failed to get caller info");
 		__destroy_caller_info(&info);
 		return -1;
 	}
@@ -343,7 +410,7 @@ int _cynara_init(void)
 {
 	int ret;
 
-	ret  = cynara_initialize(&r_cynara, NULL);
+	ret = cynara_initialize(&r_cynara, NULL);
 	if (ret != CYNARA_API_SUCCESS) {
 		_E("cynara initialize failed.");
 		return ret;
