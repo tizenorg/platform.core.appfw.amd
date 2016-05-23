@@ -450,10 +450,23 @@ static gboolean __reply_handler(gpointer data)
 	}
 	close(fd);
 
-	if (res < 0)
+	switch (cmd) {
+	case APP_TERM_BY_PID:
+	case APP_TERM_BY_BGAPP_BY_PID:
+		if (res >= 0)
+			res = 0;
 		_send_result_to_client(clifd, res);
-	else
-		_send_result_to_client(clifd, pid);
+		break;
+	case APP_START_ASYNC:
+	case APP_PAUSE_BY_PID:
+		close(clifd);
+		break;
+	default:
+		if (res >= 0)
+			res = pid;
+		_send_result_to_client(clifd, res);
+		break;
+	}
 
 	_D("listen fd : %d , send fd : %d, pid : %d", fd, clifd, pid);
 
