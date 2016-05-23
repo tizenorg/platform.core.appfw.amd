@@ -44,8 +44,6 @@
 	"http://tizen.org/privilege/download"
 #define PRIVILEGE_CALL \
 	"http://tizen.org/privilege/call"
-#define PRIVILEGE_PACKAGEMANAGER_INFO \
-	"http://tizen.org/privilege/packagemanager.info"
 #define PRIVILEGE_SYSTEM_SETTING \
 	"http://tizen.org/privilege/systemsettings.admin"
 
@@ -316,11 +314,6 @@ static struct checker_info checker_table[] = {
 		.cmd = APP_TERM_BGAPP_BY_PID,
 		.checker = __simple_checker,
 		.data = PRIVILEGE_APPMANAGER_KILL_BGAPP
-	},
-	{
-		.cmd = APP_ALL_RUNNING_INFO,
-		.checker = __simple_checker,
-		.data = PRIVILEGE_PACKAGEMANAGER_INFO
 	},
 	{
 		.cmd = APP_COM_JOIN,
