@@ -897,7 +897,7 @@ bool _app_group_is_sub_app(int pid)
 					__comp_pid);
 			if (found) {
 				if (g_list_first(list) == found)
-					return FALSE;
+					return false;
 				return true;
 			}
 		}
