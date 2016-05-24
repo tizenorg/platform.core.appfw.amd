@@ -83,6 +83,7 @@ struct launch_s {
 	int prelaunch_attr;
 	int bg_category;
 	int bg_allowed;
+	bool has_viewer;
 	shared_info_h share_info;
 };
 
@@ -1144,6 +1145,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	const char *comp_type;
 	const char *multiple;
 	const char *caller_appid;
+	const char *widget_viewer;
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
 	uid_t caller_uid = _request_get_uid(req);
@@ -1173,9 +1175,22 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	if (comp_type == NULL)
 		return -1;
 
-	multiple = _appinfo_get_value(handle->ai, AIT_MULTI);
-	if (multiple == NULL || !strcmp(multiple, "false") == 0)
-		handle->pid = _status_app_is_running(appid, target_uid);
+	if (caller_appid && (strcmp(comp_type, APP_TYPE_WIDGET) == 0 ||
+				strcmp(comp_type, APP_TYPE_WATCH) == 0)) {
+		widget_viewer = bundle_get_val(kb, AUL_K_WIDGET_VIEWER);
+		if (widget_viewer && strcmp(widget_viewer, caller_appid) == 0) {
+			handle->has_viewer = true;
+			handle->pid = _status_app_is_running_with_viewer_pid(
+					appid, caller_pid);
+		} else {
+			handle->pid = _status_app_is_running(appid, target_uid);
+		}
+	} else {
+		multiple = _appinfo_get_value(handle->ai, AIT_MULTI);
+		if (multiple == NULL || !strcmp(multiple, "false") == 0) {
+			handle->pid = _status_app_is_running(appid, target_uid);
+		}
+	}
 
 	if (strcmp(comp_type, APP_TYPE_UI) == 0) {
 		ret = __get_pid_for_app_group(appid, target_uid, kb,
@@ -1310,6 +1325,7 @@ static int __complete_starting_app(struct launch_s *handle, request_h req)
 {
 	bundle *kb = _request_get_bundle(req);
 	uid_t target_uid = _request_get_target_uid(req);
+	int caller_pid = _request_get_pid(req);
 	const char *comp_type;
 	int ret;
 
@@ -1329,7 +1345,7 @@ static int __complete_starting_app(struct launch_s *handle, request_h req)
 	}
 
 	_status_add_app_info_list(handle->ai, handle->pid, handle->is_subapp,
-			target_uid);
+			target_uid, handle->has_viewer, caller_pid);
 
 	if (handle->share_info) {
 		ret = _temporary_permission_apply(handle->pid, target_uid,
