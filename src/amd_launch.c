@@ -1174,7 +1174,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 		return -1;
 
 	multiple = _appinfo_get_value(handle->ai, AIT_MULTI);
-	if (multiple == NULL || !strcmp(multiple, "false") == 0)
+	if (multiple == NULL || strcmp(multiple, "false") == 0)
 		handle->pid = _status_app_is_running(appid, target_uid);
 
 	if (strcmp(comp_type, APP_TYPE_UI) == 0) {
