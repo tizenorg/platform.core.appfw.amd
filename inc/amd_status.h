@@ -31,7 +31,7 @@ typedef struct _shared_info_t {
 } shared_info_t;
 
 int _status_add_app_info_list(const struct appinfo *ai, int pid,
-		bool is_subapp, uid_t uid);
+		bool is_subapp, uid_t uid, int caller_pid);
 int _status_update_app_info_list(int pid, int status, bool force, uid_t uid);
 int _status_remove_app_info_list_with_uid(uid_t uid);
 int _status_remove_app_info_list(int pid, uid_t uid);
@@ -39,6 +39,7 @@ int _status_get_app_info_status(int pid, uid_t uid);
 int _status_send_running_appinfo(int fd, int cmd, uid_t uid);
 int _status_app_is_running(const char *appid,  uid_t uid);
 int _status_app_is_running_v2(const char *appid, uid_t caller_uid);
+int _status_app_is_running_with_viewer_pid(const char *appid, int viewer_pid);
 void _status_find_service_apps(int pid, uid_t uid, enum app_status status,
 		void (*send_event_to_svc_core)(int), bool suspend);
 void _status_check_service_only(int pid, uid_t uid,
