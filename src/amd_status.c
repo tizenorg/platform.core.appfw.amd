@@ -62,6 +62,7 @@ typedef struct _app_status_info_t {
 	int lpid;
 	int fg_count;
 	bool managed;
+	int org_caller_pid;
 	GList *shared_info_list;
 } app_status_info_t;
 
@@ -296,7 +297,7 @@ static void __update_leader_app_info(int lpid)
 }
 
 int _status_add_app_info_list(const struct appinfo *ai, int pid,
-		bool is_subapp, uid_t uid)
+		bool is_subapp, uid_t uid, int caller_pid)
 {
 	GSList *iter;
 	GSList *iter_next;
@@ -371,6 +372,7 @@ int _status_add_app_info_list(const struct appinfo *ai, int pid,
 	info_t->lpid = _app_group_get_leader_pid(pid);
 	info_t->timestamp = time(NULL) / 10;
 	info_t->fg_count = 0;
+	info_t->org_caller_pid = caller_pid;
 
 	taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
 	if (taskmanage && strcmp(taskmanage, "true") == 0
@@ -675,8 +677,7 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid)
 		if (info_t->uid != uid || info_t->status == STATUS_DYING)
 			continue;
 
-		if (cmd != APP_ALL_RUNNING_INFO &&
-			_app_group_is_sub_app(info_t->pid))
+		if (cmd != APP_ALL_RUNNING_INFO && info_t->is_subapp)
 			continue;
 
 		snprintf(tmp_str, sizeof(tmp_str), "%d", info_t->pid);
@@ -718,6 +719,20 @@ int _status_terminate_apps(const char *appid, uid_t uid)
 	return 0;
 }
 
+bool _status_app_is_sub_app(int pid)
+{
+	GSList *iter;
+	app_status_info_t *info;
+
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
+		info = (app_status_info_t *)iter->data;
+		if (info && info->pid == pid)
+			return info->is_subapp;
+	}
+
+	return false;
+}
+
 static inline int __find_pid_by_appid(const char *dname, const char *appid,
 		void *priv, uid_t uid)
 {
@@ -725,7 +740,7 @@ static inline int __find_pid_by_appid(const char *dname, const char *appid,
 
 	if (strncmp(appid, (char *)priv, MAX_LOCAL_BUFSZ-1) == 0) {
 		pid = atoi(dname);
-		if (pid != getpgid(pid) || _app_group_is_sub_app(pid))
+		if (pid != getpgid(pid) || _status_app_is_sub_app(pid))
 			pid = 0;
 	}
 
@@ -747,6 +762,21 @@ int _status_app_is_running_v2(const char *appid, uid_t caller_uid)
 	ret = aul_proc_iter_appid(__find_pid_by_appid, (void *)appid);
 
 	return ret;
+}
+
+int _status_app_is_running_with_org_caller(const char *appid, int caller_pid)
+{
+	GSList *iter;
+	app_status_info_t *info;
+
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
+		info = (app_status_info_t *)iter->data;
+		if (info && info->appid && !strcmp(info->appid, appid) &&
+				info->org_caller_pid == caller_pid)
+			return info->pid;
+	}
+
+	return -1;
 }
 
 static int __get_appid_bypid(int pid, char *appid, int len)
