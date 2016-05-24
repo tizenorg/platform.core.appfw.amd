@@ -62,11 +62,13 @@ typedef struct _app_status_info_t {
 	int lpid;
 	int fg_count;
 	bool managed;
+	int caller_pid;
 	GList *shared_info_list;
 } app_status_info_t;
 
 static GSList *app_status_info_list;
 static GHashTable *pkg_status_info_table;
+static GHashTable *viewer_info_table;
 static int limit_bg_uiapps;
 static GSList *running_uiapp_list;
 static GIOChannel *socket_io;
@@ -131,6 +133,43 @@ static void __add_pkg_info(const char *pkgid, app_status_info_t *appinfo)
 		pkginfo->svc_list = g_slist_append(pkginfo->svc_list, appinfo);
 	else
 		pkginfo->ui_list = g_slist_append(pkginfo->ui_list, appinfo);
+}
+
+static void __add_widget_info(int viewer_pid, app_status_info_t *appinfo)
+{
+	GSList *widget_list;
+
+	if (appinfo == NULL) {
+		_E("Invalid parameter");
+		return;
+	}
+
+	if (viewer_info_table == NULL) {
+		viewer_info_table = g_hash_table_new(g_int_hash, g_int_equal);
+		if (viewer_info_table == NULL) {
+			_E("out of memory");
+			return;
+		}
+	}
+
+	widget_list = g_hash_table_lookup(viewer_info_table,
+			GINT_TO_POINTER(viewer_pid));
+	widget_list = g_slist_append(widget_list, appinfo);
+	g_hash_table_insert(viewer_info_table, GINT_TO_POINTER(viewer_pid),
+			appinfo);
+}
+
+static void __remove_widget_info(int viewer_pid)
+{
+	GSList *widget_list;
+
+	widget_list = g_hash_table_lookup(viewer_info_table,
+			GINT_TO_POINTER(viewer_pid));
+	if (widget_list) {
+		g_hash_table_remove(viewer_info_table,
+				GINT_TO_POINTER(viewer_pid));
+		g_slist_free(widget_list);
+	}
 }
 
 static int __get_ui_app_status_pkg_info(pkg_status_info_t *pkginfo)
@@ -296,7 +335,7 @@ static void __update_leader_app_info(int lpid)
 }
 
 int _status_add_app_info_list(const struct appinfo *ai, int pid,
-		bool is_subapp, uid_t uid)
+		bool is_subapp, uid_t uid, int caller_pid)
 {
 	GSList *iter;
 	GSList *iter_next;
@@ -371,6 +410,7 @@ int _status_add_app_info_list(const struct appinfo *ai, int pid,
 	info_t->lpid = _app_group_get_leader_pid(pid);
 	info_t->timestamp = time(NULL) / 10;
 	info_t->fg_count = 0;
+	info_t->caller_pid = caller_pid;
 
 	taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
 	if (taskmanage && strcmp(taskmanage, "true") == 0
@@ -384,6 +424,10 @@ int _status_add_app_info_list(const struct appinfo *ai, int pid,
 
 	app_status_info_list = g_slist_append(app_status_info_list, info_t);
 	__add_pkg_info(pkgid, info_t);
+	if (component_type && (strcmp(component_type, APP_TYPE_WIDGET) == 0 ||
+				strcmp(component_type, APP_TYPE_WATCH) == 0))
+		__add_widget_info(caller_pid, info_t);
+
 	_D("pid(%d) appid(%s) pkgid(%s) comp(%s)",
 			pid, appid, pkgid, component_type);
 
@@ -464,6 +508,7 @@ int _status_remove_app_info_list(int pid, uid_t uid)
 					app_status_info_list, info_t);
 			running_uiapp_list = g_slist_remove(running_uiapp_list,
 					info_t);
+			__remove_widget_info(pid);
 			__remove_pkg_info(info_t->pkgid, info_t, uid);
 			__destroy_app_status_info(info_t);
 			break;
@@ -747,6 +792,23 @@ int _status_app_is_running_v2(const char *appid, uid_t caller_uid)
 	ret = aul_proc_iter_appid(__find_pid_by_appid, (void *)appid);
 
 	return ret;
+}
+
+int _status_app_is_running_with_viewer_pid(const char *appid, int viewer_pid)
+{
+	GSList *iter;
+	GSList *widget_list;
+	app_status_info_t *info;
+
+	widget_list = g_hash_table_lookup(viewer_info_table,
+			GINT_TO_POINTER(viewer_pid));
+	for (iter = widget_list; iter; iter = g_slist_next(iter)) {
+		info = (app_status_info_t *)iter->data;
+		if (info && info->appid && !strcmp(info->appid, appid))
+			return info->pid;
+	}
+
+	return -1;
 }
 
 static int __get_appid_bypid(int pid, char *appid, int len)
