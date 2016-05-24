@@ -62,6 +62,7 @@ typedef struct _app_status_info_t {
 	int lpid;
 	int fg_count;
 	bool managed;
+	int org_caller_pid;
 	GList *shared_info_list;
 } app_status_info_t;
 
@@ -296,7 +297,7 @@ static void __update_leader_app_info(int lpid)
 }
 
 int _status_add_app_info_list(const struct appinfo *ai, int pid,
-		bool is_subapp, uid_t uid)
+		bool is_subapp, uid_t uid, int caller_pid)
 {
 	GSList *iter;
 	GSList *iter_next;
@@ -371,6 +372,7 @@ int _status_add_app_info_list(const struct appinfo *ai, int pid,
 	info_t->lpid = _app_group_get_leader_pid(pid);
 	info_t->timestamp = time(NULL) / 10;
 	info_t->fg_count = 0;
+	info_t->org_caller_pid = caller_pid;
 
 	taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
 	if (taskmanage && strcmp(taskmanage, "true") == 0
@@ -747,6 +749,21 @@ int _status_app_is_running_v2(const char *appid, uid_t caller_uid)
 	ret = aul_proc_iter_appid(__find_pid_by_appid, (void *)appid);
 
 	return ret;
+}
+
+int _status_app_is_running_with_org_caller(const char *appid, int caller_pid)
+{
+	GSList *iter;
+	app_status_info_t *info;
+
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
+		info = (app_status_info_t *)iter->data;
+		if (info && info->appid && !strcmp(info->appid, appid) &&
+				info->org_caller_pid == caller_pid)
+			return info->pid;
+	}
+
+	return -1;
 }
 
 static int __get_appid_bypid(int pid, char *appid, int len)
