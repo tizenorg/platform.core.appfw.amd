@@ -761,7 +761,7 @@ bool _app_group_is_group_app(bundle *kb)
 
 	bundle_get_str(kb, AUL_K_APPID, &appid);
 	if (appid == NULL)
-		return true;
+		return false;
 
 	ai = _appinfo_find(getuid(), appid);
 	mode = _appinfo_get_value(ai, AIT_LAUNCH_MODE);
@@ -775,7 +775,7 @@ bool _app_group_is_group_app(bundle *kb)
 		return true;
 	}
 
-	return true;
+	return false;
 }
 
 void _app_group_get_leader_pids(int *cnt, int **pids)
