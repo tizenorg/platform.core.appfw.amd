@@ -1223,6 +1223,8 @@ static int __dispatch_app_register_pid(request_h req)
 	const char *pid_str;
 	int pid;
 	int ret;
+	uid_t target_uid = _request_get_target_uid(req);
+	int caller_pid = _request_get_pid(req);
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1237,7 +1239,7 @@ static int __dispatch_app_register_pid(request_h req)
 		return -1;
 
 	pid = atoi(pid_str);
-	ret = _status_app_is_running(appid, _request_get_target_uid(req));
+	ret = _status_app_is_running(appid, target_uid);
 	if (ret > 0) {
 		if (ret != pid)
 			kill(pid, SIGKILL);
@@ -1247,14 +1249,14 @@ static int __dispatch_app_register_pid(request_h req)
 
 	_D("appid: %s, pid: %d", appid, pid);
 
-	ai = _appinfo_find(_request_get_target_uid(req), appid);
+	ai = _appinfo_find(target_uid, appid);
 	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
 	if (component_type && strcmp(component_type, APP_TYPE_UI) == 0) {
 		_app_group_start_app(pid, kb, pid, FALSE,
 				APP_GROUP_LAUNCH_MODE_SINGLE);
 	}
 
-	_status_add_app_info_list(ai, pid, false, _request_get_target_uid(req));
+	_status_add_app_info_list(ai, pid, false, target_uid, caller_pid);
 
 	return 0;
 }
