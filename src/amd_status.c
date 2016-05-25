@@ -72,6 +72,7 @@ static int limit_bg_uiapps;
 static GSList *running_uiapp_list;
 static GIOChannel *socket_io;
 static guint socket_wid;
+static char *home_appid;
 
 static void __check_running_uiapp_list(void);
 
@@ -294,6 +295,23 @@ static void __update_leader_app_info(int lpid)
 			break;
 		}
 	}
+}
+
+bool _status_app_is_home_app(int pid)
+{
+	GSList *iter;
+	app_status_info_t *info;
+
+	for (iter = app_status_info_list; iter; iter = g_slist_next(iter)) {
+		info = (app_status_info_t *)iter->data;
+		if (info && info->pid == pid) {
+			if (home_appid && strcmp(home_appid, info->appid) == 0)
+				return true;
+			return false;
+		}
+	}
+
+	return false;
 }
 
 int _status_add_app_info_list(const struct appinfo *ai, int pid,
@@ -1015,6 +1033,19 @@ static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond,
 	return TRUE;
 }
 
+static void __home_appid_vconf_cb(keynode_t *key, void *data)
+{
+	char *tmpstr;
+
+	tmpstr = vconf_keynode_get_str(key);
+	if (tmpstr == NULL)
+		return;
+
+	if (home_appid)
+		free(home_appid);
+	home_appid = strdup(tmpstr);
+}
+
 int _status_init(void)
 {
 	char buf[PATH_MAX];
@@ -1056,6 +1087,13 @@ int _status_init(void)
 	if (ret != 0) {
 		_E("Failed to register callback for %s",
 				VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS);
+	}
+
+	home_appid = vconf_get_str(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME,
+			__home_appid_vconf_cb, NULL) != 0) {
+		_E("Failed to register callback for %s",
+				VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
 	}
 
 	return 0;
