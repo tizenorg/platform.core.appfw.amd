@@ -1261,8 +1261,6 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 		if (ret < 0)
 			_temporary_permission_destroy(handle->share_info);
 
-		handle->pid = ret;
-
 		return ret;
 	}
 
