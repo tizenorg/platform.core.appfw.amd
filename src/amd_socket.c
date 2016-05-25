@@ -28,8 +28,44 @@
 #include <bundle.h>
 #include <systemd/sd-daemon.h>
 #include <aul_sock.h>
+#ifdef TIZEN_FEATURE_SOCKET_TIMEOUT
+#include <glib.h>
+#include <vconf.h>
+#endif
 
 #include "amd_util.h"
+
+static struct timeval tv = { 5, 200 * 1000 }; /* 5.2 sec */
+
+#ifdef TIZEN_FEATURE_SOCKET_TIMEOUT
+struct timeval _socket_get_timeout_period(void)
+{
+	return tv;
+}
+
+static void __socket_timeout_vconf_cb(keynode_t *key, void *data)
+{
+	double sec;
+	const char *name;
+	char buf[12];
+	gchar *ptr = NULL;
+
+	name = vconf_keynode_get_name(key);
+	if (name == NULL)
+		return;
+
+	if (strcmp(name, VCONFKEY_AUL_SOCKET_TIMEOUT) == 0) {
+		sec = vconf_keynode_get_dbl(key);
+		if (sec > 0.0f) {
+			snprintf(buf, sizeof(buf), "%.3f", sec);
+			tv.tv_sec = g_ascii_strtoull(buf, &ptr, 10);
+			tv.tv_usec = g_ascii_strtoull(ptr + 1, &ptr, 10) * 1000;
+			_D("sec: %.3f, tv_sec: %ld, tv_usec: %ld",
+					sec, tv.tv_sec, tv.tv_usec);
+		}
+	}
+}
+#endif
 
 int _create_sock_activation(void)
 {
@@ -56,7 +92,6 @@ int _create_sock_activation(void)
 static inline void __set_sock_option(int fd, int cli)
 {
 	int size;
-	struct timeval tv = { 5, 200 * 1000 };  /* 5.2 sec */
 
 	size = AUL_SOCK_MAXBUFF;
 	setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
@@ -260,4 +295,32 @@ void _send_result_to_client(int fd, int res)
 
 	close(fd);
 }
+
+#ifdef TIZEN_FEATURE_SOCKET_TIMEOUT
+int _socket_init(void)
+{
+	int ret;
+	double sec = 5.2f;
+	char buf[12];
+	gchar *ptr = NULL;
+
+	ret = vconf_get_dbl(VCONFKEY_AUL_SOCKET_TIMEOUT, &sec);
+	if (ret != 0)
+		_E("Failed to get vconf: %s", VCONFKEY_AUL_SOCKET_TIMEOUT);
+
+	ret = vconf_notify_key_changed(VCONFKEY_AUL_SOCKET_TIMEOUT,
+			__socket_timeout_vconf_cb, NULL);
+	if (ret != 0) {
+		_E("Failed to register callback for %s",
+				VCONFKEY_AUL_SOCKET_TIMEOUT);
+	}
+
+	snprintf(buf, sizeof(buf), "%.f", sec);
+	tv.tv_sec = g_ascii_strtoull(buf, &ptr, 10);
+	tv.tv_usec = g_ascii_strtoll(ptr + 1, &ptr, 10);
+	_D("sec: %.3f, tv_sec: %ld, tv_usec: %ld", sec, tv.tv_sec, tv.tv_usec);
+
+	return 0;
+}
+#endif
 
