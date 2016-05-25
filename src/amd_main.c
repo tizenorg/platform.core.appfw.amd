@@ -313,6 +313,9 @@ static int __init(void)
 	_splash_screen_init();
 	_input_init();
 	_wayland_init();
+#ifdef TIZEN_FEATURE_SOCKET_TIMEOUT
+	_socket_init();
+#endif
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		_E("__syspopup_dbus_signal_handler_init failed");

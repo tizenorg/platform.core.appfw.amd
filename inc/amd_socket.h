@@ -38,3 +38,8 @@ int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd,
 		bundle *kb);
 void _send_result_to_client(int fd, int res);
 
+#ifdef TIZEN_FEATURE_SOCKET_TIMEOUT
+struct timeval _socket_get_timeout_period(void);
+int _socket_init(void);
+#endif
+
