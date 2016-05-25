@@ -40,6 +40,7 @@ int _status_send_running_appinfo(int fd, int cmd, uid_t uid);
 int _status_app_is_running(const char *appid,  uid_t uid);
 int _status_app_is_running_v2(const char *appid, uid_t caller_uid);
 int _status_app_is_running_with_org_caller(const char *appid, int caller_pid);
+bool _status_app_is_home_app(int pid);
 void _status_find_service_apps(int pid, uid_t uid, enum app_status status,
 		void (*send_event_to_svc_core)(int), bool suspend);
 void _status_check_service_only(int pid, uid_t uid,
