@@ -81,12 +81,12 @@ _TIZEN_FEATURE_BLOCK_INPUT=ON
 %endif
 
 MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
-%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
+%cmake -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
 %if %{with wayland}
--Dwith_wayland=TRUE\
+	-Dwith_wayland=TRUE \
 %endif
 %if %{with x}
--Dwith_x11=TRUE\
+	-Dwith_x11=TRUE \
 %endif
 	-D_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP:BOOL=${_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP} \
 	-D_TIZEN_FEATURE_BLOCK_INPUT:BOOL=${_TIZEN_FEATURE_BLOCK_INPUT} \
