@@ -53,18 +53,6 @@ int _create_sock_activation(void)
 	return -1;
 }
 
-static inline void __set_sock_option(int fd, int cli)
-{
-	int size;
-	struct timeval tv = { 5, 200 * 1000 };  /* 5.2 sec */
-
-	size = AUL_SOCK_MAXBUFF;
-	setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
-	setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
-	if (cli)
-		setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-}
-
 int _create_server_sock(void)
 {
 	int fd;
@@ -94,7 +82,7 @@ int _create_server_sock(void)
 		return -1;
 	}
 
-	__set_sock_option(fd, 0);
+	aul_sock_set_sock_option(fd, 0);
 
 	if (listen(fd, 128) == -1) {
 		_E("listen error: %d", errno);
@@ -206,7 +194,7 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 		return -1;
 	}
 
-	__set_sock_option(fd, 1);
+	aul_sock_set_sock_option(fd, 1);
 
 	return fd;
 }
