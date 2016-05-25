@@ -358,6 +358,21 @@ int _input_init(void)
 	wl_display_flush(display);
 	wl_display_roundtrip(display);
 
+	if (seat == NULL) {
+		_E("seat is null");
+		return -1;
+	}
+
+	if (keyboard == NULL) {
+		_E("keyboard is null");
+		return -1;
+	}
+
+	if (g_keymap == NULL) {
+		_E("g_keymap is null");
+		return -1;
+	}
+
 	init_done = true;
 
 	return 0;
