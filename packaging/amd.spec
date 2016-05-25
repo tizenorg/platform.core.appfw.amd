@@ -47,6 +47,12 @@ BuildRequires:  pkgconfig(tizen-extension-client)
 BuildRequires:  pkgconfig(wayland-tbm-client)
 %endif
 
+%if "%{?profile}?" == "tv"
+%define tizen_feature_socket_timeout 1
+%else
+%define tizen_featurE_socket_timeout 0
+%endif
+
 %description
 Application management daemon
 
@@ -59,15 +65,20 @@ cp %{SOURCE1001} .
 %if 0%{?simulator}
 CFLAGS="%{optflags} -D__emul__"; export CFLAGS
 %endif
+%if 0%{?tizen_feature_socket_timeout}
+TIZEN_FEATURE_SOCKET_TIMEOUT=ON
+%endif
 
 MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
-%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
+%cmake -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
+	-DTIZEN_FEATURE_SOCKET_TIMEOUT:BOOL=${TIZEN_FEATURE_SOCKET_TIMEOUT} \
 %if %{with wayland}
--Dwith_wayland=TRUE\
+	-Dwith_wayland=TRUE \
 %endif
 %if %{with x}
--Dwith_x11=TRUE\
+	-Dwith_x11=TRUE \
 %endif
+	.
 
 %__make %{?_smp_mflags}
 
