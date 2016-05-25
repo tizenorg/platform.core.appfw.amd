@@ -534,7 +534,7 @@ static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 
 	src = g_source_new(&funcs, sizeof(GSource));
 
-	gpollfd = (GPollFD *) g_malloc(sizeof(GPollFD));
+	gpollfd = (GPollFD *)g_malloc(sizeof(GPollFD));
 	gpollfd->events = POLLIN;
 	gpollfd->fd = fd;
 
@@ -552,8 +552,8 @@ static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 	r_info->gpollfd = gpollfd;
 	r_info->cmd = cmd;
 
-	r_info->timer_id = g_timeout_add(5000, __recv_timeout_handler,
-			(gpointer)r_info);
+	r_info->timer_id = g_timeout_add(AUL_SOCKET_TIMEOUT_TV_SEC,
+			__recv_timeout_handler, (gpointer)r_info);
 	g_source_add_poll(src, gpollfd);
 	g_source_set_callback(src, (GSourceFunc)__reply_handler,
 			(gpointer)r_info, NULL);

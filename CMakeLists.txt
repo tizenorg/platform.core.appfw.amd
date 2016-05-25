@@ -4,23 +4,27 @@ SET(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS true)
 PROJECT(amd C)
 
 ADD_DEFINITIONS("-DSHARE_PREFIX=\"${SHARE_INSTALL_PREFIX}/aul\"")
-IF (with_wayland)
-       ADD_DEFINITIONS("-DWAYLAND")
-ENDIF (with_wayland)
-IF (with_x11)
-       ADD_DEFINITIONS("-DX11")
-ENDIF (with_x11)
+IF(with_wayland)
+	ADD_DEFINITIONS("-DWAYLAND")
+ENDIF(with_wayland)
+IF(with_x11)
+	ADD_DEFINITIONS("-DX11")
+ENDIF(with_x11)
+
+# Socket timeout - 5.2s
+ADD_DEFINITIONS("-DAUL_SOCKET_TIMEOUT_TV_SEC=5")
+ADD_DEFINITIONS("-DAUL_SOCKET_TIMEOUT_TV_USEC=200")
 
 # Set required packages
 INCLUDE(FindPkgConfig)
 
 SET(AMD_PKG_CHECK_MODULES dlog rua aul glib-2.0 gio-2.0 vconf pkgmgr-info pkgmgr bundle libsystemd-daemon cynara-client cynara-creds-socket cynara-session cert-svc-vcore libtzplatform-config xkbcommon sensor security-manager ttrace)
-IF (with_wayland)
+IF(with_wayland)
 	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} wayland-client tizen-extension-client wayland-tbm-client)
-ENDIF (with_wayland)
-IF (with_x11)
+ENDIF(with_wayland)
+IF(with_x11)
 	pkg_check_modules(pkgs REQUIRED  ${AMD_PKG_CHECK_MODULES} )
-ENDIF (with_x11)
+ENDIF(with_x11)
 
 FOREACH(flag ${pkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
