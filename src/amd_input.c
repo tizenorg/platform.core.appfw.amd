@@ -351,6 +351,21 @@ int _input_init(void)
 		return -1;
 	}
 
+	if (seat == NULL) {
+		_E("seat is null");
+		return -1;
+	}
+
+	if (keyboard == NULL) {
+		_E("keyboard is null");
+		return -1;
+	}
+
+	if (g_keymap == NULL) {
+		_E("g_keymap is null");
+		return -1;
+	}
+
 	if (tizen_input_device_manager_add_listener(input_devmgr,
 		&input_devmgr_listener, NULL) < 0) {
 		_E("Failed to add listener");
