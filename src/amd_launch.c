@@ -531,10 +531,11 @@ static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 	GPollFD *gpollfd;
 	GSource *src;
 	struct reply_info *r_info;
+	struct timeval tv;
 
 	src = g_source_new(&funcs, sizeof(GSource));
 
-	gpollfd = (GPollFD *) g_malloc(sizeof(GPollFD));
+	gpollfd = (GPollFD *)g_malloc(sizeof(GPollFD));
 	gpollfd->events = POLLIN;
 	gpollfd->fd = fd;
 
@@ -552,7 +553,8 @@ static void __set_reply_handler(int fd, int pid, request_h req, int cmd)
 	r_info->gpollfd = gpollfd;
 	r_info->cmd = cmd;
 
-	r_info->timer_id = g_timeout_add(5000, __recv_timeout_handler,
+	tv = aul_sock_get_rcv_timeval();
+	r_info->timer_id = g_timeout_add(tv.tv_sec, __recv_timeout_handler,
 			(gpointer)r_info);
 	g_source_add_poll(src, gpollfd);
 	g_source_set_callback(src, (GSourceFunc)__reply_handler,
