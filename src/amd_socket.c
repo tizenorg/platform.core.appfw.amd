@@ -56,7 +56,14 @@ int _create_sock_activation(void)
 static inline void __set_sock_option(int fd, int cli)
 {
 	int size;
-	struct timeval tv = { 5, 200 * 1000 };  /* 5.2 sec */
+#ifndef TIZEN_FEATURE_SOCKET_TIMEOUT
+	struct timeval tv = { 5, 200 * 1000 }; /* 5.2 sec */
+#else
+	struct timeval tv = {
+		TIZEN_FEATURE_SOCKET_TIMEOUT_TV_SEC,
+		TIZEN_FEATURE_SOCKET_TIMEOUT_TV_USEC * 1000
+	};
+#endif
 
 	size = AUL_SOCK_MAXBUFF;
 	setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
