@@ -1327,7 +1327,7 @@ static int __complete_starting_app(struct launch_s *handle, request_h req)
 	int ret;
 
 	comp_type = _appinfo_get_value(handle->ai, AIT_COMPTYPE);
-	if (comp_type && !strcmp(comp_type, APP_TYPE_SERVICE)) {
+	if (comp_type && !strcmp(comp_type, APP_TYPE_UI)) {
 		if (handle->new_process) {
 			_D("Add app group info %d", handle->pid);
 			__pid_of_last_launched_ui_app = handle->pid;
