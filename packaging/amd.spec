@@ -41,6 +41,7 @@ BuildRequires:  pkgconfig(cert-svc-vcore)
 BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(sensor)
 BuildRequires:  pkgconfig(ttrace)
+BuildRequires:  pkgconfig(app2sd)
 %if %{with wayland}
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(tizen-extension-client)

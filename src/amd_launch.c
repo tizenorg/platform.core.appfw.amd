@@ -38,6 +38,7 @@
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
 #include <ttrace.h>
+#include <app2ext_interface.h>
 
 #include "amd_config.h"
 #include "amd_launch.h"
@@ -1175,6 +1176,13 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	if (comp_type == NULL)
 		return -1;
 
+	pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
+	if (APP2EXT_SD_CARD == app2ext_get_app_location((char *)pkgid))
+		if (app2ext_enable_external_pkg((char *)pkgid) < 0) {
+			_E("Failed to enable exteranl pkg(%s)", (char *)pkgid);
+			return -1;
+		}
+
 	if (caller_appid && (strcmp(comp_type, APP_TYPE_WIDGET) == 0 ||
 				strcmp(comp_type, APP_TYPE_WATCH) == 0)) {
 		widget_viewer = bundle_get_val(kb, AUL_K_WIDGET_VIEWER);
@@ -1200,7 +1208,6 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 
 		_input_lock();
 	} else if (caller_appid && strcmp(comp_type, APP_TYPE_SERVICE) == 0) {
-		pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
 		ret = __check_execute_permission(pkgid, caller_appid,
 				target_uid, kb);
 		if (ret < 0)
