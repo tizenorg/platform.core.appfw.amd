@@ -39,6 +39,7 @@ static bool init_done;
 static guint timer;
 static struct tizen_keyrouter *keyrouter;
 static struct tizen_input_device_manager *input_devmgr;
+static struct tizen_input_device *input_device;
 static struct wl_display *display;
 static struct wl_seat *seat;
 struct xkb_context *g_ctx;
@@ -285,12 +286,47 @@ static void __xkb_fini(void)
 	}
 }
 
+static void __input_device_info(void *data,
+		struct tizen_input_device *tizen_input_device,
+		const char *name, uint32_t class, uint32_t subclass,
+		struct wl_array *axes)
+{
+	_D("device info - name: %s, class: %d, subclass: %d",
+			name, class, subclass);
+}
+
+static void __input_device_event_device(void *data,
+		struct tizen_input_device *tizen_input_device,
+		unsigned int serial, const char *name, uint32_t time)
+{
+	_D("event device - name: %s, time: %d", name, time);
+}
+
+static void __input_device_axis(void *data,
+		struct tizen_input_device *tizen_input_device,
+		uint32_t axis_type, wl_fixed_t value)
+{
+	_D("axis - axis_type: %d, value: %lf",
+			axis_type, wl_fixed_to_double(value));
+}
+
+static const struct tizen_input_device_listener input_device_listener = {
+	__input_device_info,
+	__input_device_event_device,
+	__input_device_axis,
+};
+
 static void __cb_device_add(void *data,
 		struct tizen_input_device_manager *tizen_input_device_manager,
 		uint32_t serial, const char *name,
 		struct tizen_input_device *device, struct wl_seat *seat)
 {
 	_D("device is added!", name);
+	if (!input_device) {
+		tizen_input_device_add_listener(device, &input_device_listener,
+				NULL);
+		input_device = device;
+	}
 }
 
 static void __cb_device_remove(void *data,
@@ -299,6 +335,7 @@ static void __cb_device_remove(void *data,
 		struct tizen_input_device *device, struct wl_seat *seat)
 {
 	_D("%s device is removed!", name);
+	tizen_input_device_destroy(device);
 }
 
 static void __cb_error(void *data,
@@ -367,6 +404,11 @@ int _input_init(void)
 	}
 	wl_display_flush(display);
 	wl_display_roundtrip(display);
+
+	if (input_device == NULL) {
+		_E("input_device is null");
+		return -1;
+	}
 
 	if (g_keymap == NULL) {
 		_E("g_keymap is null");
