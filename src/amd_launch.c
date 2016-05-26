@@ -1175,6 +1175,9 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	if (comp_type == NULL)
 		return -1;
 
+	pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
+	pkgmgrinfo_client_request_enable_external_pkg((char *)pkgid);
+
 	if (caller_appid && (strcmp(comp_type, APP_TYPE_WIDGET) == 0 ||
 				strcmp(comp_type, APP_TYPE_WATCH) == 0)) {
 		widget_viewer = bundle_get_val(kb, AUL_K_WIDGET_VIEWER);
@@ -1200,7 +1203,6 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 
 		_input_lock();
 	} else if (caller_appid && strcmp(comp_type, APP_TYPE_SERVICE) == 0) {
-		pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
 		ret = __check_execute_permission(pkgid, caller_appid,
 				target_uid, kb);
 		if (ret < 0)
