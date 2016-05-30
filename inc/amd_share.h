@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "amd_status.h"
+#include "amd_app_status.h"
 
 typedef struct shared_info_main_s *shared_info_h;
 

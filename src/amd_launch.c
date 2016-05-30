@@ -42,7 +42,7 @@
 #include "amd_config.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"
-#include "amd_status.h"
+#include "amd_app_status.h"
 #include "amd_app_group.h"
 #include "amd_util.h"
 #include "app_signal.h"
@@ -85,6 +85,7 @@ struct launch_s {
 	int bg_category;
 	int bg_allowed;
 	shared_info_h share_info;
+	app_status_h app_status;
 };
 
 struct fgmgr {
@@ -98,7 +99,7 @@ static int __focused_pid;
 
 static void __set_reply_handler(int fd, int pid, request_h req, int cmd);
 static int __nofork_processing(int cmd, int pid, bundle *kb, request_h req);
-extern void _cleanup_dead_info(int pid);
+extern void _cleanup_dead_info(app_status_h stat);
 
 static void __set_stime(bundle *kb)
 {
@@ -295,12 +296,13 @@ int _term_bgapp(int pid, request_h req)
 	int *pids = NULL;
 	int i;
 	int status = -1;
+	app_status_h app_status;
 
 	if (_app_group_is_leader_pid(pid)) {
 		_app_group_get_group_pids(pid, &cnt, &pids);
 		if (cnt > 0) {
-			status = _status_get_app_info_status(pids[cnt - 1],
-					getuid());
+			app_status = _app_status_find(pids[cnt - 1]);
+			status = _app_status_get_status(app_status);
 			if (status == STATUS_BG) {
 				for (i = cnt - 1 ; i >= 0; i--) {
 					if (i != 0)
@@ -489,6 +491,8 @@ static gboolean __recv_timeout_handler(gpointer data)
 	const char *appid;
 	const struct appinfo *ai;
 	const char *taskmanage;
+	app_status_h app_status;
+	uid_t uid;
 	int ret = -EAGAIN;
 
 	_E("application is not responding: pid(%d) cmd(%d)",
@@ -501,10 +505,13 @@ static gboolean __recv_timeout_handler(gpointer data)
 	case APP_START:
 	case APP_START_RES:
 	case APP_START_ASYNC:
-		appid = _status_app_get_appid_bypid(r_info->pid);
-		if (appid == NULL)
+		app_status = _app_status_find(r_info->pid);
+		if (app_status == NULL)
 			break;
-		ai = _appinfo_find(getuid(), appid);
+
+		uid = _app_status_get_uid(app_status);
+		appid = _app_status_get_appid(app_status);
+		ai = _appinfo_find(uid, appid);
 		if (ai == NULL)
 			break;
 		taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
@@ -639,6 +646,7 @@ static int __get_pid_for_app_group(const char *appid, uid_t uid, bundle *kb,
 	int found_pid = -1;
 	int found_lpid = -1;
 	int ret;
+	app_status_h app_status;
 
 	if (_app_group_is_group_app(kb)) {
 		handle->pid = -1;
@@ -647,8 +655,10 @@ static int __get_pid_for_app_group(const char *appid, uid_t uid, bundle *kb,
 		handle->is_subapp = false;
 	}
 
-	if (handle->pid > 0)
-		status = _status_get_app_info_status(handle->pid, uid);
+	if (handle->pid > 0) {
+		app_status = _app_status_find(handle->pid);
+		status = _app_status_get_status(app_status);
+	}
 
 	if (handle->pid == -1 || status == STATUS_DYING) {
 		ret = _app_group_find_singleton(appid, &found_pid, &found_lpid);
@@ -686,31 +696,32 @@ static int __get_pid_for_app_group(const char *appid, uid_t uid, bundle *kb,
 	return 0;
 }
 
-static void __prepare_to_suspend_services(int pid)
+static void __prepare_to_suspend_services(int pid, uid_t uid)
 {
 	int dummy;
 
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	aul_sock_send_raw(pid, getuid(), APP_SUSPEND, (unsigned char *)&dummy,
+	SECURE_LOGD("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	aul_sock_send_raw(pid, uid, APP_SUSPEND, (unsigned char *)&dummy,
 			sizeof(int), AUL_SOCK_NOREPLY);
 }
 
-static void __prepare_to_wake_services(int pid)
+static void __prepare_to_wake_services(int pid, uid_t uid)
 {
 	int dummy;
 
-	SECURE_LOGD("[__SUSPEND__] pid: %d", pid);
-	aul_sock_send_raw(pid, getuid(), APP_WAKE, (unsigned char *)&dummy,
+	SECURE_LOGD("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	aul_sock_send_raw(pid, uid, APP_WAKE, (unsigned char *)&dummy,
 			sizeof(int), AUL_SOCK_NOREPLY);
 }
 
 static gboolean __check_service_only(gpointer user_data)
 {
 	int pid = GPOINTER_TO_INT(user_data);
+	app_status_h app_status;
 
 	SECURE_LOGD("[__SUSPEND__] pid :%d", pid);
-	_status_check_service_only(pid, getuid(),
-			__prepare_to_suspend_services);
+	app_status = _app_status_find(pid);
+	_app_status_check_service_only(app_status, __prepare_to_suspend_services);
 
 	return FALSE;
 }
@@ -838,11 +849,13 @@ static int __check_execute_permission(const char *callee_pkgid,
 static gboolean __fg_timeout_handler(gpointer data)
 {
 	struct fgmgr *fg = data;
+	app_status_h stat;
 
 	if (!fg)
 		return FALSE;
 
-	_status_update_app_info_list(fg->pid, STATUS_BG, TRUE, getuid());
+	stat = _app_status_find(fg->pid);
+	_app_status_update_status(stat, STATUS_BG, true);
 
 	_fgmgr_list = g_list_remove(_fgmgr_list, fg);
 	free(fg);
@@ -885,16 +898,18 @@ static void __del_fgmgr_list(int pid)
 
 static int __send_hint_for_visibility(uid_t uid)
 {
-	bundle *b = NULL;
+	bundle *b;
 	int ret;
 
 	b = bundle_create();
+	if (b == NULL) {
+		_E("out of memory");
+		return -1;
+	}
 
 	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, uid,
 			PAD_CMD_VISIBILITY, b);
-
-	if (b)
-		bundle_free(b);
+	bundle_free(b);
 	__pid_of_last_launched_ui_app = 0;
 
 	return ret;
@@ -902,31 +917,33 @@ static int __send_hint_for_visibility(uid_t uid)
 
 static int __app_status_handler(int pid, int status, void *data)
 {
-	char *appid = NULL;
-	int bg_category = 0x00;
-	int app_status = -1;
-	const struct appinfo *ai = NULL;
+	const char *appid;
+	int bg_category;
+	int app_statusus;
+	const struct appinfo *ai;
+	app_status_h stat;
 
 	_W("pid(%d) status(%d)", pid, status);
+	stat = _app_status_find(pid);
+	if (stat == NULL)
+		return 0;
 
-	app_status  = _status_get_app_info_status(pid, getuid());
-	if (app_status == STATUS_DYING && status != PROC_STATUS_LAUNCH)
+	app_statusus  = _app_status_get_status(stat);
+	if (app_statusus == STATUS_DYING && status != PROC_STATUS_LAUNCH)
 		return 0;
 
 	switch (status) {
 	case PROC_STATUS_FG:
 		__del_fgmgr_list(pid);
-		_status_update_app_info_list(pid, STATUS_VISIBLE, FALSE,
-				getuid());
+		_app_status_update_status(stat, STATUS_VISIBLE, false);
 		_suspend_remove_timer(pid);
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(getuid());
 		break;
-
 	case PROC_STATUS_BG:
-		_status_update_app_info_list(pid, STATUS_BG, FALSE, getuid());
-		appid = _status_app_get_appid_bypid(pid);
+		_app_status_update_status(stat, STATUS_BG, false);
+		appid = _app_status_get_appid(stat);
 		if (appid) {
 			ai = _appinfo_find(getuid(), appid);
 			bg_category = (bool)_appinfo_get_value(ai,
@@ -935,7 +952,6 @@ static int __app_status_handler(int pid, int status, void *data)
 				_suspend_add_timer(pid, ai);
 		}
 		break;
-
 	case PROC_STATUS_FOCUS:
 		__focused_pid = pid;
 		break;
@@ -1045,13 +1061,13 @@ static void __set_caller_appinfo(const char *caller_appid, int caller_pid,
 
 static const char *__get_caller_appid(int caller_pid, uid_t caller_uid)
 {
-	char *caller_appid;
+	app_status_h app_status;
 
-	caller_appid = _status_app_get_appid_bypid(caller_pid);
-	if (caller_appid == NULL && caller_uid >= REGULAR_UID_MIN)
-		caller_appid = _status_app_get_appid_bypid(getpgid(caller_pid));
+	app_status = _app_status_find(caller_pid);
+	if (app_status == NULL && caller_uid >= REGULAR_UID_MIN)
+		app_status = _app_status_find(getpgid(caller_pid));
 
-	return caller_appid;
+	return _app_status_get_appid(app_status);
 }
 
 static int __check_executable(const struct appinfo *ai)
@@ -1151,6 +1167,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	uid_t caller_uid = _request_get_uid(req);
 	uid_t target_uid = _request_get_target_uid(req);
 	bundle *kb = _request_get_bundle(req);
+	app_status_h app_status;
 
 	handle->appid = appid;
 	handle->ai = _appinfo_find(target_uid, appid);
@@ -1181,16 +1198,19 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 		if (widget_viewer && strcmp(widget_viewer, caller_appid) == 0) {
 			_D("widget_viewer: %s", widget_viewer);
 			handle->is_subapp = true;
-			handle->pid = _status_app_is_running_with_org_caller(
-					appid, caller_pid);
+			app_status = _app_status_find_with_org_caller(appid,
+					target_uid, caller_pid);
+			handle->pid = _app_status_get_pid(app_status);
 		} else {
 			_E("Cannot launch widget/watch app");
 			return -EREJECTED;
 		}
 	} else {
 		multiple = _appinfo_get_value(handle->ai, AIT_MULTI);
-		if (multiple == NULL || strcmp(multiple, "false") == 0)
-			handle->pid = _status_app_is_running(appid, target_uid);
+		if (multiple == NULL || strcmp(multiple, "false") == 0) {
+			app_status = _app_status_find_by_appid(appid, target_uid);
+			handle->pid = _app_status_get_pid(app_status);
+		}
 	}
 
 	if (strcmp(comp_type, APP_TYPE_UI) == 0) {
@@ -1249,14 +1269,15 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 	const char *comp_type;
 	const char *pad_type = LAUNCHPAD_PROCESS_POOL_SOCK;
 	splash_image_h splash_image;
+	app_status_h stat;
 	int ret;
 
 	pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
 	comp_type = _appinfo_get_value(handle->ai, AIT_COMPTYPE);
 
 	if (handle->pid > 0) {
-		status = _status_get_app_info_status(handle->pid,
-				target_uid);
+		stat = _app_status_find(handle->pid);
+		status = _app_status_get_status(stat);
 	}
 
 	if (handle->pid > 0 && status != STATUS_DYING) {
@@ -1270,8 +1291,10 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 				handle->appid, pkgid, comp_type);
 		_suspend_remove_timer(handle->pid);
 		if (comp_type && !strcmp(comp_type, APP_TYPE_SERVICE)) {
-			if (handle->bg_allowed == false)
-				__prepare_to_wake_services(handle->pid);
+			if (handle->bg_allowed == false) {
+				__prepare_to_wake_services(handle->pid,
+						target_uid);
+			}
 		}
 
 		ret = __nofork_processing(cmd, handle->pid, kb, req);
@@ -1287,7 +1310,7 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 			_W("Failed to send SIGKILL: %d:%s,", handle->pid,
 					strerror(errno));
 		}
-		_cleanup_dead_info(handle->pid);
+		_cleanup_dead_info(stat);
 	}
 
 	__set_appinfo_for_launchpad(handle->ai, kb);
@@ -1344,7 +1367,7 @@ static int __complete_starting_app(struct launch_s *handle, request_h req)
 		}
 	}
 
-	_status_add_app_info_list(handle->ai, handle->pid, handle->is_subapp,
+	_app_status_add_app_info(handle->ai, handle->pid, handle->is_subapp,
 			target_uid, caller_pid);
 
 	if (handle->share_info) {
