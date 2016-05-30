@@ -36,7 +36,7 @@
 #include "amd_config.h"
 #include "amd_util.h"
 #include "amd_appinfo.h"
-#include "amd_status.h"
+#include "amd_app_status.h"
 #include "amd_launch.h"
 #include "amd_request.h"
 #include "amd_app_group.h"
@@ -112,7 +112,7 @@ static bool __check_restart(const char *appid)
 	return true;
 }
 
-static bool __can_restart_app(const char *appid)
+static bool __can_restart_app(const char *appid, uid_t uid)
 {
 	const char *pkg_status;
 	const char *component_type;
@@ -121,7 +121,7 @@ static bool __can_restart_app(const char *appid)
 	int val = 0;
 
 	_D("appid: %s", appid);
-	ai = _appinfo_find(getuid(), appid);
+	ai = _appinfo_find(uid, appid);
 	if (!ai)
 		return false;
 
@@ -134,9 +134,9 @@ static bool __can_restart_app(const char *appid)
 		return false;
 
 	pkg_status = _appinfo_get_value(ai, AIT_STATUS);
-	if (pkg_status && strncmp(pkg_status, "blocking", 8) == 0) {
+	if (pkg_status && strcmp(pkg_status, "blocking") == 0) {
 		_appinfo_set_value(ai, AIT_STATUS, "restart");
-	} else if (pkg_status && strncmp(pkg_status, "norestart", 9) == 0) {
+	} else if (pkg_status && strcmp(pkg_status, "norestart") == 0) {
 		_appinfo_set_value(ai, AIT_STATUS, "installed");
 	} else {
 		r = _appinfo_get_int_value(ai, AIT_RESTART, &val);
@@ -147,11 +147,19 @@ static bool __can_restart_app(const char *appid)
 	return false;
 }
 
-void _cleanup_dead_info(int pid)
+void _cleanup_dead_info(app_status_h app_status)
 {
+	int pid;
 	int caller_pid;
+	uid_t uid;
 
-	_D("pid: %d", pid);
+	if (app_status == NULL)
+		return;
+
+	pid = _app_status_get_pid(app_status);
+	uid = _app_status_get_uid(app_status);
+
+	_D("pid: %d, uid: %d", pid, uid);
 	_extractor_unmount(pid, _extractor_mountable_get_tep_paths);
 	_extractor_unmount(pid, _extractor_mountable_get_tpk_paths);
 	_app_com_client_remove(pid);
@@ -179,8 +187,8 @@ void _cleanup_dead_info(int pid)
 		_app_group_remove(pid);
 	}
 
-	_temporary_permission_drop(pid, getuid());
-	_status_remove_app_info_list(pid, getuid());
+	_temporary_permission_drop(pid, uid);
+	_app_status_remove(app_status);
 	aul_send_app_terminated_signal(pid);
 }
 
@@ -189,25 +197,32 @@ static int __app_dead_handler(int pid, void *data)
 	bool restart = false;
 	char *appid = NULL;
 	const char *tmp_appid;
+	app_status_h app_status;
+	uid_t uid;
 
 	if (pid <= 0)
 		return 0;
 
 	_D("APP_DEAD_SIGNAL : %d", pid);
 
-	tmp_appid = _status_app_get_appid_bypid(pid);
+	app_status = _app_status_find(pid);
+	if (app_status == NULL)
+		return 0;
+
+	tmp_appid = _app_status_get_appid(app_status);
 	if (tmp_appid == NULL)
 		return 0;
 
-	restart = __can_restart_app(tmp_appid);
+	uid = _app_status_get_uid(app_status);
+	restart = __can_restart_app(tmp_appid, uid);
 	if (restart)
 		appid = strdup(tmp_appid);
 
-	_cleanup_dead_info(pid);
+	_cleanup_dead_info(app_status);
 	_request_flush_pending_request(pid);
 
 	if (restart)
-		_launch_start_app_local(getuid(), appid);
+		_launch_start_app_local(uid, appid);
 	if (appid)
 		free(appid);
 
@@ -304,7 +319,7 @@ static int __init(void)
 	}
 
 	_request_init();
-	_status_init();
+	_app_status_init();
 	_app_group_init();
 	r = rua_delete_history_from_db(NULL);
 	_D("rua_delete_history : %d", r);
@@ -358,6 +373,7 @@ static void __finish(void)
 	_input_fini();
 	_app_com_broker_fini();
 	_cynara_finish();
+	_app_status_finish();
 }
 
 int main(int argc, char *argv[])
