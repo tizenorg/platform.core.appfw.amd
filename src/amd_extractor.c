@@ -30,7 +30,7 @@
 #include "amd_config.h"
 #include "amd_util.h"
 #include "amd_signal.h"
-#include "amd_status.h"
+#include "amd_app_status.h"
 #include "amd_extractor.h"
 
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
@@ -190,7 +190,7 @@ static bool __is_unmountable(const char *appid, const char *key)
 {
 	GHashTable *set;
 
-	if (_status_get_process_cnt(appid) > 1)
+	if (_app_status_get_process_cnt(appid) > 1)
 		return false;
 
 	__prepare_map();
@@ -282,12 +282,19 @@ void _extractor_unmount(int pid, _extractor_mountable mountable)
 	struct stat link_buf;
 	int ret;
 	char **mnt_path;
+	app_status_h app_status;
+	uid_t uid;
 
-	appid = _status_app_get_appid_bypid(pid);
+	app_status = _app_status_find(pid);
+	if (app_status == NULL)
+		return;
+
+	uid = _app_status_get_uid(app_status);
+	appid = _app_status_get_appid(app_status);
 	if (appid == NULL)
 		return;
 
-	ai = _appinfo_find(getuid(), appid);
+	ai = _appinfo_find(uid, appid);
 	if (ai == NULL)
 		return;
 
