@@ -30,7 +30,7 @@
 #include "amd_util.h"
 #include "amd_appinfo.h"
 #include "amd_launch.h"
-#include "amd_status.h"
+#include "amd_app_stat.h"
 
 static pkgmgr_client *pc;
 static GHashTable *user_tbl;
@@ -845,6 +845,7 @@ static void __handle_onboot(void *user_data, const char *appid,
 	uid_t uid = (uid_t)(intptr_t)user_data;
 	int ret;
 	int enable = 1;
+	app_stat_h app_stat;
 
 	if (strcmp(info->val[AIT_COMPTYPE], APP_TYPE_SERVICE) != 0)
 		return;
@@ -854,8 +855,12 @@ static void __handle_onboot(void *user_data, const char *appid,
 		if (ret == 0 && !(enable & APP_ENABLEMENT_MASK_ACTIVE))
 			return;
 
-		if (_status_app_is_running(appid, uid) > 0)
-			return;
+		app_stat = _app_stat_find_by_appid(appid, uid);
+		if (app_stat) {
+			if (_app_stat_is_running(app_stat) > 0)
+				return;
+		}
+
 		_D("start app %s from user %d by onboot", appid, uid);
 		_launch_start_app_local(uid, info->val[AIT_NAME]);
 	}
@@ -1110,7 +1115,7 @@ static int __package_app_event_cb(uid_t target_uid, int req_id,
 				if (ei->type == AIT_ENABLEMENT &&
 					!(old & APP_ENABLEMENT_MASK_ACTIVE)) {
 					_E("terminate apps: %s", appid);
-					_status_terminate_apps(appid,
+					_app_stat_terminate_apps(appid,
 							target_uid);
 				}
 			}

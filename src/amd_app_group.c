@@ -34,7 +34,7 @@
 #include "amd_app_group.h"
 #include "amd_launch.h"
 #include "amd_request.h"
-#include "amd_status.h"
+#include "amd_app_stat.h"
 #include "app_signal.h"
 #include "amd_appinfo.h"
 #include "amd_share.h"
@@ -241,26 +241,26 @@ static GList *__find_removable_apps(int from)
 	return list;
 }
 
-static void __prepare_to_suspend_services(int pid)
+static void __prepare_to_suspend_services(int pid, uid_t uid)
 {
 	int ret;
 	int dummy;
 
-	_D("[__SUSPEND__] pid: %d", pid);
-	ret = aul_sock_send_raw(pid, getuid(), APP_SUSPEND,
-			(unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	_D("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	ret = aul_sock_send_raw(pid, uid, APP_SUSPEND, (unsigned char *)&dummy,
+			sizeof(int), AUL_SOCK_NOREPLY);
 	if (ret < 0)
 		_E("error on suspend service for pid: %d", pid);
 }
 
-static void __prepare_to_wake_services(int pid)
+static void __prepare_to_wake_services(int pid, uid_t uid)
 {
 	int ret;
 	int dummy;
 
-	_D("[__SUSPEND__] pid: %d", pid);
-	ret = aul_sock_send_raw(pid, getuid(), APP_WAKE,
-			(unsigned char *)&dummy, sizeof(int), AUL_SOCK_NOREPLY);
+	_D("[__SUSPEND__] pid: %d, uid: %d", pid, uid);
+	ret = aul_sock_send_raw(pid, uid, APP_WAKE, (unsigned char *)&dummy,
+			sizeof(int), AUL_SOCK_NOREPLY);
 	if (ret < 0)
 		_E("error on wake service for pid: %d", pid);
 }
@@ -268,15 +268,19 @@ static void __prepare_to_wake_services(int pid)
 static void __set_flag(GList *list, int cpid, int flag, bool force)
 {
 	app_group_context_t *ac;
+	app_stat_h app_stat;
 	const struct appinfo *ai;
 	const char *appid;
 	const char *pkgid;
-	int bg_category = 0x00;
+	int bg_category;
+	uid_t uid;
 
 	while (list) {
 		ac = (app_group_context_t *)list->data;
 		if (ac && (ac->fg != flag || force == true)) {
-			appid = _status_app_get_appid_bypid(ac->pid);
+			app_stat = _app_stat_find(ac->pid);
+			appid = _app_stat_get_appid(app_stat);
+			uid = _app_stat_get_uid(app_stat);
 			ai = _appinfo_find(getuid(), appid);
 			pkgid = _appinfo_get_value(ai, AIT_PKGID);
 			bg_category = (intptr_t)_appinfo_get_value(ai,
@@ -287,8 +291,7 @@ static void __set_flag(GList *list, int cpid, int flag, bool force)
 						appid, pkgid, STATUS_FOREGROUND,
 						APP_TYPE_UI);
 				if (!bg_category) {
-					_status_find_service_apps(ac->pid,
-						getuid(),
+					_app_stat_find_service_apps(app_stat,
 						STATUS_VISIBLE,
 						__prepare_to_wake_services,
 						false);
@@ -299,14 +302,13 @@ static void __set_flag(GList *list, int cpid, int flag, bool force)
 						appid, pkgid, STATUS_BACKGROUND,
 						APP_TYPE_UI);
 				if (!bg_category) {
-					_status_find_service_apps(ac->pid,
-						getuid(),
+					_app_stat_find_service_apps(app_stat,
 						STATUS_BG,
 						__prepare_to_suspend_services,
 						true);
 					if (force == TRUE && cpid == ac->pid) {
 						__prepare_to_suspend_services(
-								ac->pid);
+								ac->pid, uid);
 						_suspend_add_timer(ac->pid, ai);
 					}
 				}
@@ -623,21 +625,26 @@ static void __do_recycle(app_group_context_t *context)
 	const char *appid;
 	const char *pkgid;
 	const struct appinfo *ai;
+	app_stat_h app_stat;
+	uid_t uid;
+
+	app_stat = _app_stat_find(context->pid);
+	uid = _app_stat_get_uid(app_stat);
 
 	if (context->fg) {
-		appid = _status_app_get_appid_bypid(context->pid);
-		ai = _appinfo_find(getuid(), appid);
+		appid = _app_stat_get_appid(app_stat);
+		ai = _appinfo_find(uid, appid);
 		pkgid = _appinfo_get_value(ai, AIT_PKGID);
 
 		_D("send_signal BG %s", appid);
 		aul_send_app_status_change_signal(context->pid, appid, pkgid,
 				STATUS_BACKGROUND, APP_TYPE_UI);
-		_status_find_service_apps(context->pid, getuid(), STATUS_BG,
+		_app_stat_find_service_apps(app_stat, STATUS_BG,
 				__prepare_to_suspend_services, true);
 		context->fg = 0;
 	}
 	recycle_bin = g_list_append(recycle_bin, context);
-	_temporary_permission_drop(context->pid, getuid());
+	_temporary_permission_drop(context->pid, uid);
 }
 
 void _app_group_init(void)
@@ -1015,9 +1022,8 @@ int _app_group_get_status(int pid)
 static void __set_status(app_group_context_t *ac, app_group_context_t *last_ac,
 		int lpid, int pid, int status, bool force)
 {
-	const char *appid;
 	const char *pkgid;
-	const struct appinfo *ai;
+	app_stat_h app_stat;
 
 	if (status > 0)
 		ac->status = status;
@@ -1026,10 +1032,8 @@ static void __set_status(app_group_context_t *ac, app_group_context_t *last_ac,
 		if (__is_visible(pid)) {
 			__set_fg_flag(pid, 1, force);
 			if (!ac->group_sig && lpid != pid) {
-				appid = _status_app_get_appid_bypid(pid);
-				ai = _appinfo_find(getuid(), appid);
-				pkgid = _appinfo_get_value(ai, AIT_PKGID);
-
+				app_stat = _app_stat_find(pid);
+				pkgid = _app_stat_get_pkgid(app_stat);
 				_D("send group signal %d", pid);
 				aul_send_app_group_signal(lpid, pid, pkgid);
 				ac->group_sig = 1;
@@ -1253,7 +1257,8 @@ int _app_group_find_singleton(const char *appid, int *found_pid,
 	GHashTableIter iter;
 	gpointer key = NULL;
 	gpointer value = NULL;
-	char *target = NULL;
+	app_stat_h app_stat;
+	const char *target;
 	GList *list;
 	app_group_context_t *ac;
 	int singleton = APP_GROUP_LAUNCH_MODE_SINGLETON;
@@ -1264,7 +1269,8 @@ int _app_group_find_singleton(const char *appid, int *found_pid,
 		while (list != NULL) {
 			ac = (app_group_context_t *)list->data;
 			if (ac && ac->launch_mode == singleton) {
-				target = _status_app_get_appid_bypid(ac->pid);
+				app_stat = _app_stat_find(ac->pid);
+				target = _app_stat_get_appid(app_stat);
 				if (appid && target && !strcmp(appid, target)) {
 					*found_pid = ac->pid;
 					*found_lpid = GPOINTER_TO_INT(key);
@@ -1408,12 +1414,14 @@ void _app_group_restart_app(int pid, bundle *b)
 int _app_group_find_pid_from_recycle_bin(const char *appid)
 {
 	app_group_context_t *ac;
+	app_stat_h app_stat;
 	const char *appid_from_bin;
 	GList *iter = recycle_bin;
 
 	while (iter) {
 		ac = (app_group_context_t *)iter->data;
-		appid_from_bin = _status_app_get_appid_bypid(ac->pid);
+		app_stat = _app_stat_find(ac->pid);
+		appid_from_bin = _app_stat_get_appid(app_stat);
 		if (appid && appid_from_bin && !strcmp(appid, appid_from_bin))
 			return ac->pid;
 
@@ -1495,6 +1503,7 @@ int _app_group_activate_below(int pid, const char *below_appid)
 	GHashTableIter iter;
 	gpointer key;
 	gpointer value;
+	app_stat_h app_stat;
 	const char *appid;
 
 	if (!context) {
@@ -1517,7 +1526,8 @@ int _app_group_activate_below(int pid, const char *below_appid)
 	g_hash_table_iter_init(&iter, app_group_hash);
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		tpid = GPOINTER_TO_INT(key);
-		appid = _status_app_get_appid_bypid(tpid);
+		app_stat = _app_stat_find(tpid);
+		appid = _app_stat_get_appid(app_stat);
 		if (appid && strcmp(appid, below_appid) == 0) {
 			list = (GList *)value;
 			context  = (app_group_context_t *)list->data;
