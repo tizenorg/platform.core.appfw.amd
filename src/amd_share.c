@@ -39,7 +39,7 @@
 #include "amd_config.h"
 #include "amd_util.h"
 #include "amd_appinfo.h"
-#include "amd_status.h"
+#include "amd_app_status.h"
 #include "amd_share.h"
 #include "aul_svc_priv_key.h"
 
@@ -79,6 +79,7 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 	char *org_caller = NULL;
 	const char *appid;
 	int org_caller_pid;
+	app_status_h app_status;
 	int ret;
 
 	ret = bundle_get_str(kb, AUL_K_ORG_CALLER_PID, &org_caller);
@@ -86,7 +87,8 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 		return caller_pid;
 
 	org_caller_pid = atoi(org_caller);
-	appid = _status_app_get_appid_bypid(caller_pid);
+	app_status = _app_status_find(caller_pid);
+	appid = _app_status_get_appid(app_status);
 	if (appid && (strcmp(APP_SELECTOR, appid) == 0 ||
 			strcmp(SHARE_PANEL, appid) == 0))
 		caller_pid = org_caller_pid;
@@ -96,12 +98,14 @@ static int __get_owner_pid(int caller_pid, bundle *kb)
 
 static const char *__get_owner_appid(int caller_pid, bundle *kb)
 {
-	const char *owner_appid = NULL;
+	const char *owner_appid;
 	int owner_pid = -1;
+	app_status_h app_status;
 
 	owner_pid = __get_owner_pid(caller_pid, kb);
 	owner_pid = getpgid(owner_pid); /* for webapp */
-	owner_appid = _status_app_get_appid_bypid(owner_pid);
+	app_status = _app_status_find(owner_pid);
+	owner_appid = _app_status_get_appid(app_status);
 
 	return owner_appid;
 }
@@ -363,11 +367,16 @@ clear:
 int _temporary_permission_apply(int pid, uid_t uid, shared_info_h handle)
 {
 	int ret;
+	app_status_h app_status;
 
 	if (handle == NULL)
 		return -1;
 
-	ret = _status_add_shared_info(pid, uid, handle->shared_info);
+	app_status = _app_status_find(pid);
+	if (app_status == NULL)
+		return -1;
+
+	ret = _app_status_add_shared_info(app_status, handle->shared_info);
 	if (ret != 0)
 		return ret;
 
@@ -407,8 +416,14 @@ int _temporary_permission_drop(int pid, uid_t uid)
 {
 	int r;
 	shared_info_t *sit;
-	GList *list = _status_get_shared_info_list(pid, uid);
+	app_status_h app_status;
+	GList *list;
 
+	app_status = _app_status_find(pid);
+	if (app_status == NULL)
+		return -1;
+
+	list = _app_status_get_shared_info_list(app_status);
 	if (!list) {
 		_D("list was null");
 		return -1;
@@ -424,6 +439,6 @@ int _temporary_permission_drop(int pid, uid_t uid)
 		list = g_list_next(list);
 	}
 
-	return _status_clear_shared_info_list(pid, uid);
+	return _app_status_clear_shared_info_list(app_status);
 }
 
