@@ -563,7 +563,7 @@ void _status_check_service_only(int pid, uid_t uid,
 	ui_list = info_t->pkginfo->ui_list;
 	while (ui_list) {
 		ui_info_t = (app_status_info_t *)ui_list->data;
-		if (ui_info_t && _status_app_is_running_v2(ui_info_t->appid,
+		if (ui_info_t && _status_app_is_running(ui_info_t->appid,
 					uid) > 0)
 			ui_cnt++;
 		ui_list = g_slist_next(ui_list);
