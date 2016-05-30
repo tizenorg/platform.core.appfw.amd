@@ -44,7 +44,7 @@
 #include "amd_request.h"
 #include "amd_launch.h"
 #include "amd_appinfo.h"
-#include "amd_status.h"
+#include "amd_app_status.h"
 #include "amd_app_group.h"
 #include "amd_cynara.h"
 #include "amd_socket.h"
@@ -179,11 +179,12 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 	int pid;
 	int ret;
 	int dummy;
-	char *appid;
-	const char *pkgid = NULL;
-	const char *type = NULL;
-	const struct appinfo *ai = NULL;
+	const char *appid;
+	const char *pkgid;
+	const char *type;
+	const struct appinfo *ai;
 	uid_t target_uid = _request_get_target_uid(req);
+	app_status_h app_status;
 
 	if (pid_str == NULL)
 		return -1;
@@ -194,13 +195,14 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 		return -1;
 	}
 
-	appid = _status_app_get_appid_bypid(pid);
-	if (appid == NULL) {
-		_E("pid %d is not an app", pid);
+	app_status = _app_status_find(pid);
+	if (app_status == NULL) {
+		_E("pid %s is not an application", pid);
 		_request_send_result(req, -1);
 		return -1;
 	}
 
+	appid = _app_status_get_appid(app_status);
 	ai = _appinfo_find(target_uid, appid);
 	if (ai == NULL) {
 		_request_send_result(req, -1);
@@ -230,8 +232,7 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 		ret = _send_to_sigkill(pid);
 		if (ret < 0)
 			_E("fail to killing - %d\n", pid);
-		_status_update_app_info_list(pid, STATUS_DYING, FALSE,
-				target_uid);
+		_app_status_update_status(app_status, STATUS_DYING, false);
 		_request_send_result(req, ret);
 		break;
 	case APP_TERM_REQ_BY_PID:
@@ -832,6 +833,7 @@ static int __dispatch_app_result(request_h req)
 	const char *appid;
 	int ret;
 	uid_t target_uid = _request_get_target_uid(req);
+	app_status_h app_status;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -848,8 +850,9 @@ static int __dispatch_app_result(request_h req)
 		bundle_add(kb, AUL_K_CALLEE_PID, tmp_pid);
 	}
 
-	appid = _status_app_get_appid_bypid(getpgid(pid));
-	if (appid != NULL) {
+	app_status = _app_status_find(getpgid(pid));
+	appid = _app_status_get_appid(app_status);
+	if (appid) {
 		si = _temporary_permission_create(pgid, appid, kb, target_uid);
 		if (si == NULL)
 			_D("No sharable path : %d %s", pgid, appid);
@@ -879,13 +882,16 @@ static int __dispatch_app_pause(request_h req)
 	const char *appid;
 	bundle *kb;
 	int ret;
+	app_status_h app_status;
 
 	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	ret = _status_app_is_running(appid, _request_get_target_uid(req));
+	app_status = _app_status_find_by_appid(appid,
+			_request_get_target_uid(req));
+	ret = _app_status_is_running(app_status);
 	if (ret > 0)
 		ret = _pause_app(ret, req);
 	else
@@ -911,17 +917,19 @@ static int __dispatch_app_process_by_pid(request_h req)
 
 static int __dispatch_app_term_async(request_h req)
 {
-	char *appid;
+	const char *appid;
 	bundle *kb;
 	const char *term_pid;
 	struct appinfo *ai;
+	app_status_h app_status;
 
 	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
 	term_pid = bundle_get_val(kb, AUL_K_APPID);
-	appid = _status_app_get_appid_bypid(atoi(term_pid));
+	app_status = _app_status_find(atoi(term_pid));
+	appid = _app_status_get_appid(app_status);
 	ai = _appinfo_find(_request_get_target_uid(req), appid);
 	if (ai) {
 		_appinfo_set_value(ai, AIT_STATUS, "norestart");
@@ -948,34 +956,34 @@ static int __dispatch_app_term(request_h req)
 
 static int __dispatch_app_running_info(request_h req)
 {
-	_status_send_running_appinfo(_request_remove_fd(req), req->cmd,
-			_request_get_target_uid(req));
-	return 0;
+	int ret;
+
+	ret = _app_status_send_running_appinfo(_request_remove_fd(req),
+			req->cmd, _request_get_target_uid(req));
+	return ret;
 }
 
 static int __dispatch_app_all_running_info(request_h req)
 {
-	_status_send_running_appinfo(_request_remove_fd(req), req->cmd,
-			_request_get_target_uid(req));
-	return 0;
+	int ret;
+
+	ret = _app_status_send_running_appinfo(_request_remove_fd(req),
+			req->cmd, _request_get_target_uid(req));
+	return ret;
 }
 
 static int __dispatch_app_is_running(request_h req)
 {
-	char *appid = NULL;
+	char appid[MAX_PACKAGE_STR_SIZE];
 	int ret;
+	app_status_h app_status;
 
-	appid = malloc(MAX_PACKAGE_STR_SIZE);
-	if (appid == NULL) {
-		_E("out of memory");
-		_request_send_result(req, -1);
-		return -1;
-	}
-	strncpy(appid, (const char *)req->data, MAX_PACKAGE_STR_SIZE-1);
-	ret = _status_app_is_running(appid, _request_get_target_uid(req));
+	snprintf(appid, sizeof(appid), "%s", (const char *)req->data);
+	app_status = _app_status_find_by_appid(appid,
+			_request_get_target_uid(req));
+	ret = _app_status_is_running(app_status);
 	SECURE_LOGD("APP_IS_RUNNING : %s : %d", appid, ret);
 	_request_send_result(req, ret);
-	free(appid);
 
 	return 0;
 }
@@ -986,8 +994,8 @@ static int __dispatch_app_get_appid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, req->len);
-	ret = _status_get_appid_bypid(_request_remove_fd(req), pid);
-	_D("app_get_appid_bypid : %d : %d", pid, ret);
+	ret = _app_status_get_appid_bypid(_request_remove_fd(req), pid);
+	_D("app_status_get_appid_bypid : %d : %d", pid, ret);
 
 	return 0;
 }
@@ -998,7 +1006,7 @@ static int __dispatch_app_get_pkgid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, sizeof(int));
-	ret = _status_get_pkgid_bypid(_request_remove_fd(req), pid);
+	ret = _app_status_get_pkgid_bypid(_request_remove_fd(req), pid);
 	_D("APP_GET_PKGID_BYPID : %d : %d", pid, ret);
 
 	return 0;
@@ -1013,18 +1021,22 @@ static int __dispatch_legacy_command(request_h req)
 static int __dispatch_app_status_update(request_h req)
 {
 	int *status;
-	char *appid;
+	const char *appid;
 	struct appinfo *ai;
+	app_status_h app_status;
+
+	app_status = _app_status_find(req->pid);
+	if (app_status == NULL)
+		return -1;
 
 	status = (int *)req->data;
 	if (*status == STATUS_NORESTART) {
-		appid = _status_app_get_appid_bypid(req->pid);
+		appid = _app_status_get_appid(app_status);
 		ai = _appinfo_find(_request_get_target_uid(req), appid);
 		_appinfo_set_value((struct appinfo *)ai, AIT_STATUS,
 				"norestart");
 	} else if (*status != STATUS_VISIBLE && *status != STATUS_BG) {
-		_status_update_app_info_list(req->pid, *status, FALSE,
-				_request_get_target_uid(req));
+		_app_status_update_status(app_status, *status, false);
 	}
 
 	return 0;
@@ -1033,11 +1045,13 @@ static int __dispatch_app_status_update(request_h req)
 static int __dispatch_app_get_status(request_h req)
 {
 	int pid;
-	int ret;
+	int status;
+	app_status_h app_status;
 
 	memcpy(&pid, req->data, sizeof(int));
-	ret = _status_get_app_info_status(pid, 0);
-	_request_send_result(req, ret);
+	app_status = _app_status_find(pid);
+	status = _app_status_get_status(app_status);
+	_request_send_result(req, status);
 
 	return 0;
 }
@@ -1080,8 +1094,10 @@ static int __dispatch_app_remove_loader(request_h req)
 
 static int __dispatch_agent_dead_signal(request_h req)
 {
-	_D("AMD_AGENT_DEAD_SIGNAL: %d", _request_get_target_uid(req));
-	_status_remove_app_info_list_with_uid(_request_get_target_uid(req));
+	uid_t target_uid = _request_get_target_uid(req);
+
+	_D("AMD_AGENT_DEAD_SIGNAL: %d", target_uid);
+	_app_status_remove_all_app_info_with_uid(target_uid);
 
 	return 0;
 }
@@ -1225,6 +1241,7 @@ static int __dispatch_app_register_pid(request_h req)
 	int ret;
 	uid_t target_uid = _request_get_target_uid(req);
 	int caller_pid = _request_get_pid(req);
+	app_status_h app_status;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1239,14 +1256,16 @@ static int __dispatch_app_register_pid(request_h req)
 		return -1;
 
 	pid = atoi(pid_str);
-	ret = _status_app_is_running(appid, target_uid);
-	if (ret > 0) {
-		if (ret != pid)
-			kill(pid, SIGKILL);
-		_D("status info is already exist: %s", appid);
-		return 0;
+	app_status = _app_status_find_by_appid(appid, target_uid);
+	if (app_status) {
+		ret = _app_status_is_running(app_status);
+		if (ret > 0) {
+			if (ret != pid)
+				kill(pid, SIGKILL);
+			_D("status info is already exist: %s", appid);
+			return 0;
+		}
 	}
-
 	_D("appid: %s, pid: %d", appid, pid);
 
 	ai = _appinfo_find(target_uid, appid);
@@ -1256,7 +1275,7 @@ static int __dispatch_app_register_pid(request_h req)
 				APP_GROUP_LAUNCH_MODE_SINGLE);
 	}
 
-	_status_add_app_info_list(ai, pid, false, target_uid, caller_pid);
+	_app_status_add_app_info(ai, pid, false, target_uid, caller_pid);
 
 	return 0;
 }
@@ -1327,6 +1346,7 @@ static int __dispatch_app_set_process_group(request_h req)
 	const char *child_pkgid;
 	const struct appinfo *ai;
 	const char *str_pid;
+	app_status_h app_status;
 	int ret;
 
 	kb = req->kb;
@@ -1351,7 +1371,8 @@ static int __dispatch_app_set_process_group(request_h req)
 	}
 
 	child_pid = atoi(str_pid);
-	child_appid = _status_app_get_appid_bypid(child_pid);
+	app_status = _app_status_find(child_pid);
+	child_appid = _app_status_get_appid(app_status);
 	if (child_appid == NULL) {
 		_E("No child appid");
 		_request_send_result(req, -1);
@@ -1433,6 +1454,7 @@ static int __dispatch_app_get_status_by_appid(request_h req)
 	uid_t uid;
 	const char *appid;
 	bundle *kb;
+	app_status_h app_status;
 
 	kb = _request_get_bundle(req);
 	if (kb == NULL) {
@@ -1447,13 +1469,19 @@ static int __dispatch_app_get_status_by_appid(request_h req)
 		return -1;
 	}
 
-	pid = _status_app_is_running(appid, uid);
+	app_status = _app_status_find_by_appid(appid, uid);
+	if (app_status == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	pid = _app_status_is_running(app_status);
 	if (pid <= 0) {
 		_request_send_result(req, -1);
 		return -1;
 	}
 
-	status = _status_get_app_info_status(pid, uid);
+	status = _app_status_get_status(app_status);
 	if (status == STATUS_VISIBLE) {
 		if (_get_focused_pid() == pid)
 			status = STATUS_FOCUS;
@@ -1656,7 +1684,8 @@ static int __check_app_is_running(request_h req)
 	bundle *b = req->kb;
 	char *str;
 	int pid;
-	int ret = 0;
+	app_status_h app_status;
+	int status;
 
 	if (b == NULL)
 		return -1;
@@ -1678,22 +1707,27 @@ static int __check_app_is_running(request_h req)
 	case APP_TERM_BY_PID_SYNC:
 		/* get pid */
 		pid = atoi(str);
-		if (_status_app_get_appid_bypid(pid))
-			ret = pid;
+		app_status = _app_status_find(pid);
 		break;
 	default:
-		pid = _status_app_is_running(str, _request_get_target_uid(req));
-		if (pid > 0)
-			ret = pid;
+		app_status = _app_status_find_by_appid(str,
+				_request_get_target_uid(req));
+		break;
 	}
 
-	return ret;
+	if (app_status == NULL)
+		return 0;
+
+	status = _app_status_get_status(app_status);
+	if (status == STATUS_DYING)
+		return 0;
+
+	return _app_status_get_pid(app_status);
 }
 
 static int __check_request(request_h req)
 {
 	int pid;
-	int status;
 	struct pending_item *item;
 
 	if (req->opt & AUL_SOCK_NOREPLY)
@@ -1706,10 +1740,6 @@ static int __check_request(request_h req)
 	if (pid < 0)
 		return -1;
 	else if (pid == 0)
-		return 0;
-
-	status = _status_get_app_info_status(pid, _request_get_target_uid(req));
-	if (status == STATUS_DYING)
 		return 0;
 
 	item = g_hash_table_lookup(pending_table, GINT_TO_POINTER(pid));
@@ -1803,7 +1833,7 @@ bundle *_request_get_bundle(request_h req)
 	return req->kb;
 }
 
-request_h _request_create_local(int cmd, int uid, int pid, bundle *kb)
+request_h _request_create_local(int cmd, uid_t uid, int pid, bundle *kb)
 {
 	request_h req;
 
