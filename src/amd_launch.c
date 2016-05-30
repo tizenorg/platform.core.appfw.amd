@@ -70,6 +70,7 @@
 #define PROC_STATUS_FOCUS 5
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
+#define REGULAR_UID_MIN 5000
 
 struct launch_s {
 	const char *appid;
@@ -1042,12 +1043,12 @@ static void __set_caller_appinfo(const char *caller_appid, int caller_pid,
 	}
 }
 
-static const char *__get_caller_appid(int caller_pid)
+static const char *__get_caller_appid(int caller_pid, uid_t caller_uid)
 {
 	char *caller_appid;
 
 	caller_appid = _status_app_get_appid_bypid(caller_pid);
-	if (caller_appid == NULL)
+	if (caller_appid == NULL && caller_uid >= REGULAR_UID_MIN)
 		caller_appid = _status_app_get_appid_bypid(getpgid(caller_pid));
 
 	return caller_appid;
@@ -1162,7 +1163,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	if (ret < 0)
 		return -1;
 
-	caller_appid = __get_caller_appid(caller_pid);
+	caller_appid = __get_caller_appid(caller_pid, caller_uid);
 	__set_caller_appinfo(caller_appid, caller_pid, caller_uid, kb);
 
 	ret = __compare_signature(handle->ai, cmd, target_uid, appid,

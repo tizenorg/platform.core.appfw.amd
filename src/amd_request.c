@@ -885,7 +885,7 @@ static int __dispatch_app_pause(request_h req)
 		return -1;
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	ret = _status_app_is_running_v2(appid, _request_get_target_uid(req));
+	ret = _status_app_is_running(appid, _request_get_target_uid(req));
 	if (ret > 0)
 		ret = _pause_app(ret, req);
 	else
