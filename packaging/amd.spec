@@ -48,6 +48,12 @@ BuildRequires:  pkgconfig(tizen-extension-client)
 BuildRequires:  pkgconfig(wayland-tbm-client)
 %endif
 
+%if "%{?profile}" == "tv"
+%define tizen_feature_terminate_unmanageable_app 0
+%else
+%define tizen_feature_terminate_unmanageable_app 1
+%endif
+
 %description
 Application management daemon
 
@@ -61,6 +67,10 @@ cp %{SOURCE1001} .
 CFLAGS="%{optflags} -D__emul__"; export CFLAGS
 %endif
 
+%if 0%{?tizen_feature_terminate_unmanageable_app}
+_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP=ON
+%endif
+
 MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
 %cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
 %if %{with wayland}
@@ -69,6 +79,8 @@ MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
 %if %{with x}
 -Dwith_x11=TRUE\
 %endif
+	-D_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP:BOOL=${_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP} \
+	.
 
 %__make %{?_smp_mflags}
 
