@@ -49,6 +49,7 @@
 #include "amd_signal.h"
 #include "amd_wayland.h"
 #include "amd_extractor.h"
+#include "amd_suspend.h"
 
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
@@ -313,6 +314,7 @@ static int __init(void)
 	_splash_screen_init();
 	_input_init();
 	_wayland_init();
+	_suspend_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		_E("__syspopup_dbus_signal_handler_init failed");
@@ -351,6 +353,7 @@ static void __ready(void)
 
 static void __finish(void)
 {
+	_suspend_fini();
 	_wayland_finish();
 	_input_fini();
 	_app_com_broker_fini();
