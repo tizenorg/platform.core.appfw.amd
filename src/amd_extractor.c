@@ -36,7 +36,7 @@
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
 #define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
 #define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
-#define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
+#define _APP_SPECIFIC_PATH tzplatform_getenv(TZ_USER_APP)
 
 static GHashTable *mount_point_hash;
 
@@ -65,7 +65,6 @@ char **_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 	char tep_path[PATH_MAX];
 	char **mnt_path;
 	const char *pkgid;
-	const char *installed_storage;
 	const char *tep_name;
 
 	if (ai == NULL)
@@ -73,10 +72,6 @@ char **_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 
 	pkgid = _appinfo_get_value(ai, AIT_PKGID);
 	if (pkgid == NULL)
-		return NULL;
-
-	installed_storage = _appinfo_get_value(ai, AIT_STORAGE_TYPE);
-	if (installed_storage == NULL)
 		return NULL;
 
 	tep_name = _appinfo_get_value(ai, AIT_TEP);
@@ -89,21 +84,10 @@ char **_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 		return NULL;
 	}
 
-	SECURE_LOGD("storage: %s", installed_storage);
-	if (strncmp(installed_storage, "internal", 8) == 0) {
-		mnt_path[1] = strdup(tep_name);
-		snprintf(tep_path, PATH_MAX, "%s/%s/tep/mount",
-				__get_app_root_path(ai), pkgid);
-		mnt_path[0] = strdup(tep_path);
-	} else if (strncmp(installed_storage, "external", 8) == 0) {
-		snprintf(tep_path, PATH_MAX, "%s/tep/%s",
-				PREFIX_EXTERNAL_STORAGE_PATH, tep_name);
-		mnt_path[1] = strdup(tep_path);
-		/* TODO : keeping tep/tep-access for now for external storage */
-		snprintf(tep_path, PATH_MAX, "%s/tep/tep-access",
-				PREFIX_EXTERNAL_STORAGE_PATH);
-		mnt_path[0] = strdup(tep_path);
-	}
+	mnt_path[1] = strdup(tep_name);
+	snprintf(tep_path, PATH_MAX, "%s/%s/tep/mount",
+			__get_app_root_path(ai), pkgid);
+	mnt_path[0] = strdup(tep_path);
 
 	return mnt_path;
 }
@@ -227,6 +211,8 @@ void _extractor_mount(const struct appinfo *ai, bundle *kb,
 		__free_path(mnt_path, 2);
 		return;
 	}
+
+	_D("mnt_path: %s, %s", mnt_path[0], mnt_path[1]);
 
 	array = bundle_get_str_array(kb, AUL_TEP_PATH, &len);
 	if (array == NULL) {
