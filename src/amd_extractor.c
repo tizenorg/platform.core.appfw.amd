@@ -36,7 +36,13 @@
 #define PATH_APP_ROOT tzplatform_getenv(TZ_USER_APP)
 #define PATH_GLOBAL_APP_RO_ROOT tzplatform_getenv(TZ_SYS_RO_APP)
 #define PATH_GLOBAL_APP_RW_ROOT tzplatform_getenv(TZ_SYS_RW_APP)
-#define PREFIX_EXTERNAL_STORAGE_PATH tzplatform_mkpath(TZ_SYS_STORAGE, "sdcard")
+#define PREFIX_EXTERNAL_STORAGE_PATH(uid) ({ \
+	tzplatform_set_user(uid); \
+	const char *path = tzplatform_mkpath3(TZ_SYS_MEDIA, \
+		"SDCardA1", tzplatform_getenv(TZ_USER_NAME)); \
+	tzplatform_reset_user(); \
+	path; })
+#define _APP_SPECIFIC_PATH tzplatform_getenv(TZ_USER_APP)
 
 static GHashTable *mount_point_hash;
 
@@ -97,11 +103,11 @@ char **_extractor_mountable_get_tep_paths(const struct appinfo *ai)
 		mnt_path[0] = strdup(tep_path);
 	} else if (strncmp(installed_storage, "external", 8) == 0) {
 		snprintf(tep_path, PATH_MAX, "%s/tep/%s",
-				PREFIX_EXTERNAL_STORAGE_PATH, tep_name);
+				PREFIX_EXTERNAL_STORAGE_PATH(getuid()), tep_name);
 		mnt_path[1] = strdup(tep_path);
 		/* TODO : keeping tep/tep-access for now for external storage */
 		snprintf(tep_path, PATH_MAX, "%s/tep/tep-access",
-				PREFIX_EXTERNAL_STORAGE_PATH);
+				PREFIX_EXTERNAL_STORAGE_PATH(getuid()));
 		mnt_path[0] = strdup(tep_path);
 	}
 
