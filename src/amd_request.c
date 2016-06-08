@@ -1030,13 +1030,24 @@ static int __dispatch_app_status_update(request_h req)
 		return -1;
 
 	status = (int *)req->data;
-	if (*status == STATUS_NORESTART) {
+	switch (*status) {
+	case STATUS_CREATED:
+		appid = _app_status_get_appid(app_status);
+		_D("%s(%d) is connected", appid, req->pid);
+		_request_reply_for_pending_request(req->pid);
+		break;
+	case STATUS_NORESTART:
 		appid = _app_status_get_appid(app_status);
 		ai = _appinfo_find(_request_get_target_uid(req), appid);
 		_appinfo_set_value((struct appinfo *)ai, AIT_STATUS,
 				"norestart");
-	} else if (*status != STATUS_VISIBLE && *status != STATUS_BG) {
+		break;
+	case STATUS_VISIBLE:
+	case STATUS_BG:
+		break;
+	default:
 		_app_status_update_status(app_status, *status, false);
+		break;
 	}
 
 	return 0;

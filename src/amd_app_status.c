@@ -988,10 +988,8 @@ static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond,
 			p = event->name;
 			if (p && isdigit(*p)) {
 				pid = atoi(p);
-				if (pid > 1) {
+				if (pid > 1)
 					_D("pid: %d", pid);
-					_request_reply_for_pending_request(pid);
-				}
 			}
 		}
 		i += offsetof(struct inotify_event, name) + event->len;
@@ -1011,7 +1009,7 @@ int _app_status_init(void)
 		return -1;
 	}
 
-	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
+	snprintf(buf, sizeof(buf), "/run/aul/%d", getuid());
 	sock_watch.wd = inotify_add_watch(sock_watch.fd, buf, IN_CREATE);
 	if (sock_watch.wd < 0) {
 		_E("inotify_add_watch() is failed.");
