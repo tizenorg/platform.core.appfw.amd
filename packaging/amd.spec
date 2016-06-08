@@ -11,7 +11,6 @@ Source0:    %{name}-%{version}.tar.gz
 Source100:  ac.conf
 Source101:  ac.service
 Source102:  ac.socket
-Source103:  ac-init.service
 Source1001: %{name}.manifest
 
 Requires(post):   /sbin/ldconfig
@@ -91,14 +90,11 @@ rm -rf %{buildroot}
 mkdir -p %{buildroot}%{_tmpfilesdir}
 mkdir -p %{buildroot}%{_unitdir_user}/default.target.wants
 mkdir -p %{buildroot}%{_unitdir_user}/sockets.target.wants
-mkdir -p %{buildroot}%{_unitdir}/graphical.target.wants
 install -m 0644 %SOURCE100 %{buildroot}%{_tmpfilesdir}/ac.conf
 install -m 0644 %SOURCE101 %{buildroot}%{_unitdir_user}/ac.service
 install -m 0644 %SOURCE102 %{buildroot}%{_unitdir_user}/ac.socket
-install -m 0644 %SOURCE103 %{buildroot}%{_unitdir}/ac-init.service
 ln -sf ../ac.service %{buildroot}%{_unitdir_user}/default.target.wants/ac.service
 ln -sf ../ac.socket %{buildroot}%{_unitdir_user}/sockets.target.wants/ac.socket
-ln -sf ../ac-init.service %{buildroot}%{_unitdir}/graphical.target.wants/ac-init.service
 
 %preun
 if [ $1 == 0 ]; then
@@ -126,7 +122,5 @@ systemctl daemon-reload
 %{_unitdir_user}/default.target.wants/ac.service
 %{_unitdir_user}/ac.socket
 %{_unitdir_user}/sockets.target.wants/ac.socket
-%{_unitdir}/ac-init.service
-%{_unitdir}/graphical.target.wants/ac-init.service
 %{_bindir}/amd
 
