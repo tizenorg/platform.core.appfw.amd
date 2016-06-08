@@ -1028,7 +1028,7 @@ int _status_init(void)
 		return -1;
 	}
 
-	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
+	snprintf(buf, sizeof(buf), "/run/aul/%d", getuid());
 	wd = inotify_add_watch(fd, buf, IN_CREATE);
 	if (wd < 0) {
 		_E("inotify_add_watch() is failed.");
