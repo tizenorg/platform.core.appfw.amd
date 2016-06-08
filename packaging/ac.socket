@@ -1,5 +1,5 @@
 [Socket]
-ListenStream=/run/amd/%U
+ListenStream=/run/aul/daemons/%U/.amd-sock
 DirectoryMode=0777
 
 [Install]

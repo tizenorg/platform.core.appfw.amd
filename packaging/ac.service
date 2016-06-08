@@ -3,11 +3,13 @@
 #
 
 [Unit]
-Description=Start the Access Control server
+Description=Start Application Management Daemon
 
 [Service]
 Type=notify
 EnvironmentFile=-/run/tizen-system-env
+ExecStartPre=-/usr/bin/mkdir -p /run/aul/daemons/%U
+ExecStartPre=-/usr/bin/chmod 0777 /run/aul/daemons/%U
 ExecStart=/usr/bin/amd
 
 OOMScoreAdjust=-100
