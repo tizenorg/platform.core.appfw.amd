@@ -8,6 +8,8 @@ Description=Start the Access Control server
 [Service]
 Type=notify
 EnvironmentFile=-/run/tizen-system-env
+ExecStartPre=-/usr/bin/mkdir -p -m go+x /run/aul/%U
+ExecStartPre=-/usr/bin/chmod go+x /run/aul/%U
 ExecStart=/usr/bin/amd
 
 OOMScoreAdjust=-100
