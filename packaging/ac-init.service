@@ -4,7 +4,7 @@ Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/mkdir -p -Z User::Home -m go+w /run/amd
+ExecStart=/bin/mkdir -p -Z User::Home -m go+w /run/aul
 
 [Install]
 WantedBy=default.target
