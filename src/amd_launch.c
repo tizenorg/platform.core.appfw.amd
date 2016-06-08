@@ -720,6 +720,7 @@ static char *__get_cert_value_from_pkginfo(const char *pkgid, uid_t uid)
 {
 	int ret;
 	const char *cert_value;
+	char *ret_cert;
 	pkgmgrinfo_certinfo_h certinfo;
 
 	ret = pkgmgrinfo_pkginfo_create_certinfo(&certinfo);
@@ -743,9 +744,10 @@ static char *__get_cert_value_from_pkginfo(const char *pkgid, uid_t uid)
 		return NULL;
 	}
 
+	ret_cert = strdup(cert_value);
 	pkgmgrinfo_pkginfo_destroy_certinfo(certinfo);
 
-	return strdup(cert_value);
+	return ret_cert;
 }
 
 static int __get_visibility_from_certsvc(const char *cert_value)
