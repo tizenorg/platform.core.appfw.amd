@@ -114,9 +114,8 @@ static void __set_stime(bundle *kb)
 int _launch_start_app_local_with_bundle(uid_t uid, const char *appid,
 		bundle *kb)
 {
-	bool dummy;
 	request_h req;
-	int r = 0;
+	int r;
 
 	__set_stime(kb);
 	bundle_add(kb, AUL_K_APPID, appid);
@@ -126,7 +125,7 @@ int _launch_start_app_local_with_bundle(uid_t uid, const char *appid,
 		return -1;
 	}
 
-	r = _launch_start_app(appid, req, &dummy);
+	r = _launch_start_app(appid, req);
 	_request_free_local(req);
 
 	return r;
@@ -1273,8 +1272,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	return 0;
 }
 
-static int __do_starting_app(struct launch_s *handle, request_h req,
-		bool *pending)
+static int __do_starting_app(struct launch_s *handle, request_h req)
 {
 	int status = -1;
 	int cmd = _request_get_cmd(req);
@@ -1348,7 +1346,6 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 	}
 
 	handle->pid = ret;
-	*pending = true;
 	_splash_screen_send_pid(splash_image, handle->pid);
 	_suspend_add_proc(handle->pid);
 	aul_send_app_launch_request_signal(handle->pid, handle->appid,
@@ -1357,6 +1354,8 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 		if (handle->bg_allowed)
 			g_idle_add(__check_service_only, GINT_TO_POINTER(ret));
 	}
+
+	_request_send_result(req, handle->pid);
 
 	return ret;
 }
@@ -1399,7 +1398,7 @@ static int __complete_starting_app(struct launch_s *handle, request_h req)
 	return handle->pid;
 }
 
-int _launch_start_app(const char *appid, request_h req, bool *pending)
+int _launch_start_app(const char *appid, request_h req)
 {
 	int ret;
 	struct launch_s launch_data = {0,};
@@ -1417,7 +1416,7 @@ int _launch_start_app(const char *appid, request_h req, bool *pending)
 		return -1;
 	}
 
-	ret = __do_starting_app(&launch_data, req, pending);
+	ret = __do_starting_app(&launch_data, req);
 	if (ret < 0) {
 		_request_send_result(req, ret);
 		traceEnd(TTRACE_TAG_APPLICATION_MANAGER);
