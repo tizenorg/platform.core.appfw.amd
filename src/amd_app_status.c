@@ -22,12 +22,10 @@
 #include <aul.h>
 #include <string.h>
 #include <linux/limits.h>
-#include <gio/gio.h>
 #include <vconf.h>
 #include <time.h>
 #include <aul_sock.h>
 #include <aul_proc.h>
-#include <sys/inotify.h>
 #include <ctype.h>
 
 #include "amd_config.h"
@@ -39,8 +37,6 @@
 #include "amd_app_group.h"
 #include "amd_input.h"
 #include "amd_suspend.h"
-
-#define INOTIFY_BUF (1024 * ((sizeof(struct inotify_event)) + 16))
 
 enum app_type_e {
 	AT_SERVICE_APP,
@@ -74,17 +70,9 @@ struct app_status_s {
 	GList *shared_info_list;
 };
 
-struct socket_watch_s {
-	int fd;
-	int wd;
-	GIOChannel *io;
-	guint wid;
-};
-
 static GSList *app_status_list;
 static GHashTable *pkg_status_table;
 static int limit_bg_uiapps;
-static struct socket_watch_s sock_watch;
 static char *home_appid;
 
 static int __get_managed_uiapp_cnt(void)
@@ -980,42 +968,6 @@ out:
 	return ret;
 }
 
-static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond,
-		gpointer data)
-{
-	char buf[INOTIFY_BUF];
-	ssize_t len = 0;
-	int i = 0;
-	struct inotify_event *event;
-	char *p;
-	int pid;
-	int fd = g_io_channel_unix_get_fd(io);
-
-	len = read(fd, buf, sizeof(buf));
-	if (len < 0) {
-		_E("Failed to read");
-		return TRUE;
-	}
-
-	while (i < len) {
-		pid = -1;
-		event = (struct inotify_event *)&buf[i];
-		if (event->len) {
-			p = event->name;
-			if (p && isdigit(*p)) {
-				pid = atoi(p);
-				if (pid > 1) {
-					_D("pid: %d", pid);
-					_request_reply_for_pending_request(pid);
-				}
-			}
-		}
-		i += offsetof(struct inotify_event, name) + event->len;
-	}
-
-	return TRUE;
-}
-
 static void __home_appid_vconf_cb(keynode_t *key, void *data)
 {
 	char *tmpstr;
@@ -1031,32 +983,7 @@ static void __home_appid_vconf_cb(keynode_t *key, void *data)
 
 int _app_status_init(void)
 {
-	char buf[PATH_MAX];
 	int ret;
-
-	sock_watch.fd = inotify_init();
-	if (sock_watch.fd < 0) {
-		_E("inotify_init() is failed.");
-		return -1;
-	}
-
-	snprintf(buf, sizeof(buf), "/run/user/%d", getuid());
-	sock_watch.wd = inotify_add_watch(sock_watch.fd, buf, IN_CREATE);
-	if (sock_watch.wd < 0) {
-		_E("inotify_add_watch() is failed.");
-		close(sock_watch.fd);
-		return -1;
-	}
-
-	sock_watch.io = g_io_channel_unix_new(sock_watch.fd);
-	if (sock_watch.io == NULL) {
-		inotify_rm_watch(sock_watch.fd, sock_watch.wd);
-		close(sock_watch.fd);
-		return -1;
-	}
-
-	sock_watch.wid = g_io_add_watch(sock_watch.io, G_IO_IN,
-			__socket_monitor_cb, NULL);
 
 	ret = vconf_get_int(VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS,
 			&limit_bg_uiapps);
@@ -1071,8 +998,9 @@ int _app_status_init(void)
 	}
 
 	home_appid = vconf_get_str(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
-	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME,
-			__home_appid_vconf_cb, NULL) != 0) {
+	ret = vconf_notify_key_changed(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME,
+			__home_appid_vconf_cb, NULL);
+	if (ret != 0) {
 		_E("Failed to register callback for %s",
 				VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
 	}
@@ -1095,11 +1023,6 @@ int _app_status_finish(void)
 			__home_appid_vconf_cb);
 	if (ret != 0)
 		_E("Failed to remove a callback");
-
-	g_source_remove(sock_watch.wid);
-	g_io_channel_unref(sock_watch.io);
-	inotify_rm_watch(sock_watch.fd, sock_watch.wd);
-	close(sock_watch.fd);
 
 	free(home_appid);
 
