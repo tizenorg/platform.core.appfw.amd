@@ -783,9 +783,7 @@ static int __dispatch_app_group_activate_below(request_h req)
 static int __dispatch_app_start(request_h req)
 {
 	const char *appid;
-	int ret = -1;
-	bool pending = false;
-	struct pending_item *pending_item;
+	int ret;
 	bundle *kb;
 
 	kb = req->kb;
@@ -795,26 +793,9 @@ static int __dispatch_app_start(request_h req)
 	__set_effective_appid(_request_get_target_uid(req), kb);
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
-	ret = _launch_start_app(appid, req, &pending);
+	ret = _launch_start_app(appid, req);
 	if (ret <= 0)
 		_input_unlock();
-
-	/* add pending list to wait app launched successfully */
-	if (pending) {
-		pending_item = calloc(1, sizeof(struct pending_item));
-		if (pending_item == NULL) {
-			_E("Out of memory");
-			_request_send_result(req, ret);
-			return -1;
-		}
-		pending_item->clifd = _request_remove_fd(req);
-		pending_item->pid = ret;
-		pending_item->cmd = _request_get_cmd(req);
-		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
-				__timeout_pending_item, (gpointer)pending_item);
-		g_hash_table_insert(pending_table, GINT_TO_POINTER(ret),
-				pending_item);
-	}
 
 	if (ret > 0 && __add_rua_info(req, kb, appid) < 0)
 		return -1;
@@ -1030,13 +1011,19 @@ static int __dispatch_app_status_update(request_h req)
 		return -1;
 
 	status = (int *)req->data;
-	if (*status == STATUS_NORESTART) {
+	switch (*status) {
+	case STATUS_NORESTART:
 		appid = _app_status_get_appid(app_status);
 		ai = _appinfo_find(_request_get_target_uid(req), appid);
 		_appinfo_set_value((struct appinfo *)ai, AIT_STATUS,
 				"norestart");
-	} else if (*status != STATUS_VISIBLE && *status != STATUS_BG) {
+		break;
+	case STATUS_VISIBLE:
+	case STATUS_BG:
+		break;
+	default:
 		_app_status_update_status(app_status, *status, false);
+		break;
 	}
 
 	return 0;
@@ -1669,79 +1656,12 @@ static request_h __get_request(int clifd, app_pkt_t *pkt,
 	else
 		req->kb = NULL;
 
+	if (req->opt & AUL_SOCK_NOREPLY) {
+		close(req->clifd);
+		req->clifd = 0;
+	}
+
 	return req;
-}
-
-static int __check_app_is_running(request_h req)
-{
-	bundle *b = req->kb;
-	char *str;
-	int pid;
-	app_status_h app_status;
-	int status;
-
-	if (b == NULL)
-		return -1;
-
-	if (bundle_get_str(b, AUL_K_APPID, &str)) {
-		_E("cannot get target pid");
-		return -1;
-	}
-
-	switch (req->cmd) {
-	case APP_RESUME_BY_PID:
-	case APP_TERM_BY_PID:
-	case APP_TERM_BY_PID_WITHOUT_RESTART:
-	case APP_KILL_BY_PID:
-	case APP_TERM_REQ_BY_PID:
-	case APP_TERM_BY_PID_ASYNC:
-	case APP_TERM_BGAPP_BY_PID:
-	case APP_PAUSE_BY_PID:
-	case APP_TERM_BY_PID_SYNC:
-		/* get pid */
-		pid = atoi(str);
-		app_status = _app_status_find(pid);
-		break;
-	default:
-		app_status = _app_status_find_by_appid(str,
-				_request_get_target_uid(req));
-		break;
-	}
-
-	if (app_status == NULL)
-		return 0;
-
-	status = _app_status_get_status(app_status);
-	if (status == STATUS_DYING)
-		return 0;
-
-	return _app_status_get_pid(app_status);
-}
-
-static int __check_request(request_h req)
-{
-	int pid;
-	struct pending_item *item;
-
-	if (req->opt & AUL_SOCK_NOREPLY)
-		close(_request_remove_fd(req));
-
-	if ((req->opt & AUL_SOCK_QUEUE) == 0)
-		return 0;
-
-	pid = __check_app_is_running(req);
-	if (pid < 0)
-		return -1;
-	else if (pid == 0)
-		return 0;
-
-	item = g_hash_table_lookup(pending_table, GINT_TO_POINTER(pid));
-	if (item == NULL)
-		return 0;
-
-	item->pending_list = g_list_append(item->pending_list, req);
-
-	return 1;
 }
 
 static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
@@ -1757,7 +1677,7 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 	pkt = aul_sock_recv_pkt(fd, &clifd, &cr);
 	if (pkt == NULL) {
 		_E("recv error");
-		return FALSE;
+		return TRUE;
 	}
 
 	req = __get_request(clifd, pkt, cr);
@@ -1779,31 +1699,16 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 		}
 	}
 
-	ret = __check_request(req);
-	if (ret < 0) {
-		_request_send_result(req, ret);
-		__free_request(req);
-		free(pkt);
-		return TRUE;
-	} else if (ret > 0) {
-		free(pkt);
-		return TRUE;
-	}
-
 	if (pkt->cmd >= 0 && pkt->cmd < APP_CMD_MAX &&
 			dispatch_table[pkt->cmd]) {
 		if (dispatch_table[pkt->cmd](req) != 0)
 			_E("callback returns FALSE : %d", pkt->cmd);
 	} else {
 		_E("Invalid packet or not supported command");
-		if (req->clifd)
-			close(req->clifd);
-
-		req->clifd = 0;
 	}
 
 	if (req->clifd)
-		close(req->clifd);
+		close(_request_remove_fd(req));
 
 	__free_request(req);
 	free(pkt);
