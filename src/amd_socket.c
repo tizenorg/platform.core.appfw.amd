@@ -38,8 +38,8 @@ int _create_sock_activation(void)
 
 	fds = sd_listen_fds(0);
 	if (fds == 1) {
-		snprintf(sock_path, sizeof(sock_path), "/run/amd/%d",
-				getuid());
+		snprintf(sock_path, sizeof(sock_path),
+				"/run/aul/%d/.amd-sock", getuid());
 		if (chmod(sock_path, (S_IRWXU | S_IRWXG | S_IRWXO)) < 0)
 			_E("change mode error: %d", errno);
 		return SD_LISTEN_FDS_START;
@@ -78,8 +78,8 @@ int _create_server_sock(void)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	snprintf(addr.sun_path, sizeof(addr.sun_path), "/run/amd/%d",
-				getuid());
+	snprintf(addr.sun_path, sizeof(addr.sun_path),
+			"/run/aul/%d/.amd-sock", getuid());
 	unlink(addr.sun_path);
 
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
@@ -188,7 +188,7 @@ static int __create_launchpad_client_sock(const char *pad_type, uid_t uid)
 	}
 
 	saddr.sun_family = AF_UNIX;
-	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/user/%d/%s",
+	snprintf(saddr.sun_path, sizeof(saddr.sun_path), "/run/aul/%d/%s",
 			uid, pad_type);
  retry_con:
 	ret = __connect_client_sock(fd, (struct sockaddr *)&saddr,
