@@ -4,7 +4,7 @@ Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/mkdir -p /run/amd/
+ExecStart=/bin/mkdir -p --context=User::Home /run/amd/
 ExecStart=/bin/chmod go+w /run/amd/
 
 [Install]
