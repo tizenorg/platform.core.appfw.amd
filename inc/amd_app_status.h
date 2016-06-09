@@ -37,6 +37,7 @@ int _app_status_remove_all_app_info_with_uid(uid_t uid);
 int _app_status_remove(app_status_h app_status);
 int _app_status_update_status(app_status_h app_status, int status, bool force);
 int _app_status_get_process_cnt(const char *appid);
+bool _app_status_is_home_app(app_status_h app_status);
 int _app_status_get_pid(app_status_h app_status);
 int _app_status_is_running(app_status_h app_status);
 int _app_status_get_status(app_status_h app_status);

@@ -85,6 +85,7 @@ static GSList *app_status_list;
 static GHashTable *pkg_status_table;
 static int limit_bg_uiapps;
 static struct socket_watch_s sock_watch;
+static char *home_appid;
 
 static int __get_managed_uiapp_cnt(void)
 {
@@ -591,6 +592,21 @@ int _app_status_get_process_cnt(const char *appid)
 	return cnt;
 }
 
+bool _app_status_is_home_app(app_status_h app_status)
+{
+	const char* appid = _app_status_get_appid(app_status);
+
+	if (!appid)
+		return false;
+	if (!home_appid)
+		return false;
+
+	if (strcmp(home_appid, appid) == 0)
+		return true;
+
+	return false;
+}
+
 int _app_status_get_pid(app_status_h app_status)
 {
 	if (app_status == NULL)
@@ -1000,6 +1016,19 @@ static gboolean __socket_monitor_cb(GIOChannel *io, GIOCondition cond,
 	return TRUE;
 }
 
+static void __home_appid_vconf_cb(keynode_t *key, void *data)
+{
+	char *tmpstr;
+
+	tmpstr = vconf_keynode_get_str(key);
+	if (tmpstr == NULL)
+		return;
+
+	if (home_appid)
+		free(home_appid);
+	home_appid = strdup(tmpstr);
+}
+
 int _app_status_init(void)
 {
 	char buf[PATH_MAX];
@@ -1041,6 +1070,13 @@ int _app_status_init(void)
 				VCONFKEY_SETAPPL_DEVOPTION_BGPROCESS);
 	}
 
+	home_appid = vconf_get_str(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
+	if (vconf_notify_key_changed(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME,
+			__home_appid_vconf_cb, NULL) != 0) {
+		_E("Failed to register callback for %s",
+				VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME);
+	}
+
 	return 0;
 }
 
@@ -1055,10 +1091,17 @@ int _app_status_finish(void)
 	if (ret != 0)
 		_E("Failed to remove a callback");
 
+	ret = vconf_ignore_key_changed(VCONFKEY_SETAPPL_SELECTED_PACKAGE_NAME,
+			__home_appid_vconf_cb);
+	if (ret != 0)
+		_E("Failed to remove a callback");
+
 	g_source_remove(sock_watch.wid);
 	g_io_channel_unref(sock_watch.io);
 	inotify_rm_watch(sock_watch.fd, sock_watch.wd);
 	close(sock_watch.fd);
+
+	free(home_appid);
 
 	return 0;
 }
