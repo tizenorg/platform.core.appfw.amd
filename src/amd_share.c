@@ -128,6 +128,7 @@ static shared_info_h __new_shared_info_handle(const char *appid, uid_t uid,
 
 	ret = security_manager_private_sharing_req_new(&h->shared_info->handle);
 	if (ret != SECURITY_MANAGER_SUCCESS) {
+		free(h->shared_info);
 		free(h);
 		return NULL;
 	}
