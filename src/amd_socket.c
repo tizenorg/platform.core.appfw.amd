@@ -216,6 +216,7 @@ int _send_cmd_to_launchpad(const char *pad_type, uid_t uid, int cmd, bundle *kb)
 	int fd;
 	int len;
 	int res;
+	char err_buf[1024];
 
 	fd = __create_launchpad_client_sock(pad_type, uid);
 	if (fd < 0)
@@ -231,13 +232,16 @@ retry_recv:
 	len = recv(fd, &res, sizeof(int), 0);
 	if (len == -1) {
 		if (errno == EAGAIN) {
-			_E("recv timeout : %s", strerror(errno));
+			_E("recv timeout : %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			res = -EAGAIN;
 		} else if (errno == EINTR) {
-			_D("recv : %s", strerror(errno));
+			_D("recv : %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			goto retry_recv;
 		} else {
-			_E("recv error : %s", strerror(errno));
+			_E("recv error : %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			res = -ECOMM;
 		}
 	}

@@ -80,12 +80,14 @@ static gboolean __restart_timeout_handler(void *data)
 static bool __check_restart(const char *appid)
 {
 	struct restart_info *ri = NULL;
+	char err_buf[1024];
 
 	ri = g_hash_table_lookup(restart_tbl, appid);
 	if (!ri) {
 		ri = malloc(sizeof(struct restart_info));
 		if (!ri) {
-			_E("create restart info: %s", strerror(errno));
+			_E("create restart info: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			return false;
 		}
 		memset(ri, 0, sizeof(struct restart_info));

@@ -795,6 +795,7 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 	struct user_appinfo *info = (struct user_appinfo *)data;
 	char *appid;
 	int ret;
+	char err_buf[1024];
 
 	if (!handle || !info) {
 		_E("null app handle");
@@ -810,7 +811,8 @@ static int __appinfo_insert_handler (const pkgmgrinfo_appinfo_h handle,
 
 	c = calloc(1, sizeof(struct appinfo));
 	if (!c) {
-		_E("create appinfo: %s", strerror(errno));
+		_E("create appinfo: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return -1;
 	}
 
@@ -1163,10 +1165,12 @@ int _appinfo_init(void)
 	char buf[4096] = {0,};
 	char *tmp;
 	struct user_appinfo *appinfo;
+	char err_buf[1024];
 
 	fp = fopen("/proc/cmdline", "r");
 	if (fp == NULL) {
-		_E("appinfo init failed: %s", strerror(errno));
+		_E("appinfo init failed: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return -1;
 	}
 
@@ -1281,9 +1285,12 @@ void _appinfo_reload(void)
 
 const char *_appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 {
+	char err_buf[1024];
+
 	if (!c) {
 		errno = EINVAL;
-		_E("appinfo get value: %s", strerror(errno));
+		_E("appinfo get value: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return NULL;
 	}
 
@@ -1296,9 +1303,12 @@ const char *_appinfo_get_value(const struct appinfo *c, enum appinfo_type type)
 const void *_appinfo_get_ptr_value(const struct appinfo *c,
 		enum appinfo_type type)
 {
+	char err_buf[1024];
+
 	if (!c) {
 		errno = EINVAL;
-		_E("appinfo get value: %s", strerror(errno));
+		_E("appinfo get value: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return NULL;
 	}
 
@@ -1311,9 +1321,12 @@ const void *_appinfo_get_ptr_value(const struct appinfo *c,
 int _appinfo_get_int_value(const struct appinfo *c, enum appinfo_type type,
 		int *val)
 {
+	char err_buf[1024];
+
 	if (!c) {
 		errno = EINVAL;
-		_E("appinfo get value: %s", strerror(errno));
+		_E("appinfo get value: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return -1;
 	}
 
@@ -1400,6 +1413,7 @@ void _appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
 {
 	struct user_appinfo *info;
 	struct _cbinfo cbi;
+	char err_buf[1024];
 
 	info = __find_user_appinfo(uid);
 	if (info == NULL)
@@ -1407,7 +1421,8 @@ void _appinfo_foreach(uid_t uid, appinfo_iter_callback cb, void *user_data)
 
 	if (!cb) {
 		errno = EINVAL;
-		_E("appinfo foreach: %s", strerror(errno));
+		_E("appinfo foreach: %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		return;
 	}
 

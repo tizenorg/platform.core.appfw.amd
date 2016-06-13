@@ -441,14 +441,17 @@ static gboolean __reply_handler(gpointer data)
 	int clifd = r_info->clifd;
 	int pid = r_info->pid;
 	int cmd = r_info->cmd;
+	char err_buf[1024];
 
 	len = recv(fd, &res, sizeof(int), 0);
 	if (len == -1) {
 		if (errno == EAGAIN) {
-			_E("recv timeout : %s", strerror(errno));
+			_E("recv timeout : %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			res = -EAGAIN;
 		} else {
-			_E("recv error : %s", strerror(errno));
+			_E("recv error : %s",
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 			res = -ECOMM;
 		}
 	}
@@ -1284,6 +1287,7 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 	splash_image_h splash_image;
 	app_status_h app_status;
 	int ret;
+	char err_buf[1024];
 
 	pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
 	comp_type = _appinfo_get_value(handle->ai, AIT_COMPTYPE);
@@ -1321,7 +1325,7 @@ static int __do_starting_app(struct launch_s *handle, request_h req,
 		ret = kill(handle->pid, SIGKILL);
 		if (ret == -1) {
 			_W("Failed to send SIGKILL: %d:%s,", handle->pid,
-					strerror(errno));
+				strerror_r(errno, err_buf, sizeof(err_buf)));
 		}
 		_cleanup_dead_info(app_status);
 	}
