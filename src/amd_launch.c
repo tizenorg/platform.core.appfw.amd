@@ -663,7 +663,7 @@ static int __get_pid_for_app_group(const char *appid, uid_t uid, bundle *kb,
 		status = _app_status_get_status(app_status);
 	}
 
-	if (handle->pid == -1 || status == STATUS_DYING) {
+	if (handle->pid <= 0 || status == STATUS_DYING) {
 		ret = _app_group_find_singleton(appid, &found_pid, &found_lpid);
 		if (ret == 0) {
 			handle->pid = found_pid;
