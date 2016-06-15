@@ -1664,10 +1664,15 @@ static request_h __get_request(int clifd, app_pkt_t *pkt,
 	req->opt = pkt->opt;
 	memcpy(req->data, pkt->data, pkt->len + 1);
 
-	if (pkt->opt & AUL_SOCK_BUNDLE)
+	if (pkt->opt & AUL_SOCK_BUNDLE) {
 		req->kb = bundle_decode(pkt->data, pkt->len);
-	else
+		if (req->kb == NULL) {
+			free(req);
+			return NULL;
+		}
+	} else {
 		req->kb = NULL;
+	}
 
 	return req;
 }
