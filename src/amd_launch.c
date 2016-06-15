@@ -919,6 +919,59 @@ static int __send_hint_for_visibility(uid_t uid)
 	return ret;
 }
 
+static void __terminate_unmanageable_app(int pid)
+{
+#ifdef _TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP
+	const char *appid = NULL;
+	int cnt = 0;
+	int *pids = NULL;
+	int i;
+	const char *taskmanage = NULL;
+	const struct appinfo *ai = NULL;
+	int bg_category = 0x00;
+	app_status_h status_h;
+	int st;
+
+	status_h = _app_status_find(pid);
+
+	if (!status_h)
+		return;
+
+	if (!_app_status_is_home_app(status_h))
+		return;
+
+	_app_group_get_leader_pids(&cnt, &pids);
+	if (pids == NULL)
+		return;
+
+	for (i = 0; i < cnt; i++) {
+		status_h = _app_status_find(pids[i]);
+		if (!status_h)
+			continue;
+
+		if (_app_status_is_home_app(status_h))
+			continue;
+
+		appid = _app_status_get_appid(status_h);
+		ai = _appinfo_find(_app_status_get_uid(status_h), appid);
+		taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
+		_appinfo_get_int_value(ai, AIT_BG_CATEGORY, &bg_category);
+
+		if (taskmanage && strcmp("false", taskmanage) == 0
+			&& bg_category == 0) {
+			st = _app_status_get_status(status_h);
+			if (st == STATUS_BG) {
+				_W("terminate %d %s %d", pids[i], appid, st);
+				aul_update_freezer_status(pids[i], "wakeup");
+				_term_sub_app(pids[i]);
+			}
+		}
+	}
+
+	free(pids);
+#endif
+}
+
 static int __app_status_handler(int pid, int status, void *data)
 {
 	const char *appid;
@@ -946,6 +999,7 @@ static int __app_status_handler(int pid, int status, void *data)
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(uid);
+		__terminate_unmanageable_app(pid);
 		break;
 	case PROC_STATUS_BG:
 		_app_status_update_status(app_status, STATUS_BG, false);
