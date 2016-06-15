@@ -366,8 +366,6 @@ int _term_app_v2(int pid, request_h req, bool *pend)
 
 	if (pend)
 		*pend = true;
-	if (ret > 0)
-		close(ret);
 
 	return 0;
 }
