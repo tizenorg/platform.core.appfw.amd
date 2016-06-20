@@ -31,8 +31,8 @@
 #include <aul.h>
 #include <bundle.h>
 #include <bundle_internal.h>
-#include <rua.h>
-#include <rua_stat.h>
+#include <rua_internal.h>
+#include <rua_stat_internal.h>
 #include <tzplatform_config.h>
 #include <systemd/sd-login.h>
 #include <aul_sock.h>
@@ -322,7 +322,7 @@ static gboolean __add_history_handler(gpointer user_data)
 		SECURE_LOGD("add rua history %s %s",
 				rec.pkg_name, rec.app_path);
 
-		ret = rua_add_history(&rec);
+		ret = rua_db_add_history(&rec);
 		if (ret == -1)
 			_D("rua add history error");
 	}
@@ -330,7 +330,7 @@ static gboolean __add_history_handler(gpointer user_data)
 	if (pkt->stat_caller != NULL && pkt->stat_tag != NULL) {
 		SECURE_LOGD("rua_stat_caller: %s, rua_stat_tag: %s",
 				pkt->stat_caller, pkt->stat_tag);
-		rua_stat_update(pkt->stat_caller, pkt->stat_tag);
+		rua_stat_db_update(pkt->stat_caller, pkt->stat_tag);
 	}
 	if (pkt) {
 		if (pkt->data)
@@ -611,12 +611,12 @@ static int __dispatch_remove_history(request_h req)
 
 	/* b can be NULL */
 	b = bundle_decode(req->data, req->len);
-	result = rua_delete_history_from_db(b);
+	result = rua_db_delete_history(b);
 
 	if (b)
 		bundle_free(b);
 
-	_D("rua_delete_history_from_db result : %d", result);
+	_D("rua_db_delete_history result : %d", result);
 	_request_send_result(req, result);
 
 	return 0;

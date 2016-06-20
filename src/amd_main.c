@@ -25,7 +25,7 @@
 #include <stdbool.h>
 
 #include <aul.h>
-#include <rua.h>
+#include <rua_internal.h>
 #include <pkgmgr-info.h>
 #include <glib.h>
 #include <tzplatform_config.h>
@@ -323,7 +323,7 @@ static int __init(void)
 	_request_init();
 	_app_status_init();
 	_app_group_init();
-	r = rua_delete_history_from_db(NULL);
+	r = rua_db_delete_history(NULL);
 	_D("rua_delete_history : %d", r);
 
 	_app_com_broker_init();
