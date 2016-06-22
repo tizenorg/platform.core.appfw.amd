@@ -322,7 +322,7 @@ static gboolean __add_history_handler(gpointer user_data)
 		SECURE_LOGD("add rua history %s %s",
 				rec.pkg_name, rec.app_path);
 
-		ret = rua_db_add_history(&rec);
+		ret = rua_db_add_history(&rec, getuid());
 		if (ret == -1)
 			_D("rua add history error");
 	}
@@ -330,7 +330,7 @@ static gboolean __add_history_handler(gpointer user_data)
 	if (pkt->stat_caller != NULL && pkt->stat_tag != NULL) {
 		SECURE_LOGD("rua_stat_caller: %s, rua_stat_tag: %s",
 				pkt->stat_caller, pkt->stat_tag);
-		rua_stat_db_update(pkt->stat_caller, pkt->stat_tag);
+		rua_stat_db_update(pkt->stat_caller, pkt->stat_tag, getuid());
 	}
 	if (pkt) {
 		if (pkt->data)
@@ -611,7 +611,7 @@ static int __dispatch_remove_history(request_h req)
 
 	/* b can be NULL */
 	b = bundle_decode(req->data, req->len);
-	result = rua_db_delete_history(b);
+	result = rua_db_delete_history(b, getuid());
 
 	if (b)
 		bundle_free(b);
