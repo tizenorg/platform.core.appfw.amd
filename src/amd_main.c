@@ -323,7 +323,7 @@ static int __init(void)
 	_request_init();
 	_app_status_init();
 	_app_group_init();
-	r = rua_db_delete_history(NULL);
+	r = rua_db_delete_history(NULL, getuid());
 	_D("rua_delete_history : %d", r);
 
 	_app_com_broker_init();
