@@ -32,6 +32,8 @@
 #include "amd_config.h"
 #include "amd_util.h"
 
+#define REGULAR_UID_MIN     5000
+
 #define PRIVILEGE_WIDGET_VIEWER \
 	"http://tizen.org/privilege/widget.viewer"
 #define PRIVILEGE_APPMANAGER_LAUNCH \
@@ -46,6 +48,8 @@
 	"http://tizen.org/privilege/call"
 #define PRIVILEGE_SYSTEM_SETTING \
 	"http://tizen.org/privilege/systemsettings.admin"
+#define PRIVILEGE_PLATFORM \
+	"http://tizen.org/privilege/internal/default/platform"
 
 static cynara *r_cynara;
 
@@ -160,6 +164,15 @@ static int __check_privilege(struct caller_info *info, const char *privilege)
 	}
 
 	return ret;
+}
+
+static int __system_user_or_platform_app_checker(struct caller_info *info, request_h req, void *data)
+{
+	uid_t uid = _request_get_uid(req);
+	if (uid < REGULAR_UID_MIN)
+		return 0;
+
+	return __check_privilege(info, PRIVILEGE_PLATFORM);
 }
 
 static int __simple_checker(struct caller_info *info, request_h req, void *data)
@@ -344,6 +357,21 @@ static struct checker_info checker_table[] = {
 		.cmd = APP_TERM_BY_PID_SYNC,
 		.checker = __simple_checker,
 		.data = PRIVILEGE_APPMANAGER_KILL
+	},
+	{
+		.cmd = APP_UPDATE_RUA_STAT,
+		.checker = __system_user_or_platform_app_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_ADD_HISTORY,
+		.checker = __system_user_or_platform_app_checker,
+		.data = NULL
+	},
+	{
+		.cmd = APP_REMOVE_HISTORY,
+		.checker = __system_user_or_platform_app_checker,
+		.data = NULL
 	},
 };
 
