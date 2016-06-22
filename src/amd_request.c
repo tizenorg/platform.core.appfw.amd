@@ -319,9 +319,9 @@ static gboolean __add_history_handler(gpointer user_data)
 		if (pkt->len > 0)
 			rec.arg = pkt->data;
 
-		SECURE_LOGD("add rua history %s %s",
-				rec.pkg_name, rec.app_path);
+		rec.launch_time = (int)time(NULL);
 
+		SECURE_LOGD("add rua history %s %s", rec.pkg_name, rec.app_path);
 		ret = rua_db_add_history(&rec);
 		if (ret == -1)
 			_D("rua add history error");
@@ -602,6 +602,60 @@ err_out:
 	}
 
 	return -1;
+}
+
+static int __dispatch_update_rua_stat(request_h req)
+{
+	int result;
+	bundle *b;
+	char *caller = NULL;
+	char *tag = NULL;
+
+	/* b can be NULL */
+	b = bundle_decode(req->data, req->len);
+
+	bundle_get_str(b, AUL_SVC_K_RUA_STAT_CALLER, &caller);
+	bundle_get_str(b, AUL_SVC_K_RUA_STAT_TAG, &tag);
+
+	result = rua_stat_db_update(caller, tag);
+
+	if (b)
+		bundle_free(b);
+
+	_D("rua_stat_db_update result : %d", result);
+	_request_send_result(req, result);
+
+	return 0;
+}
+
+static int __dispatch_add_history(request_h req)
+{
+	int result;
+	struct rua_rec rec;
+	bundle *b;
+	char *time_str;
+
+	/* b can be NULL */
+	b = bundle_decode(req->data, req->len);
+	memset((void *)&rec, 0, sizeof(rec));
+
+	bundle_get_str(b, AUL_K_RUA_PKGNAME, &rec.pkg_name);
+	bundle_get_str(b, AUL_K_RUA_APPPATH, &rec.app_path);
+	bundle_get_str(b, AUL_K_RUA_ARG, &rec.arg);
+	bundle_get_str(b, AUL_K_RUA_TIME, &time_str);
+	if (time_str != NULL)
+		rec.launch_time = atoi(time_str);
+	else
+		rec.launch_time = (int)time(NULL);
+	result = rua_db_add_history(&rec);
+
+	if (b)
+		bundle_free(b);
+
+	_D("rua_db_add_history result : %d", result);
+	_request_send_result(req, result);
+
+	return 0;
 }
 
 static int __dispatch_remove_history(request_h req)
@@ -1499,7 +1553,8 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_START_RES] = __dispatch_app_start,
 	[APP_CANCEL] = __dispatch_app_result,
 	[APP_KILL_BY_PID] = __dispatch_app_term,
-	[APP_ADD_HISTORY] = NULL,
+	[APP_UPDATE_RUA_STAT] = __dispatch_update_rua_stat,
+	[APP_ADD_HISTORY] = __dispatch_add_history,
 	[APP_REMOVE_HISTORY] = __dispatch_remove_history,
 	[APP_RUNNING_INFO] = __dispatch_app_running_info,
 	[APP_RUNNING_INFO_RESULT] = NULL,
