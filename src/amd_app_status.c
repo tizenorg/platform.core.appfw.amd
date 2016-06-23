@@ -222,6 +222,7 @@ static void __remove_all_shared_info(struct app_status_s *app_status)
 	}
 
 	g_list_free(app_status->shared_info_list);
+	app_status->shared_info_list = NULL;
 }
 
 static void __add_pkg_status(struct app_status_s *app_status)
