@@ -335,6 +335,8 @@ static void __set_fg_flag(int cpid, int flag, bool force)
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		list = (GList *)value;
 		i = g_list_first(list);
+		if (i == NULL)
+			break;
 		ac = (app_group_context_t *)i->data;
 		if (ac && ac->pid == lpid) {
 			__set_flag(i, cpid, flag, force);
@@ -357,6 +359,8 @@ static bool __is_visible(int cpid)
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		list = (GList *)value;
 		i = g_list_first(list);
+		if (i == NULL)
+			return false;
 		ac = (app_group_context_t *)i->data;
 		if (ac && ac->pid == lpid) {
 			while (i != NULL) {
