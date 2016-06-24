@@ -547,7 +547,7 @@ static int __add_splash_screen_list_cb(const char *src, const char *type,
 	splash_image->type = strdup(type);
 	splash_image->indicatordisplay = strdup(indicatordisplay);
 	splash_image->color_depth = strdup(color_depth);
-	if (*operation == '\0')
+	if (operation == NULL || *operation == '\0')
 		key = strdup("launch-effect");
 	else
 		key = strdup(operation);
