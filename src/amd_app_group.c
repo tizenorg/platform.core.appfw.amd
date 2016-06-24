@@ -943,7 +943,6 @@ void _app_group_reroute(int pid)
 				ac1 = (app_group_context_t *)before->data;
 				ac2 = (app_group_context_t *)after->data;
 
-				__detach_window(ac2->wid);
 				__attach_window(ac1->wid, ac2->wid);
 				break;
 			}
@@ -1324,9 +1323,11 @@ void _app_group_lower(int pid, int *exit)
 		if (__can_recycle(pid) && __can_reroute(pid)) {
 			ac = __get_context(pid);
 			if (ac) {
+				_app_group_reroute(pid);
+
 				if (ac->wid != 0)
 					__detach_window(ac->wid);
-				_app_group_reroute(pid);
+
 				ac = __context_dup(ac);
 				__group_remove(pid);
 				if (ac)
