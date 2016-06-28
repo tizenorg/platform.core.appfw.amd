@@ -57,8 +57,8 @@ void _app_status_check_service_only(app_status_h app_status,
 		void (*send_event_to_svc_core)(int, uid_t));
 int _app_status_send_running_appinfo(int fd, int cmd, uid_t uid);
 int _app_status_terminate_apps(const char *appid, uid_t uid);
-int _app_status_get_appid_bypid(int fd, int pid);
-int _app_status_get_pkgid_bypid(int fd, int pid);
+int _app_status_get_appid_bypid(int fd, int pid, uid_t uid);
+int _app_status_get_pkgid_bypid(int fd, int pid, uid_t uid);
 int _app_status_init(void);
 int _app_status_finish(void);
 

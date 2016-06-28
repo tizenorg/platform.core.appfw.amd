@@ -975,7 +975,8 @@ static int __dispatch_app_get_appid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, req->len);
-	ret = _app_status_get_appid_bypid(_request_remove_fd(req), pid);
+	ret = _app_status_get_appid_bypid(_request_remove_fd(req), pid,
+			_request_get_target_uid(req));
 	_D("app_status_get_appid_bypid : %d : %d", pid, ret);
 
 	return 0;
@@ -987,7 +988,8 @@ static int __dispatch_app_get_pkgid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, sizeof(int));
-	ret = _app_status_get_pkgid_bypid(_request_remove_fd(req), pid);
+	ret = _app_status_get_pkgid_bypid(_request_remove_fd(req), pid,
+			_request_get_target_uid(req));
 	_D("APP_GET_PKGID_BYPID : %d : %d", pid, ret);
 
 	return 0;
