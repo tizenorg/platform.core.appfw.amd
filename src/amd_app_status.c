@@ -27,6 +27,7 @@
 #include <aul_sock.h>
 #include <aul_proc.h>
 #include <ctype.h>
+#include <bundle_internal.h>
 
 #include "amd_config.h"
 #include "amd_app_status.h"
@@ -37,6 +38,7 @@
 #include "amd_app_group.h"
 #include "amd_input.h"
 #include "amd_suspend.h"
+#include "amd_socket.h"
 
 enum app_type_e {
 	AT_SERVICE_APP,
@@ -849,120 +851,83 @@ int _app_status_terminate_apps(const char *appid, uid_t uid)
 	return 0;
 }
 
-static int __get_appid_bypid(int pid, char *appid, int len)
+static int __get_pgid(int pid, uid_t uid)
 {
-	char *proc_appid;
+	char buf[MAX_PID_STR_BUFSZ];
+	bundle *kb;
+	int ret;
 
-	proc_appid = aul_proc_get_appid_bypid(pid);
-	if (proc_appid == NULL)
+	kb = bundle_create();
+	if (kb == NULL) {
+		_E("out of memory");
 		return -1;
+	}
 
-	snprintf(appid, len, "%s", proc_appid);
-	free(proc_appid);
+	snprintf(buf, sizeof(buf), "%d", pid);
+	bundle_add(kb, AUL_K_PID, buf);
 
-	return 0;
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, uid,
+			PAD_CMD_GET_PRGRP, kb);
+	bundle_free(kb);
+	SECURE_LOGD("pid: %d, pgid: %d", pid, pgid);
+
+	return ret;
 }
 
-int _app_status_get_appid_bypid(int fd, int pid)
+int _app_status_get_appid_bypid(int fd, int pid, uid_t uid)
 {
 	int cmd = APP_GET_INFO_ERROR;
 	int len = 0;
 	int pgid;
-	char appid[MAX_PACKAGE_STR_SIZE] = {0,};
 	int ret;
+	char appid[MAX_PACKAGE_STR_SIZE] = {0,};
+	app_status_h app_status;
 
-	ret = __get_appid_bypid(pid, appid, sizeof(appid));
-	if (ret == 0) {
+	app_status = _app_status_find(pid);
+	if (app_status == NULL) {
+		pgid = __get_pgid(pid, uid);
+		if (pgid > 0)
+			app_status = _app_status_find(pgid);
+	}
+
+	if (app_status) {
+		snprintf(appid, sizeof(appid), "%s",
+				_app_status_get_appid(app_status));
 		SECURE_LOGD("appid for %d is %s", pid, appid);
 		len = strlen(appid);
 		cmd = APP_GET_INFO_OK;
-		goto out;
 	}
 
-	/* Support app launched by shell script */
-	_D("second chance");
-	pgid = getpgid(pid);
-	if (pgid <= 1) {
-		close(fd);
-		return -1;
-	}
-
-	_D("second change pgid = %d, pid = %d", pgid, pid);
-	ret = __get_appid_bypid(pgid, appid, sizeof(appid));
-	if (ret == 0) {
-		SECURE_LOGD("appid for %d(%d) is %s", pid, pgid, appid);
-		len = strlen(appid);
-		cmd = APP_GET_INFO_OK;
-	}
-
-out:
 	ret = aul_sock_send_raw_with_fd(fd, cmd, (unsigned char *)appid,
 			len, AUL_SOCK_NOREPLY);
 
 	return ret;
 }
 
-static int __get_pkgid_bypid(int pid, char *pkgid, int len)
-{
-	char *appid;
-	uid_t uid;
-	const struct appinfo *ai;
-
-	appid = aul_proc_get_appid_bypid(pid);
-	if (appid == NULL)
-		return -1;
-
-	uid = aul_proc_get_usr_bypid(pid);
-	if (uid == (uid_t)-1) {
-		free(appid);
-		return -1;
-	}
-
-	ai = _appinfo_find(uid, appid);
-	if (ai == NULL) {
-		free(appid);
-		return -1;
-	}
-
-	snprintf(pkgid, len, "%s", _appinfo_get_value(ai, AIT_PKGID));
-	free(appid);
-
-	return 0;
-}
-
-int _app_status_get_pkgid_bypid(int fd, int pid)
+int _app_status_get_pkgid_bypid(int fd, int pid, uid_t uid)
 {
 	int cmd = APP_GET_INFO_ERROR;
 	int len = 0;
 	int pgid;
-	char pkgid[MAX_PACKAGE_STR_SIZE] = {0,};
 	int ret;
+	char pkgid[MAX_PACKAGE_STR_SIZE] = {0,};
+	app_status_h app_status;
 
-	ret = __get_pkgid_bypid(pid, pkgid, sizeof(pkgid));
-	if (ret == 0) {
+	app_status = _app_status_find(pid);
+	if (app_status == NULL) {
+		pgid = __get_pgid(pid, uid);
+		if (pgid > 0)
+			app_status = _app_status_find(pgid);
+	}
+
+	if (app_status) {
+		snprintf(pkgid, sizeof(pkgid), "%s",
+				_app_status_get_pkgid(app_status));
 		SECURE_LOGD("pkgid for %d is %s", pid, pkgid);
 		len = strlen(pkgid);
 		cmd = APP_GET_INFO_OK;
-		goto out;
 	}
 
-	/* Support app launched by shell script */
-	_D("second chance");
-	pgid = getpgid(pid);
-	if (pgid <= 1) {
-		close(fd);
-		return -1;
-	}
-
-	_E("second change pgid = %d, pid = %d", pgid, pid);
-	ret = __get_pkgid_bypid(pgid, pkgid, sizeof(pkgid));
-	if (ret == 0) {
-		SECURE_LOGD("appid for %d(%d) is %s", pid, pgid, pkgid);
-		len = strlen(pkgid);
-		cmd = APP_GET_INFO_OK;
-	}
-
-out:
 	ret = aul_sock_send_raw_with_fd(fd, cmd, (unsigned char *)pkgid,
 			len, AUL_SOCK_NOREPLY);
 
