@@ -4,6 +4,8 @@
 
 [Unit]
 Description=Start Application Management Daemon
+Requires=dbus.service
+After=dbus.service
 
 [Service]
 Type=notify
