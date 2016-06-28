@@ -1661,11 +1661,6 @@ static request_h __get_request(int clifd, app_pkt_t *pkt,
 		req->kb = NULL;
 	}
 
-	if (req->opt & AUL_SOCK_NOREPLY) {
-		close(req->clifd);
-		req->clifd = 0;
-	}
-
 	return req;
 }
 
@@ -1702,6 +1697,11 @@ static gboolean __request_handler(GIOChannel *io, GIOCondition cond,
 			free(pkt);
 			return TRUE;
 		}
+	}
+
+	if (req->opt & AUL_SOCK_NOREPLY) {
+		close(req->clifd);
+		req->clifd = 0;
 	}
 
 	if (pkt->cmd >= 0 && pkt->cmd < APP_CMD_MAX &&
