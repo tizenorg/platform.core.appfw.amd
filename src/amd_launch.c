@@ -369,7 +369,7 @@ int _term_app_v2(int pid, request_h req, bool *pend)
 	return 0;
 }
 
-int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
+static int __fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 {
 	int ret;
 
@@ -381,6 +381,24 @@ int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req)
 
 	if (ret > 0)
 		__set_reply_handler(ret, pid, req, cmd);
+
+	return ret;
+}
+
+static int __fake_launch_app_async(int cmd, int pid, bundle *kb, request_h req)
+{
+	int ret;
+
+	ret = aul_sock_send_bundle(pid, getuid(), cmd, kb, AUL_SOCK_ASYNC);
+	if (ret < 0) {
+		_E("error request fake launch - error code = %d", ret);
+		_request_send_result(req, ret);
+	}
+
+	if (ret > 0) {
+		_send_result_to_client(_request_get_fd(req), pid);
+		__set_reply_handler(ret, pid, req, cmd);
+	}
 
 	return ret;
 }
@@ -584,15 +602,19 @@ static int __nofork_processing(int cmd, int pid, bundle *kb, request_h req)
 			_E("__resume_app failed. error code = %d", ret);
 		_D("resume app done");
 		break;
-
 	case APP_START:
 	case APP_START_RES:
-	case APP_START_ASYNC:
 		_D("fake launch pid : %d\n", pid);
-		ret = _fake_launch_app(cmd, pid, kb, req);
+		ret = __fake_launch_app(cmd, pid, kb, req);
 		if (ret < 0)
 			_E("fake_launch failed. error code = %d", ret);
 		_D("fake launch done");
+		break;
+	case APP_START_ASYNC:
+		ret = __fake_launch_app_async(cmd, pid, kb, req);
+		if (ret < 0)
+			_E("fake_launch_async failed. error code = %d", ret);
+		_D("fake launch async done");
 		break;
 	default:
 		_E("unknown command: %d", cmd);

@@ -31,7 +31,6 @@ int _term_app(int pid, request_h req);
 int _term_req_app(int pid, request_h req);
 int _term_bgapp(int pid, request_h req);
 int _term_sub_app(int pid);
-int _fake_launch_app(int cmd, int pid, bundle *kb, request_h req);
 int _launch_start_app(const char *appid, request_h req);
 int _launch_start_app_local(uid_t uid, const char *appid);
 int _launch_start_app_local_with_bundle(uid_t uid, const char *appid,
