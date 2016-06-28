@@ -48,6 +48,7 @@ int _app_status_add_shared_info(app_status_h app_status, shared_info_t *info);
 int _app_status_clear_shared_info_list(app_status_h stat);
 GList *_app_status_get_shared_info_list(app_status_h stat);
 app_status_h _app_status_find(int pid);
+app_status_h _app_status_find_v2(int pid);
 app_status_h _app_status_find_by_appid(const char *appid, uid_t uid);
 app_status_h _app_status_find_with_org_caller(const char *appid, uid_t uid,
 		int caller_pid);
