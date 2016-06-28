@@ -824,7 +824,7 @@ static int __dispatch_app_result(request_h req)
 	if (pid < 0)
 		return AUL_R_ERROR;
 
-	pgid = getpgid(req->pid);
+	pgid = _app_status_get_pgid(_request_get_pid(req), target_uid);
 	if (pgid > 0) {
 		snprintf(tmp_pid, MAX_PID_STR_BUFSZ, "%d", pgid);
 		bundle_del(kb, AUL_K_CALLEE_PID);
@@ -975,7 +975,8 @@ static int __dispatch_app_get_appid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, req->len);
-	ret = _app_status_get_appid_bypid(_request_remove_fd(req), pid);
+	ret = _app_status_get_appid_bypid(_request_remove_fd(req), pid,
+			_request_get_target_uid(req));
 	_D("app_status_get_appid_bypid : %d : %d", pid, ret);
 
 	return 0;
@@ -987,7 +988,8 @@ static int __dispatch_app_get_pkgid_by_pid(request_h req)
 	int ret;
 
 	memcpy(&pid, req->data, sizeof(int));
-	ret = _app_status_get_pkgid_bypid(_request_remove_fd(req), pid);
+	ret = _app_status_get_pkgid_bypid(_request_remove_fd(req), pid,
+			_request_get_target_uid(req));
 	_D("APP_GET_PKGID_BYPID : %d : %d", pid, ret);
 
 	return 0;
@@ -1048,15 +1050,18 @@ static int __dispatch_app_add_loader(request_h req)
 	bundle *kb;
 	int ret;
 	char tmpbuf[MAX_PID_STR_BUFSZ];
+	int pgid;
+	uid_t target_uid = _request_get_target_uid(req);
 
 	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "%d", getpgid(req->pid));
+	pgid = _app_status_get_pgid(_request_get_pid(req), target_uid);
+	snprintf(tmpbuf, sizeof(tmpbuf), "%d", pgid);
 	bundle_add(kb, AUL_K_CALLER_PID, tmpbuf);
-	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK,
-			_request_get_target_uid(req), PAD_CMD_ADD_LOADER, kb);
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK, target_uid,
+			PAD_CMD_ADD_LOADER, kb);
 	_request_send_result(req, ret);
 
 	return ret;
@@ -1107,6 +1112,7 @@ static int __dispatch_app_com_create(request_h req)
 	const char *privilege;
 	const char *endpoint;
 	unsigned int *prop;
+	int pgid;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1135,7 +1141,9 @@ static int __dispatch_app_com_create(request_h req)
 	ret = _app_com_add_endpoint(endpoint, propagate, privilege);
 	if (ret == AUL_APP_COM_R_ERROR_OK ||
 			ret == AUL_APP_COM_R_ERROR_ENDPOINT_ALREADY_EXISTS) {
-		ret = _app_com_join(endpoint, getpgid(req->pid), NULL);
+		pgid = _app_status_get_pgid(_request_get_pid(req),
+				_request_get_target_uid(req));
+		ret = _app_com_join(endpoint, pgid, NULL);
 		if (ret == AUL_APP_COM_R_ERROR_ILLEGAL_ACCESS) {
 			_E("illegal access: remove endpoint");
 			_app_com_remove_endpoint(endpoint);
@@ -1152,6 +1160,7 @@ static int __dispatch_app_com_join(request_h req)
 	int ret;
 	const char *endpoint;
 	const char *filter;
+	int pgid;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1166,7 +1175,9 @@ static int __dispatch_app_com_join(request_h req)
 
 	filter = bundle_get_val(kb, AUL_K_COM_FILTER);
 
-	ret = _app_com_join(endpoint, getpgid(req->pid), filter);
+	pgid = _app_status_get_pgid(_request_get_pid(req),
+			_request_get_target_uid(req));
+	ret = _app_com_join(endpoint, pgid, filter);
 
 	_request_send_result(req, ret);
 
@@ -1178,6 +1189,7 @@ static int __dispatch_app_com_send(request_h req)
 	bundle *kb;
 	int ret;
 	const char *endpoint;
+	int pgid;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1189,7 +1201,9 @@ static int __dispatch_app_com_send(request_h req)
 		return 0;
 	}
 
-	ret = _app_com_send(endpoint, getpgid(req->pid), kb);
+	pgid = _app_status_get_pgid(_request_get_pid(req),
+			_request_get_target_uid(req));
+	ret = _app_com_send(endpoint, pgid, kb);
 	_request_send_result(req, ret);
 
 	return 0;
@@ -1200,6 +1214,7 @@ static int __dispatch_app_com_leave(request_h req)
 	bundle *kb;
 	int ret;
 	const char *endpoint;
+	int pgid;
 
 	kb = req->kb;
 	if (kb == NULL)
@@ -1211,7 +1226,9 @@ static int __dispatch_app_com_leave(request_h req)
 		return 0;
 	}
 
-	ret = _app_com_leave(endpoint, getpgid(req->pid));
+	pgid = _app_status_get_pgid(_request_get_pid(req),
+			_request_get_target_uid(req));
+	ret = _app_com_leave(endpoint, pgid);
 	_request_send_result(req, ret);
 
 	return 0;
@@ -1749,7 +1766,7 @@ request_h _request_create_local(int cmd, uid_t uid, int pid, bundle *kb)
 	req->clifd = -1;
 	req->pid = pid;
 	req->uid = uid;
-	req->gid = getpgid(uid);
+	req->gid = getgid();
 	req->t_uid = getuid();
 	req->cmd = cmd;
 	req->len = 0;
