@@ -166,15 +166,6 @@ static int __check_privilege(struct caller_info *info, const char *privilege)
 	return ret;
 }
 
-static int __system_user_or_platform_app_checker(struct caller_info *info, request_h req, void *data)
-{
-	uid_t uid = _request_get_uid(req);
-	if (uid < REGULAR_UID_MIN)
-		return 0;
-
-	return __check_privilege(info, PRIVILEGE_PLATFORM);
-}
-
 static int __simple_checker(struct caller_info *info, request_h req, void *data)
 {
 	return __check_privilege(info, (const char *)data);
@@ -360,18 +351,18 @@ static struct checker_info checker_table[] = {
 	},
 	{
 		.cmd = APP_UPDATE_RUA_STAT,
-		.checker = __system_user_or_platform_app_checker,
-		.data = NULL
+		.checker = __simple_checker,
+		.data = PRIVILEGE_PLATFORM
 	},
 	{
 		.cmd = APP_ADD_HISTORY,
-		.checker = __system_user_or_platform_app_checker,
-		.data = NULL
+		.checker = __simple_checker,
+		.data = PRIVILEGE_PLATFORM
 	},
 	{
 		.cmd = APP_REMOVE_HISTORY,
-		.checker = __system_user_or_platform_app_checker,
-		.data = NULL
+		.checker = __simple_checker,
+		.data = PRIVILEGE_PLATFORM
 	},
 };
 
