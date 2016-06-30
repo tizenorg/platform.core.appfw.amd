@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <glib.h>
 #include <aul_cmd.h>
 #include <aul_svc.h>
 #include <aul_svc_priv_key.h>
@@ -39,9 +40,18 @@
 
 #define K_FAKE_EFFECT "__FAKE_EFFECT__"
 #define APP_CONTROL_OPERATION_MAIN "http://tizen.org/appcontrol/operation/main"
+#define SPLASH_SCREEN_INFO_PATH "/usr/share/aul"
+#define TAG_SPLASH_IMAGE "[Splash image]"
+#define TAG_NAME "Name"
+#define TAG_FILE "File"
+#define TAG_TYPE "Type"
+#define TAG_ORIENTATION "Orientation"
+#define TAG_INDICATOR_DISPLAY "Indicator-display"
+#define TAG_COLOR_DEPTH "Color-depth"
 
 struct splash_image_s {
 	struct tizen_launch_image *image;
+	char *appid;
 	char *src;
 	int type;
 	int rotation;
@@ -56,11 +66,21 @@ struct rotation_s {
 	int auto_rotate;
 };
 
+struct image_info_s {
+	char *name;
+	char *file;
+	char *type;
+	char *orientation;
+	char *indicator_display;
+	char *color_depth;
+};
+
 static struct wl_display *display;
 static struct tizen_launchscreen *tz_launchscreen;
 static int splash_screen_initialized;
 static struct rotation_s rotation;
 static int rotation_initialized;
+static GList *default_image_list;
 
 static int __init_splash_screen(void);
 static int __init_rotation(void);
@@ -70,6 +90,8 @@ void _splash_screen_destroy_image(splash_image_h si)
 	if (si == NULL)
 		return;
 
+	if (si->appid)
+		free(si->appid);
 	if (si->src)
 		free(si->src);
 	if (si->tid > 0)
@@ -154,11 +176,46 @@ static struct appinfo_splash_image *__get_splash_image_info(
 				tbl, operation);
 }
 
+static struct image_info_s *__get_default_image_info(bundle *kb)
+{
+	struct image_info_s *info = NULL;
+	const char *orientation = "portrait";
+	const char *str;
+	GList *list;
+
+	if (default_image_list == NULL)
+		return NULL;
+
+	if ((rotation.angle == 90 || rotation.angle == 270) &&
+			rotation.auto_rotate == true)
+		orientation = "landscape";
+
+	str = bundle_get_val(kb, AUL_SVC_K_SPLASH_SCREEN);
+	if (str == NULL)
+		str = "default";
+
+	list = default_image_list;
+	while (list) {
+		info = (struct image_info_s *)list->data;
+		if (info && strcmp(str, info->name) == 0) {
+			if (!strcasecmp(info->orientation, orientation))
+				return info;
+		}
+
+		list = g_list_next(list);
+	}
+
+	return NULL;
+}
+
 splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 		bundle *kb, int cmd)
 {
 	struct splash_image_s *si;
 	struct appinfo_splash_image *ai_si;
+	struct image_info_s *info;
+	const char *appid;
+	const char *src;
 	int file_type = 0;
 	int indicator = 1;
 	int color_depth = 24; /* default */
@@ -178,16 +235,31 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	_D("angle: %d", rotation.angle);
 
 	ai_si = __get_splash_image_info(ai, kb, cmd);
-	if (ai_si == NULL)
-		return NULL;
-	if (access(ai_si->src, F_OK) != 0)
-		return NULL;
-	if (strcasecmp(ai_si->type, "edj") == 0)
-		file_type = 1;
-	if (strcmp(ai_si->indicatordisplay, "false") == 0)
-		indicator = 0;
-	if (strcmp(ai_si->color_depth, "32") == 0)
-		color_depth = 32;
+	if (ai_si) {
+		src = ai_si->src;
+		if (access(src, F_OK) != 0)
+			return NULL;
+		if (strcasecmp(ai_si->type, "edj") == 0)
+			file_type = 1;
+		if (strcmp(ai_si->indicatordisplay, "false") == 0)
+			indicator = 0;
+		if (strcmp(ai_si->color_depth, "32") == 0)
+			color_depth = 32;
+	} else {
+		info = __get_default_image_info(kb);
+		if (info == NULL)
+			return NULL;
+
+		src = info->file;
+		if (access(src, F_OK != 0))
+			return NULL;
+		if (strcasecmp(info->type, "edj") == 0)
+			file_type = 1;
+		if (strcmp(info->indicator_display, "false") == 0)
+			indicator = 0;
+		if (strcmp(info->color_depth, "32") == 0)
+			color_depth = 32;
+	}
 
 	si = (struct splash_image_s *)calloc(1, sizeof(struct splash_image_s));
 	if (si == NULL) {
@@ -203,7 +275,15 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 	}
 	wl_display_flush(display);
 
-	si->src = strdup(ai_si->src);
+	appid = _appinfo_get_value(ai, AIT_NAME);
+	si->appid = strdup(appid);
+	if (si->appid == NULL) {
+		_E("out of memory");
+		_splash_screen_destroy_image(si);
+		return NULL;
+	}
+
+	si->src = strdup(src);
 	if (si->src == NULL) {
 		_E("out of memory");
 		_splash_screen_destroy_image(si);
@@ -227,6 +307,7 @@ void _splash_screen_send_image(splash_image_h si)
 		return;
 
 	wl_array_init(&options);
+	/* TODO: Set appid */
 	tizen_launch_image_launch(si->image, si->src, si->type, si->color_depth,
 			si->rotation, si->indicator, &options);
 	wl_display_flush(display);
@@ -378,10 +459,162 @@ static int __init_rotation(void)
 	return 0;
 }
 
+static void __destroy_image_info(struct image_info_s *info)
+{
+	if (info == NULL)
+		return;
+
+	if (info->color_depth)
+		free(info->color_depth);
+	if (info->indicator_display)
+		free(info->indicator_display);
+	if (info->type)
+		free(info->type);
+	if (info->orientation)
+		free(info->orientation);
+	if (info->file)
+		free(info->file);
+	if (info->name)
+		free(info->name);
+	free(info);
+}
+
+struct image_info_s *__create_image_info(void)
+{
+	struct image_info_s *info;
+
+	info = (struct image_info_s *)calloc(1, sizeof(struct image_info_s));
+	if (info == NULL) {
+		_E("out of memory");
+		return NULL;
+	}
+
+	return info;
+}
+
+static int __validate_image_info(struct image_info_s *info)
+{
+	if (info == NULL)
+		return -1;
+
+	if (info->name == NULL ||
+			info->file == NULL ||
+			info->orientation == NULL)
+		return -1;
+
+	if (info->type == NULL) {
+		if (strstr(info->file, "edj"))
+			info->type = strdup("edj");
+		else
+			info->type = strdup("img");
+	}
+
+	if (info->indicator_display == NULL)
+		info->indicator_display = strdup("true");
+
+	if (info->color_depth == NULL)
+		info->color_depth = strdup("24");
+
+	return 0;
+}
+
+static void __parse_file(const char *file)
+{
+	FILE *fp;
+	char buf[LINE_MAX];
+	char tok1[LINE_MAX];
+	char tok2[LINE_MAX];
+	struct image_info_s *info = NULL;
+
+	fp = fopen(file, "rt");
+	if (fp == NULL)
+		return;
+
+	while (fgets(buf, sizeof(buf), fp) != NULL) {
+		tok1[0] = '\0';
+		tok2[0] = '\0';
+		sscanf(buf, "%s %s", tok1, tok2);
+
+		if (strncasecmp(TAG_SPLASH_IMAGE, tok1,
+					strlen(TAG_SPLASH_IMAGE)) == 0) {
+			if (info) {
+				if (__validate_image_info(info) < 0) {
+					__destroy_image_info(info);
+				} else {
+					default_image_list = g_list_append(
+							default_image_list,
+							info);
+				}
+			}
+			info = __create_image_info();
+			continue;
+		}
+
+		if (tok1[0] == '\0' || tok2[0] == '\0' || info == NULL)
+			continue;
+
+		if (strncasecmp(TAG_NAME, tok1, strlen(TAG_NAME)) == 0)
+			info->name = strdup(tok2);
+		else if (strncasecmp(TAG_FILE, tok1, strlen(TAG_FILE)) == 0)
+			info->file = strdup(tok2);
+		else if (strncasecmp(TAG_TYPE, tok1, strlen(TAG_TYPE)) == 0)
+			info->type = strdup(tok2);
+		else if (strncasecmp(TAG_ORIENTATION, tok1,
+					strlen(TAG_ORIENTATION)) == 0)
+			info->orientation = strdup(tok2);
+		else if (strncasecmp(TAG_INDICATOR_DISPLAY, tok1,
+					strlen(TAG_INDICATOR_DISPLAY)) == 0)
+			info->indicator_display = strdup(tok2);
+		else if (strncasecmp(TAG_COLOR_DEPTH, tok1,
+					strlen(TAG_COLOR_DEPTH)) == 0)
+			info->color_depth = strdup(tok2);
+	}
+
+	if (info) {
+		if (__validate_image_info(info) < 0) {
+			__destroy_image_info(info);
+		} else {
+			default_image_list = g_list_append(default_image_list,
+					info);
+		}
+	}
+
+	fclose(fp);
+}
+
+static int __load_splash_screen_info(const char *path)
+{
+	DIR *dp;
+	struct dirent entry;
+	struct dirent *result = NULL;
+	char *ext;
+	char buf[PATH_MAX];
+
+	dp = opendir(path);
+	if (dp == NULL)
+		return -1;
+
+	while (readdir_r(dp, &entry, &result) == 0 && result != NULL) {
+		if (entry.d_name[0] == '.')
+			continue;
+
+		ext = strrchr(entry.d_name, '.');
+		if (ext && !strcmp(ext, ".conf")) {
+			snprintf(buf, sizeof(buf), "%s/%s", path, entry.d_name);
+			__parse_file(buf);
+		}
+	}
+
+	closedir(dp);
+
+	return 0;
+}
+
 int _splash_screen_init(void)
 {
 	_D("init splash screen");
 
+	__load_splash_screen_info(SPLASH_SCREEN_INFO_PATH);
 	_wayland_add_registry_listener(&registry_listener, NULL);
 
 	if (__init_rotation() < 0)
