@@ -297,31 +297,27 @@ static void __set_effective_appid(uid_t uid, bundle *kb)
 
 static gboolean __add_history_handler(gpointer user_data)
 {
-	struct rua_rec rec;
+	struct rua_rec rec = { 0, };
 	int ret;
-	char *app_path = NULL;
 	struct appinfo *ai;
-
 	rua_stat_pkt_t *pkt = (rua_stat_pkt_t *)user_data;
 
 	if (!pkt)
 		return FALSE;
 
 	if (!pkt->is_group_app) {
-		ai = (struct appinfo *)_appinfo_find(pkt->uid, pkt->appid);
-		app_path = (char *)_appinfo_get_value(ai, AIT_EXEC);
-
-		memset((void *)&rec, 0, sizeof(rec));
+		ai = _appinfo_find(pkt->uid, pkt->appid);
 
 		rec.pkg_name = pkt->appid;
-		rec.app_path = app_path;
+		rec.app_path = (char *)_appinfo_get_value(ai, AIT_EXEC);
 
 		if (pkt->len > 0)
 			rec.arg = pkt->data;
 
-		rec.launch_time = (int)time(NULL);
+		rec.launch_time = time(NULL);
 
-		SECURE_LOGD("add rua history %s %s", rec.pkg_name, rec.app_path);
+		SECURE_LOGD("add rua history %s %s",
+				rec.pkg_name, rec.app_path);
 		ret = rua_db_add_history(&rec);
 		if (ret == -1)
 			_D("rua add history error");
