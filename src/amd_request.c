@@ -197,7 +197,7 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 
 	app_status = _app_status_find(pid);
 	if (app_status == NULL) {
-		_E("pid %s is not an application", pid);
+		_E("pid %d is not an application", pid);
 		_request_send_result(req, -1);
 		return -1;
 	}
