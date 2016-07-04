@@ -173,7 +173,7 @@ splash_image_h _splash_screen_create_image(const struct appinfo *ai,
 
 	if (!rotation_initialized) {
 		if (__init_rotation() < 0)
-			_E("Failed to initialize rotation");
+			_W("Failed to initialize rotation");
 	}
 	_D("angle: %d", rotation.angle);
 
@@ -336,7 +336,7 @@ static int __init_rotation(void)
 	rotation.angle = 0;
 	rotation.handle = sensord_connect(sensor);
 	if (rotation.handle < 0) {
-		_E("Failed to connect sensord");
+		_W("Failed to connect sensord");
 		return -1;
 	}
 
@@ -347,14 +347,14 @@ static int __init_rotation(void)
 			__rotation_changed_cb,
 			NULL);
 	if (!r) {
-		_E("Failed to register event");
+		_W("Failed to register event");
 		sensord_disconnect(rotation.handle);
 		return -1;
 	}
 
 	r = sensord_start(rotation.handle, 0);
 	if (!r) {
-		_E("Failed to start sensord");
+		_W("Failed to start sensord");
 		sensord_unregister_event(rotation.handle,
 				AUTO_ROTATION_CHANGE_STATE_EVENT);
 		sensord_disconnect(rotation.handle);
@@ -369,7 +369,7 @@ static int __init_rotation(void)
 	ret = vconf_notify_key_changed(VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL,
 			__auto_rotate_screen_cb, NULL);
 	if (ret != 0) {
-		_E("Failed to register callback for %s",
+		_W("Failed to register callback for %s",
 				VCONFKEY_SETAPPL_AUTO_ROTATE_SCREEN_BOOL);
 	}
 
@@ -385,7 +385,7 @@ int _splash_screen_init(void)
 	_wayland_add_registry_listener(&registry_listener, NULL);
 
 	if (__init_rotation() < 0)
-		_E("Failed to initialize rotation");
+		_W("Failed to initialize rotation");
 
 	return 0;
 }

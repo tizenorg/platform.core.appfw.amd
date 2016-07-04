@@ -1325,7 +1325,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 		handle->share_info = _temporary_permission_create(caller_pid,
 				appid, kb, target_uid);
 		if (handle->share_info == NULL)
-			_E("No sharable path: %d %s", caller_pid, appid);
+			_W("No sharable path: %d %s", caller_pid, appid);
 	}
 
 	_extractor_mount(handle->ai, kb, _extractor_mountable_get_tep_paths);
