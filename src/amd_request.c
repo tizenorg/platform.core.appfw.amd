@@ -51,6 +51,7 @@
 #include "amd_app_com.h"
 #include "amd_share.h"
 #include "amd_input.h"
+#include "amd_widget.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -1509,6 +1510,152 @@ static int __dispatch_app_get_status_by_appid(request_h req)
 	return 0;
 }
 
+static int __validate_widget_owner(request_h req)
+{
+	app_status_h status;
+	const char *appid;
+	char *widget_id = NULL;
+	const char *appid_part = NULL;
+	bundle *kb = req->kb;
+
+	status = _app_status_find(req->pid);
+	if (!status)
+		return -1;
+
+	appid = _app_status_get_appid(status);
+	bundle_get_str(kb, AUL_K_WIDGET_ID, &widget_id);
+	if (!widget_id || !appid)
+		return -1;
+
+	appid_part = g_strstr_len(widget_id, strlen(widget_id), "@");
+	if (appid_part)
+		appid_part = appid_part + 1;
+	else
+		appid_part = widget_id;
+
+	return strcmp(appid_part, appid);
+}
+
+static int __dispatch_widget_add_del(request_h req)
+{
+	bundle *kb = req->kb;
+	char *widget_id = NULL;
+	char *instance_id = NULL;
+	int ret;
+
+	if (__validate_widget_owner(req) < 0) {
+		_request_send_result(req, -EINVAL);
+		return -1;
+	}
+
+	bundle_get_str(kb, AUL_K_WIDGET_ID, &widget_id);
+	bundle_get_str(kb, AUL_K_WIDGET_INSTANCE_ID, &instance_id);
+	if (!widget_id || !instance_id) {
+		_request_send_result(req, -EINVAL);
+		return -1;
+	}
+
+	if (req->cmd == WIDGET_ADD)
+		ret = _widget_add(widget_id, instance_id, req->pid, req->uid);
+	else
+		ret = _widget_del(widget_id, instance_id);
+
+	_request_send_result(req, ret);
+
+	return ret;
+}
+
+static int __validate_widget_caller(request_h req)
+{
+	bundle *kb = req->kb;
+	char *appid = NULL;
+	struct appinfo *target;
+	const char *target_pkgid;
+	app_status_h caller_status;
+	const char *caller_pkgid;
+
+	bundle_get_str(kb, AUL_K_APPID, &appid);
+	if (!appid) {
+		_E("no appid provided");
+		return -1;
+	}
+
+	target = _appinfo_find(req->uid, appid);
+	if (!target) {
+		_E("can not find appinfo of %s", appid);
+		return -1;
+	}
+
+	target_pkgid = _appinfo_get_value(target, AIT_PKGID);
+	if (!target_pkgid) {
+		_E("can not get pkgid %s", target_pkgid);
+		return -1;
+	}
+
+	caller_status = _app_status_find(req->pid);
+	if (!caller_status)
+		return 0; /* not app? */
+
+	caller_pkgid = _app_status_get_pkgid(caller_status);
+	if (!caller_pkgid) {
+		_E("can not get caller pkgid");
+		return -1;
+	}
+
+	_D("compare pkgid %s:%s", caller_pkgid, target_pkgid);
+	if (strcmp(caller_pkgid, target_pkgid) == 0)
+		return 0;
+
+	return -1;
+}
+
+static int __dispatch_widget_list(request_h req)
+{
+	bundle *kb = req->kb;
+	char *widget_id = NULL;
+	int ret;
+
+	if (__validate_widget_caller(req) < 0) {
+		_request_send_result(req, -EILLEGALACCESS);
+		return -1;
+	}
+
+	bundle_get_str(kb, AUL_K_WIDGET_ID, &widget_id);
+	if (!widget_id) {
+		_request_send_result(req, -EINVAL);
+		return -1;
+	}
+
+	ret = _widget_list(widget_id, req);
+
+	return ret;
+}
+
+static int __dispatch_widget_update(request_h req)
+{
+	bundle *kb = req->kb;
+	char *widget_id = NULL;
+	int ret;
+
+	if (__validate_widget_caller(req) < 0) {
+		_request_send_result(req, -EILLEGALACCESS);
+		return -1;
+	}
+
+	bundle_get_str(kb, AUL_K_WIDGET_ID, &widget_id);
+	if (!widget_id) {
+		_request_send_result(req, -EINVAL);
+		return -1;
+	}
+
+	/* update will pass bundle by app_control */
+	req->cmd = APP_START;
+
+	ret = _widget_update(widget_id, req);
+
+	return ret;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1562,6 +1709,10 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_JOIN] = __dispatch_app_com_join,
 	[APP_COM_SEND] = __dispatch_app_com_send,
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
+	[WIDGET_ADD] = __dispatch_widget_add_del,
+	[WIDGET_DEL] = __dispatch_widget_add_del,
+	[WIDGET_LIST] = __dispatch_widget_list,
+	[WIDGET_UPDATE] = __dispatch_widget_update,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] =
