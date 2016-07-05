@@ -455,7 +455,6 @@ static gboolean __reply_handler(gpointer data)
 	int res = 0;
 	int clifd = r_info->clifd;
 	int pid = r_info->pid;
-	int cmd = r_info->cmd;
 	char err_buf[1024];
 
 	len = recv(fd, &res, sizeof(int), 0);
@@ -472,22 +471,8 @@ static gboolean __reply_handler(gpointer data)
 	}
 	close(fd);
 
-	switch (cmd) {
-	case APP_TERM_BY_PID:
-	case APP_TERM_BGAPP_BY_PID:
-		if (res >= 0)
-			res = 0;
-		_send_result_to_client(clifd, res);
-		break;
-	case APP_START_ASYNC:
-	case APP_PAUSE_BY_PID:
-		break;
-	default:
-		if (res >= 0)
-			res = pid;
-		_send_result_to_client(clifd, res);
-		break;
-	}
+	if (res >= 0)
+		_send_result_to_client(clifd, pid);
 
 	_D("listen fd : %d , send fd : %d, pid : %d", fd, clifd, pid);
 
