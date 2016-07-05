@@ -60,6 +60,7 @@ ADD_EXECUTABLE(amd
 	src/amd_signal.c
 	src/amd_wayland.c
 	src/amd_extractor.c
+	src/amd_widget.c
 	)
 SET_TARGET_PROPERTIES(amd PROPERTIES COMPILE_FLAGS "${EXTRA_CFLAGS} -fPIE")
 TARGET_LINK_LIBRARIES(amd ${pkgs_LDFLAGS} "-pie")
