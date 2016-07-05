@@ -51,6 +51,7 @@
 #include "amd_app_com.h"
 #include "amd_share.h"
 #include "amd_input.h"
+#include "amd_app_data.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
 #define REGULAR_UID_MIN     5000
@@ -1253,6 +1254,97 @@ static int __dispatch_app_com_leave(request_h req)
 	return 0;
 }
 
+static int __process_app_data_simple(request_h req,
+		int (*store_fn)(const char *key, request_h req))
+{
+	int ret;
+	char *key = NULL;
+
+	key = malloc(req->len + 1); /* add '\0' */
+	if (key == NULL) {
+		_E("out of memory");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	strncpy(key, (const char *)req->data, req->len);
+	key[req->len] = '\0';
+
+	ret = store_fn(key, req);
+	_D("app data %s (%d:%d)", key, req->uid, req->pid);
+	_request_send_result(req, ret);
+	free(key);
+
+	return 0;
+}
+
+static int __process_app_data_bundle(request_h req,
+		int (*store_fn)(const char *key, bundle *kb, request_h req))
+{
+	int ret;
+	char *key = NULL;
+	bundle *kb;
+	bundle *data;
+
+	kb = req->kb;
+	if (kb == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	bundle_get_str(kb, AUL_K_APP_DATA_KEY, &key);
+	if (key == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	data = bundle_dup(kb);
+	if (data == NULL) {
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	bundle_del(data, AUL_K_APP_DATA_KEY);
+
+	ret = store_fn(key, data, req);
+	_D("app data bundle %d=%s (%d:%d)", ret, key, req->uid, req->pid);
+	_request_send_result(req, ret);
+
+	bundle_free(data);
+
+	return ret;
+}
+
+static int __dispatch_app_data_new(request_h req)
+{
+	return __process_app_data_simple(req, _app_data_new);
+}
+
+static int __dispatch_app_data_get_raw(request_h req)
+{
+	return __process_app_data_simple(req, _app_data_get_raw);
+}
+
+static int __dispatch_app_data_put(request_h req)
+{
+	return __process_app_data_bundle(req, _app_data_put);
+}
+
+static int __dispatch_app_data_get(request_h req)
+{
+	return __process_app_data_bundle(req, _app_data_get);
+}
+
+static int __dispatch_app_data_get_owner(request_h req)
+{
+	return __process_app_data_bundle(req, _app_data_get_owner);
+}
+
+static int __dispatch_app_data_del(request_h req)
+{
+	return __process_app_data_bundle(req, _app_data_del);
+}
+
 static int __dispatch_app_register_pid(request_h req)
 {
 	bundle *kb;
@@ -1562,6 +1654,12 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_COM_JOIN] = __dispatch_app_com_join,
 	[APP_COM_SEND] = __dispatch_app_com_send,
 	[APP_COM_LEAVE] = __dispatch_app_com_leave,
+	[APP_DATA_NEW] = __dispatch_app_data_new,
+	[APP_DATA_GET_RAW] = __dispatch_app_data_get_raw,
+	[APP_DATA_PUT] = __dispatch_app_data_put,
+	[APP_DATA_GET] = __dispatch_app_data_get,
+	[APP_DATA_GET_OWNER] = __dispatch_app_data_get_owner,
+	[APP_DATA_DEL] = __dispatch_app_data_del,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] =

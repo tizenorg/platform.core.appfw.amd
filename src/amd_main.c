@@ -50,6 +50,7 @@
 #include "amd_wayland.h"
 #include "amd_extractor.h"
 #include "amd_suspend.h"
+#include "amd_app_data.h"
 
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
@@ -190,6 +191,7 @@ void _cleanup_dead_info(app_status_h app_status)
 	}
 
 	_temporary_permission_drop(pid, uid);
+	_app_data_cleanup(pid, uid);
 	_app_status_remove(app_status);
 	aul_send_app_terminated_signal(pid);
 }
@@ -332,6 +334,7 @@ static int __init(void)
 	_input_init();
 	_wayland_init();
 	_suspend_init();
+	_app_data_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		_E("__syspopup_dbus_signal_handler_init failed");
@@ -370,6 +373,7 @@ static void __ready(void)
 
 static void __finish(void)
 {
+	_app_data_fini();
 	_suspend_fini();
 	_wayland_finish();
 	_input_fini();
