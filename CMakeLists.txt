@@ -50,6 +50,7 @@ ADD_EXECUTABLE(amd
 	src/amd_launch.c
 	src/amd_app_status.c
 	src/amd_app_com.c
+	src/amd_app_data.c
 	src/amd_app_group.c
 	src/amd_cynara.c
 	src/amd_socket.c

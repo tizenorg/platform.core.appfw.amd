@@ -26,6 +26,7 @@
 #include <aul_svc_priv_key.h>
 #include <amd_app_com.h>
 #include <amd_request.h>
+#include <amd_app_status.h>
 #include <amd_appinfo.h>
 #include <aul.h>
 
@@ -175,6 +176,9 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 		void *data)
 {
 	char *appid = NULL;
+	const char *callee_pkgid = NULL;
+	const char *caller_pkgid = NULL;
+	app_status_h caller_status;
 	const char *apptype;
 	struct appinfo *appinfo;
 	bundle *appcontrol = _request_get_bundle(req);
@@ -203,8 +207,18 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 	}
 
 	if (!strcmp(apptype, APP_TYPE_WIDGET) ||
-			!strcmp(apptype, APP_TYPE_WATCH))
+			!strcmp(apptype, APP_TYPE_WATCH)) {
+		caller_status = _app_status_find(_request_get_pid(req));
+		if (caller_status)
+			caller_pkgid = _app_status_get_pkgid(caller_status);
+
+		callee_pkgid = _appinfo_get_value(appinfo, AIT_PKGID);
+
+		if (caller_pkgid && strcmp(callee_pkgid, caller_pkgid) == 0)
+			return 0;
+
 		return __check_privilege(info, PRIVILEGE_WIDGET_VIEWER);
+	}
 
 	_E("illegal app type of request: %s - "
 			"only widget or watch apps are allowed", apptype);
