@@ -1224,6 +1224,8 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	const char *multiple;
 	const char *caller_appid;
 	const char *widget_viewer;
+	int *target_pid = NULL;
+	size_t target_pid_sz;
 	int cmd = _request_get_cmd(req);
 	int caller_pid = _request_get_pid(req);
 	uid_t caller_uid = _request_get_uid(req);
@@ -1272,8 +1274,23 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 					target_uid, caller_pid);
 			handle->pid = _app_status_get_pid(app_status);
 		} else {
-			_E("Cannot launch widget/watch app");
-			return -EREJECTED;
+			ret = bundle_get_byte(kb, AUL_K_TARGET_PID,
+				(void **)&target_pid, &target_pid_sz);
+			if (ret != BUNDLE_ERROR_NONE || target_pid == NULL) {
+				_E("Cannot launch widget/watch app");
+				return -EREJECTED;
+			}
+
+			app_status = _app_status_find(*target_pid);
+			if (app_status) {
+				handle->pid = *target_pid;
+				handle->is_subapp = true;
+			} else {
+				_E("Cannot launch widget/watch app - "
+						"target pid(%d) is dead",
+						*target_pid);
+				return -EREJECTED;
+			}
 		}
 	} else {
 		multiple = _appinfo_get_value(handle->ai, AIT_MULTI);
