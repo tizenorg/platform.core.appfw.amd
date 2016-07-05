@@ -50,6 +50,7 @@
 #include "amd_wayland.h"
 #include "amd_extractor.h"
 #include "amd_suspend.h"
+#include "amd_widget.h"
 
 #define AUL_SP_DBUS_PATH "/Org/Tizen/Aul/Syspopup"
 #define AUL_SP_DBUS_SIGNAL_INTERFACE "org.tizen.aul.syspopup"
@@ -162,6 +163,7 @@ void _cleanup_dead_info(app_status_h app_status)
 	uid = _app_status_get_uid(app_status);
 
 	_D("pid: %d, uid: %d", pid, uid);
+	
 	_extractor_unmount(pid, _extractor_mountable_get_tep_paths);
 	_extractor_unmount(pid, _extractor_mountable_get_tpk_paths);
 	_app_com_client_remove(pid);
@@ -379,6 +381,7 @@ static void __ready(void)
 
 static void __finish(void)
 {
+	_widget_fini();
 	_suspend_fini();
 	_wayland_finish();
 	_input_fini();
