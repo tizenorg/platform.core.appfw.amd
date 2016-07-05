@@ -481,7 +481,6 @@ static gboolean __reply_handler(gpointer data)
 		break;
 	case APP_START_ASYNC:
 	case APP_PAUSE_BY_PID:
-		close(clifd);
 		break;
 	default:
 		if (res >= 0)
