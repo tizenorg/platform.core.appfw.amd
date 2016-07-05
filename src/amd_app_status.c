@@ -37,6 +37,7 @@
 #include "amd_app_group.h"
 #include "amd_input.h"
 #include "amd_suspend.h"
+#include "amd_widget.h"
 
 enum app_type_e {
 	AT_SERVICE_APP,
@@ -356,6 +357,9 @@ static void __destroy_app_status(struct app_status_s *app_status)
 {
 	if (app_status == NULL)
 		return;
+
+	if (app_status->app_type == AT_WIDGET_APP)
+		_widget_cleanup(app_status->pid, app_status->uid);
 
 	__remove_all_shared_info(app_status);
 
