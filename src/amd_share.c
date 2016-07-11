@@ -285,7 +285,7 @@ static char **__convert_list_to_array(GList *list)
 	if (len == 0)
 		return NULL;
 
-	array = (char **)g_malloc(sizeof(char *) * len);
+	array = (char **)g_malloc(sizeof(char *) * (len + 1));
 	if (array == NULL) {
 		_E("out of memory");
 		return NULL;
@@ -299,6 +299,11 @@ static char **__convert_list_to_array(GList *list)
 	array[len] = NULL;
 
 	return array;
+}
+
+static void __free_path(gpointer data)
+{
+	free((void *)data);
 }
 
 shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
@@ -357,7 +362,7 @@ shared_info_h _temporary_permission_create(int caller_pid, const char *appid,
 
 clear:
 	if (paths)
-		g_list_free_full(paths, free);
+		g_list_free_full(paths, __free_path);
 
 	if (path_array)
 		g_strfreev(path_array);
