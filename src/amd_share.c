@@ -285,7 +285,7 @@ static char **__convert_list_to_array(GList *list)
 	if (len == 0)
 		return NULL;
 
-	array = (char **)g_malloc(sizeof(char *) * len);
+	array = (char **)g_malloc(sizeof(char *) * (len + 1));
 	if (array == NULL) {
 		_E("out of memory");
 		return NULL;
