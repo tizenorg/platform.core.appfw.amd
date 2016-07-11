@@ -45,12 +45,18 @@ struct wl_listener {
 	void *data;
 };
 
+struct wl_initializer {
+	void (*cb)(void *);
+	void *data;
+};
+
 static int wl_0_ready;
 static int wm_ready;
 static int wl_initialized;
 static struct wl_display *display;
 static struct wl_registry *registry;
 static GList *wl_list;
+static GList *wl_init_list;
 
 static void __init_wl(void);
 
@@ -149,6 +155,51 @@ static void __init_wl(void)
 	wl_display_roundtrip(display);
 }
 
+int _wayland_add_initializer(void (*cb)(void *data), void *data)
+{
+	struct wl_initializer *wl_init;
+
+	wl_init = (struct wl_initializer *)malloc(
+			sizeof(struct wl_initializer));
+	if (wl_init == NULL) {
+		_E("out of memory");
+		return -1;
+	}
+
+	wl_init->cb = cb;
+	wl_init->data = data;
+
+	wl_init_list = g_list_append(wl_init_list, wl_init);
+
+	return 0;
+}
+
+static void __destroy_initializer_list(void)
+{
+	if (wl_init_list == NULL)
+		return;
+
+	g_list_free_full(wl_init_list, free);
+	wl_init_list = NULL;
+}
+
+static void __dispatch_initializer_list(void)
+{
+	GList *list;
+	struct wl_initializer *wl_init;
+
+	if (wl_init_list == NULL)
+		return;
+
+	list = wl_init_list;
+	while (list) {
+		wl_init = (struct wl_initializer *)list->data;
+		if (wl_init && wl_init->cb)
+			wl_init->cb(wl_init->data);
+		list = g_list_next(list);
+	}
+}
+
 static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond,
 		gpointer data)
 {
@@ -180,6 +231,8 @@ static gboolean __wl_monitor_cb(GIOChannel *io, GIOCondition cond,
 			if (wm_ready && wl_0_ready) {
 				wl_initialized = 1;
 				__init_wl();
+				__dispatch_initializer_list();
+				__destroy_initializer_list();
 				return FALSE;
 			}
 		}
@@ -287,6 +340,8 @@ int _wayland_init(void)
 		return -1;
 
 	__init_wl();
+	__dispatch_initializer_list();
+	__destroy_initializer_list();
 
 	return 0;
 }

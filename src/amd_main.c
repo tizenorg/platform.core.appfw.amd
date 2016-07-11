@@ -297,10 +297,29 @@ static int __syspopup_dbus_signal_handler_init(void)
 	return 0;
 }
 
+static void __make_default_slots(void *data)
+{
+	bundle *b;
+	int ret;
+
+	_D("make default slots");
+	b = bundle_create();
+	if (b == NULL) {
+		_E("out of memory");
+		return;
+	}
+
+	ret = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK,
+			getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
+	if (ret != 0)
+		_E("Failed to make default slots");
+
+	bundle_free(b);
+}
+
 static int __init(void)
 {
 	int r;
-	bundle *b;
 
 	if (_appinfo_init()) {
 		_E("_appinfo_init failed");
@@ -330,24 +349,14 @@ static int __init(void)
 	_launch_init();
 	_splash_screen_init();
 	_input_init();
+
+	_wayland_add_initializer(__make_default_slots, NULL);
 	_wayland_init();
 	_suspend_init();
 
 	if (__syspopup_dbus_signal_handler_init() < 0)
 		_E("__syspopup_dbus_signal_handler_init failed");
 
-	b = bundle_create();
-	if (b == NULL) {
-		_E("failed to make a bundle");
-		return -1;
-	}
-
-	r = _send_cmd_to_launchpad(LAUNCHPAD_PROCESS_POOL_SOCK,
-			getuid(), PAD_CMD_MAKE_DEFAULT_SLOTS, b);
-	if (r != 0)
-		_E("failed to make default slots");
-
-	bundle_free(b);
 	return 0;
 }
 

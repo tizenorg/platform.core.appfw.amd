@@ -22,6 +22,7 @@ int _wayland_add_registry_listener(
 		struct wl_registry_listener *registry_listener,
 		void *data);
 struct wl_display *_wayland_get_display(void);
+int _wayland_add_initializer(void (*cb)(void *data), void *data);
 int _wayland_init(void);
 void _wayland_finish(void);
 
