@@ -206,7 +206,7 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 			!strcmp(apptype, APP_TYPE_WATCH))
 		return __check_privilege(info, PRIVILEGE_WIDGET_VIEWER);
 
-	_E("illegal app type of request: %s - "
+	_E("illegal app type of request: %s - " \
 			"only widget or watch apps are allowed", apptype);
 
 	return -1;

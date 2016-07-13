@@ -1286,7 +1286,9 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 				handle->pid = *target_pid;
 				handle->is_subapp = true;
 			} else {
-				_E("Cannot launch widget/watch app - target pid(%d) is dead", *target_pid);
+				_E("Cannot launch widget/watch app - " \
+						"target pid(%d) is dead",
+						*target_pid);
 				return -EREJECTED;
 			}
 		}

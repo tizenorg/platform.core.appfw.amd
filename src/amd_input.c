@@ -104,7 +104,7 @@ static void __keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
 		uint32_t mods_locked, uint32_t group)
 {
-	_D("serial=%d, mods_depressed=%d, mods_latched=%d mods_locked=%d, "
+	_D("serial=%d, mods_depressed=%d, mods_latched=%d mods_locked=%d, " \
 			"group=%d", serial, mods_depressed, mods_latched,
 			mods_locked, group);
 }

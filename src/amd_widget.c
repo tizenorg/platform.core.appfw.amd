@@ -38,12 +38,13 @@ static GList *__widgets;
 static void __free_widget(gpointer data)
 {
 	widget_t *widget = (widget_t *)data;
+
 	free(widget->widget_id);
 	g_list_free_full(widget->instances, free);
 	free(widget);
 }
 
-int _widget_fini()
+int _widget_fini(void)
 {
 	if (__widgets)
 		g_list_free_full(__widgets, __free_widget);
@@ -92,7 +93,8 @@ static widget_t *__find_instance(const char *widget_id, const char *instance_id)
 	return NULL;
 }
 
-int _widget_add(const char *widget_id, const char *instance_id, int pid, int uid)
+int _widget_add(const char *widget_id, const char *instance_id, int pid,
+		int uid)
 {
 	widget_t *widget;
 	char *id;
