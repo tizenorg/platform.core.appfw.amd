@@ -498,16 +498,16 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
 			_E("error create socket pair");
 			_request_send_result(req, -1);
-
 			free(handles);
+			handles = NULL;
 			goto err_out;
 		}
 
 		if (handles[0] == -1 || handles[1] == -1) {
 			_E("error socket open");
 			_request_send_result(req, -1);
-
 			free(handles);
+			handles = NULL;
 			goto err_out;
 		}
 
@@ -521,6 +521,7 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 			close(handles[0]);
 			close(handles[1]);
 			free(handles);
+			handles = NULL;
 			goto err_out;
 		}
 
@@ -532,6 +533,7 @@ static int __dispatch_get_dc_socket_pair(request_h req)
 			close(handles[0]);
 			close(handles[1]);
 			free(handles);
+			handles = NULL;
 			goto err_out;
 		}
 
@@ -592,6 +594,7 @@ err_out:
 			close(handles[0]);
 		if (handles[1] > 0)
 			close(handles[1]);
+		free(handles);
 	}
 	if (socket_pair_key) {
 		g_hash_table_remove(__dc_socket_pair_hash, socket_pair_key);
