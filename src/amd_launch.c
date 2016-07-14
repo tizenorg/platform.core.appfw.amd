@@ -396,7 +396,7 @@ static int __fake_launch_app_async(int cmd, int pid, bundle *kb, request_h req)
 	}
 
 	if (ret > 0) {
-		_send_result_to_client(_request_get_fd(req), pid);
+		_send_result_to_client(_request_remove_fd(req), pid);
 		__set_reply_handler(ret, pid, req, cmd);
 	}
 
@@ -472,7 +472,8 @@ static gboolean __reply_handler(gpointer data)
 	close(fd);
 
 	if (res >= 0)
-		_send_result_to_client(clifd, pid);
+		res = pid;
+	_send_result_to_client(clifd, pid);
 
 	_D("listen fd : %d , send fd : %d, pid : %d", fd, clifd, pid);
 
