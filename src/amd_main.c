@@ -219,11 +219,10 @@ static int __app_dead_handler(int pid, void *data)
 
 	uid = _app_status_get_uid(app_status);
 	restart = __can_restart_app(tmp_appid, uid);
-	if (restart)
-		appid = strdup(tmp_appid);
+	appid = strdup(tmp_appid);
 
 	_cleanup_dead_info(app_status);
-	_request_flush_pending_request(pid);
+	_request_flush_pending_request(pid, appid, uid);
 
 	if (restart)
 		_launch_start_app_local(uid, appid);
