@@ -1471,6 +1471,47 @@ static int __dispatch_app_term_sync(request_h req)
 	return 0;
 }
 
+static int __dispatch_app_term_sync_without_restart(request_h req)
+{
+	int ret = -1;
+	const char *appid;
+	const char *term_pid;
+	const char *component_type;
+	struct appinfo *ai;
+	app_status_h app_status;
+
+	term_pid = bundle_get_val(req->kb, AUL_K_APPID);
+	app_status = _app_status_find(atoi(term_pid));
+	if (app_status == NULL)
+		goto exception;
+
+	appid = _app_status_get_appid(app_status);
+	if (appid == NULL)
+		goto exception;
+
+	ai = _appinfo_find(_request_get_target_uid(req), appid);
+	if (ai == NULL)
+		goto exception;
+
+	component_type = _appinfo_get_value(ai, AIT_COMPTYPE);
+	if (!component_type)
+		goto exception;
+
+	ret = __dispatch_app_term_sync(req);
+
+	if (ret < 0)
+		return ret;
+
+	if (strncmp(component_type, APP_TYPE_SERVICE,
+			strlen(APP_TYPE_SERVICE)) == 0)
+		_appinfo_set_value(ai, AIT_STATUS, "norestart");
+	return 0;
+
+exception:
+	_request_send_result(req, ret);
+	return ret;
+}
+
 static int __dispatch_app_get_status_by_appid(request_h req)
 {
 	int status;
@@ -1727,6 +1768,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 		__dispatch_app_prepare_candidate_process,
 	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
 	[APP_GET_STATUS_BY_APPID] = __dispatch_app_get_status_by_appid,
+	[APP_TERM_BY_PID_SYNC_WITHOUT_RESTART] = __dispatch_app_term_sync_without_restart,
 };
 
 static void __free_request(gpointer data)
