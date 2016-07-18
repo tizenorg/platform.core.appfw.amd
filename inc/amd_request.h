@@ -33,7 +33,7 @@ request_h _request_create_local(int cmd, uid_t uid, int pid, bundle *kb);
 void _request_free_local(request_h req);
 int _request_remove_fd(request_h req);
 int _request_reply_for_pending_request(int pid);
-int _request_flush_pending_request(int pid);
+int _request_flush_pending_request(int pid, const char *term_appid, uid_t uid);
 uid_t _request_get_target_uid(request_h req);
 uid_t _request_get_uid(request_h req);
 

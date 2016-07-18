@@ -239,6 +239,7 @@ static int __app_process_by_pid(request_h req, const char *pid_str,
 	case APP_TERM_REQ_BY_PID:
 		ret = _term_req_app(pid, req);
 		break;
+	case WIDGET_RESTART:
 	case APP_TERM_BY_PID_ASYNC:
 		ret = aul_sock_send_raw(pid, target_uid, req->cmd,
 				(unsigned char *)&dummy, sizeof(int),
@@ -1659,6 +1660,48 @@ static int __dispatch_widget_update(request_h req)
 	return ret;
 }
 
+static int __dispatch_widget_restart(request_h req)
+{
+	int pid;
+	const char *appid;
+	bundle *kb;
+	struct pending_item *pending_item;
+
+	const char *term_pid;
+	struct appinfo *ai;
+	app_status_h app_status;
+
+	kb = req->kb;
+	if (kb == NULL)
+		return -1;
+
+	term_pid = bundle_get_val(kb, AUL_K_APPID);
+	app_status = _app_status_find(atoi(term_pid));
+	appid = _app_status_get_appid(app_status);
+	ai = _appinfo_find(_request_get_target_uid(req), appid);
+
+
+	if (ai) {
+
+		pid = atoi(term_pid);
+		pending_item = calloc(1, sizeof(struct pending_item));
+		if (pending_item == NULL) {
+			_E("Out of memory");
+			_request_send_result(req, -EINVAL);
+			return -1;
+		}
+		pending_item->cmd = _request_get_cmd(req);
+		pending_item->timer = g_timeout_add(PENDING_REQUEST_TIMEOUT,
+				__timeout_pending_item, (gpointer)pending_item);
+		g_hash_table_insert(pending_table, GINT_TO_POINTER(pid),
+				pending_item);
+
+		__app_process_by_pid(req, term_pid, NULL);
+	}
+	return 0;
+
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1716,6 +1759,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[WIDGET_DEL] = __dispatch_widget_add_del,
 	[WIDGET_LIST] = __dispatch_widget_list,
 	[WIDGET_UPDATE] = __dispatch_widget_update,
+	[WIDGET_RESTART] = __dispatch_widget_restart,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] =
@@ -1784,7 +1828,7 @@ static gboolean __timeout_pending_item(gpointer user_data)
 	return FALSE;
 }
 
-int _request_flush_pending_request(int pid)
+int _request_flush_pending_request(int pid, const char *term_appid, uid_t uid)
 {
 	struct pending_item *item;
 
@@ -1796,6 +1840,9 @@ int _request_flush_pending_request(int pid)
 	if (item->cmd == APP_TERM_BY_PID_SYNC) {
 		_send_result_to_client(item->clifd, 0);
 		item->clifd = 0;
+	} else if (item->cmd == WIDGET_RESTART) {
+		if (term_appid)
+			_launch_start_app_local(uid, term_appid);
 	}
 
 	__timeout_pending_item((gpointer)item);
