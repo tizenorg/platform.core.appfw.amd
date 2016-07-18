@@ -43,6 +43,9 @@
 #include "amd_share.h"
 #include "aul_svc_priv_key.h"
 
+#define LEGACY_APP_ROOT_PATH "/opt/usr/apps"
+#define LEGACY_PATH_OFFSET	14
+
 struct shared_info_main_s {
 	char *appid;
 	uid_t uid;
@@ -53,6 +56,15 @@ static int __can_share(const char *path, const char *pkgid, uid_t uid)
 {
 	struct stat path_stat;
 	char buf[PATH_MAX];
+	char new_path[PATH_MAX];
+
+	if (strncmp(LEGACY_APP_ROOT_PATH, path, strlen(LEGACY_APP_ROOT_PATH)) == 0) {
+		tzplatform_set_user(uid);
+		snprintf(new_path, sizeof(new_path), "%s/%s",
+			tzplatform_getenv(TZ_USER_APP), &path[LEGACY_PATH_OFFSET]);
+		tzplatform_reset_user();
+		path = new_path;
+	}
 
 	if (access(path, F_OK) != 0)
 		return -1;
@@ -72,6 +84,21 @@ static int __can_share(const char *path, const char *pkgid, uid_t uid)
 		return -1;
 
 	return 0;
+}
+
+static char *__convert_path(const char *path, uid_t uid)
+{
+	char new_path[PATH_MAX];
+
+	if (strncmp(LEGACY_APP_ROOT_PATH, path, strlen(LEGACY_APP_ROOT_PATH)) == 0) {
+		tzplatform_set_user(uid);
+		snprintf(new_path, sizeof(new_path), "%s/%s",
+			tzplatform_getenv(TZ_USER_APP), &path[LEGACY_PATH_OFFSET]);
+		tzplatform_reset_user();
+		path = new_path;
+	}
+
+	return strdup(path);
 }
 
 static int __get_owner_pid(int caller_pid, bundle *kb)
@@ -171,7 +198,7 @@ static GList *__add_valid_uri(GList *paths, int caller_pid, const char *appid,
 		_E("__can_share() returned an error");
 		return paths;
 	}
-	paths = g_list_append(paths, strdup(path));
+	paths = g_list_append(paths, __convert_path(path, uid));
 
 	return paths;
 }
@@ -205,7 +232,7 @@ static GList *__add_valid_key_for_data_selected(GList *paths, int caller_pid,
 
 	for (i = 0; i < len; i++) {
 		if (__can_share(path_array[i], pkgid, uid) == 0)
-			paths = g_list_append(paths, strdup(path_array[i]));
+			paths = g_list_append(paths, __convert_path(path_array[i], uid));
 	}
 
 	return paths;
@@ -243,7 +270,7 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 			break;
 		}
 
-		paths = g_list_append(paths, strdup(path));
+		paths = g_list_append(paths, __convert_path(path, uid));
 		break;
 	case BUNDLE_TYPE_STR_ARRAY:
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
@@ -262,7 +289,7 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 		for (i = 0; i < len; i++) {
 			if (__can_share(path_array[i], pkgid, uid) == 0) {
 				paths = g_list_append(paths,
-						strdup(path_array[i]));
+						__convert_path(path_array[i], uid));
 			}
 		}
 
