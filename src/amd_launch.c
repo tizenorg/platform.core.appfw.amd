@@ -1224,6 +1224,7 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	const char *multiple;
 	const char *caller_appid;
 	const char *widget_viewer;
+	const char *installed_storage;
 	int *target_pid = NULL;
 	size_t target_pid_sz;
 	int cmd = _request_get_cmd(req);
@@ -1253,7 +1254,8 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 		return ret;
 
 	pkgid = _appinfo_get_value(handle->ai, AIT_PKGID);
-	if (app2ext_get_app_location(pkgid) == APP2EXT_SD_CARD) {
+	installed_storage = _appinfo_get_value(handle->ai, AIT_STORAGE_TYPE);
+	if (installed_storage && strcmp(installed_storage, "external") == 0) {
 		if (app2ext_enable_external_pkg(pkgid) < 0) {
 			_E("Failed to enable exteranl pkg(%s)", pkgid);
 			return -1;
