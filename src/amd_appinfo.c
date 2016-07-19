@@ -45,6 +45,11 @@ struct app_event_info {
 	int type;
 };
 
+struct pkg_event_info {
+	uid_t uid;
+	const char *pkgid;
+};
+
 static GList *app_event_list;
 
 typedef int (*appinfo_handler_add_cb)(const pkgmgrinfo_appinfo_h handle,
@@ -919,9 +924,16 @@ static struct user_appinfo *__find_user_appinfo(uid_t uid)
 static void __appinfo_set_blocking_cb(void *user_data,
 		const char *appid, struct appinfo *info)
 {
-	char *pkgid = (char *)user_data;
+	struct pkg_event_info *pkg_info = (struct pkg_event_info *)user_data;
 
-	if (strcmp(info->val[AIT_PKGID], pkgid))
+	if (strcmp(info->val[AIT_PKGID], pkg_info->pkgid))
+		return;
+
+	if (pkg_info->uid == GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "false"))
+		return;
+	else if (pkg_info->uid != GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "true"))
 		return;
 
 	free(info->val[AIT_STATUS]);
@@ -932,9 +944,16 @@ static void __appinfo_set_blocking_cb(void *user_data,
 static void __appinfo_unset_blocking_cb(void *user_data,
 		const char *appid, struct appinfo *info)
 {
-	char *pkgid = (char *)user_data;
+	struct pkg_event_info *pkg_info = (struct pkg_event_info *)user_data;
 
-	if (strcmp(info->val[AIT_PKGID], pkgid))
+	if (strcmp(info->val[AIT_PKGID], pkg_info->pkgid))
+		return;
+
+	if (pkg_info->uid == GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "false"))
+		return;
+	else if (pkg_info->uid != GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "true"))
 		return;
 
 	free(info->val[AIT_STATUS]);
@@ -944,18 +963,24 @@ static void __appinfo_unset_blocking_cb(void *user_data,
 
 static gboolean __appinfo_remove_cb(gpointer key, gpointer value, gpointer data)
 {
-	char *pkgid = (char *)data;
+	struct pkg_event_info *pkg_info = (struct pkg_event_info *)data;
 	struct appinfo *info = (struct appinfo *)value;
 
-	if (!strcmp(info->val[AIT_PKGID], pkgid)) {
-		_D("appinfo removed: %s", info->val[AIT_NAME]);
-		return TRUE;
-	}
+	if (strcmp(info->val[AIT_PKGID], pkg_info->pkgid))
+		return FALSE;
 
-	return FALSE;
+	if (pkg_info->uid == GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "false"))
+		return FALSE;
+	else if (pkg_info->uid != GLOBAL_USER &&
+			!strcmp(info->val[AIT_GLOBAL], "true"))
+		return FALSE;
+
+	_D("appinfo removed: %s", info->val[AIT_NAME]);
+	return TRUE;
 }
 
-static void __appinfo_delete_on_event(uid_t uid, const char *pkgid)
+static void __appinfo_delete_on_event(uid_t uid, void *data)
 {
 	struct user_appinfo *info;
 
@@ -966,7 +991,7 @@ static void __appinfo_delete_on_event(uid_t uid, const char *pkgid)
 	}
 
 	g_hash_table_foreach_remove(info->tbl, __appinfo_remove_cb,
-			(gpointer)pkgid);
+			(gpointer)data);
 }
 
 static void __appinfo_insert_on_event(uid_t uid, const char *pkgid)
@@ -980,16 +1005,20 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 		const char *key, const char *val, const void *pmsg, void *data)
 {
 	char *op;
+	uid_t uid = getuid();
+	struct pkg_event_info info = {
+		.uid = target_uid,
+		.pkgid = pkgid
+	};
 
-	if (target_uid == 0 || target_uid == GLOBAL_USER)
-		target_uid = getuid();
+	if (target_uid >= REGULAR_UID_MIN && target_uid != uid)
+		return 0;
 
 	if (!strcasecmp(key, "start")) {
 		if (!strcasecmp(val, "uninstall") ||
-				!strcasecmp(val, "update")) {
-			_appinfo_foreach(target_uid, __appinfo_set_blocking_cb,
-					(void *)pkgid);
-		}
+				!strcasecmp(val, "update"))
+			_appinfo_foreach(uid, __appinfo_set_blocking_cb, &info);
+
 		g_hash_table_insert(pkg_pending, strdup(pkgid), strdup(val));
 	}
 
@@ -999,9 +1028,8 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 			return 0;
 
 		if (!strcasecmp(op, "uninstall") || !strcasecmp(op, "update")) {
-			_appinfo_foreach(target_uid,
-					__appinfo_unset_blocking_cb,
-					(void *)pkgid);
+			_appinfo_foreach(uid, __appinfo_unset_blocking_cb,
+					&info);
 		}
 		g_hash_table_remove(pkg_pending, pkgid);
 	}
@@ -1012,12 +1040,14 @@ static int __package_event_cb(uid_t target_uid, int req_id,
 			return 0;
 
 		if (!strcasecmp(op, "uninstall")) {
-			__appinfo_delete_on_event(target_uid, pkgid);
+			__appinfo_delete_on_event(uid, &info);
+			if (uid == target_uid)
+				__appinfo_insert_on_event(uid, pkgid);
 		} else if (!strcasecmp(op, "install")) {
-			__appinfo_insert_on_event(target_uid, pkgid);
+			__appinfo_insert_on_event(uid, pkgid);
 		} else if (!strcasecmp(op, "update")) {
-			__appinfo_delete_on_event(target_uid, pkgid);
-			__appinfo_insert_on_event(target_uid, pkgid);
+			__appinfo_delete_on_event(uid, &info);
+			__appinfo_insert_on_event(uid, pkgid);
 		}
 
 		g_hash_table_remove(pkg_pending, pkgid);

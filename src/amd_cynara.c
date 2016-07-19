@@ -32,8 +32,6 @@
 #include "amd_config.h"
 #include "amd_util.h"
 
-#define REGULAR_UID_MIN     5000
-
 #define PRIVILEGE_WIDGET_VIEWER \
 	"http://tizen.org/privilege/widget.viewer"
 #define PRIVILEGE_APPMANAGER_LAUNCH \

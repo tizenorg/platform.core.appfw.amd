@@ -54,7 +54,6 @@
 #include "amd_widget.h"
 
 #define INHOUSE_UID     tzplatform_getuid(TZ_USER_NAME)
-#define REGULAR_UID_MIN     5000
 
 #define MAX_NR_OF_DESCRIPTORS 2
 #define PENDING_REQUEST_TIMEOUT 5000 /* msec */

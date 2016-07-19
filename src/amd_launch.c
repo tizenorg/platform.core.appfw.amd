@@ -71,7 +71,6 @@
 #define PROC_STATUS_FOCUS 5
 
 #define GLOBAL_USER tzplatform_getuid(TZ_SYS_GLOBALAPP_USER)
-#define REGULAR_UID_MIN 5000
 
 struct launch_s {
 	const char *appid;
