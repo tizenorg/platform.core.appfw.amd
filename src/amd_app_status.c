@@ -542,7 +542,9 @@ int _app_status_update_status(app_status_h app_status, int status, bool force)
 		return -1;
 
 	_D("pid: %d, status: %d", app_status->pid, status);
+#ifdef TIZEN_FEATURE_BLOCK_INPUT
 	_input_unlock();
+#endif /* TIZEN_FEATURE_BLOCK_INPUT */
 
 	if (app_status->status == STATUS_DYING) {
 		_E("%s is STATUS_DYING", app_status->appid);
