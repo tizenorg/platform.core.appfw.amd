@@ -833,8 +833,10 @@ static int __dispatch_app_start(request_h req)
 
 	appid = bundle_get_val(kb, AUL_K_APPID);
 	ret = _launch_start_app(appid, req);
+#ifdef TIZEN_FEATURE_BLOCK_INPUT
 	if (ret <= 0)
 		_input_unlock();
+#endif /* TIZEN_FEATURE_BLOCK_INPUT */
 
 	if (ret > 0 && __add_rua_info(req, kb, appid) < 0)
 		return -1;

@@ -924,7 +924,7 @@ static int __send_hint_for_visibility(uid_t uid)
 	return ret;
 }
 
-#ifdef _TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP
+#ifdef TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP
 static void __terminate_unmanageable_app(app_status_h app_status)
 {
 	const char *appid = NULL;
@@ -970,7 +970,7 @@ static void __terminate_unmanageable_app(app_status_h app_status)
 
 	free(pids);
 }
-#endif
+#endif /* TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP */
 
 static int __app_status_handler(int pid, int status, void *data)
 {
@@ -999,9 +999,9 @@ static int __app_status_handler(int pid, int status, void *data)
 
 		if (pid == __pid_of_last_launched_ui_app)
 			__send_hint_for_visibility(uid);
-#ifdef _TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP
+#ifdef TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP
 		__terminate_unmanageable_app(app_status);
-#endif
+#endif /* TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP */
 		break;
 	case PROC_STATUS_BG:
 		_app_status_update_status(app_status, STATUS_BG, false);
@@ -1231,7 +1231,8 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 	uid_t caller_uid = _request_get_uid(req);
 	uid_t target_uid = _request_get_target_uid(req);
 	bundle *kb = _request_get_bundle(req);
-	app_status_h app_status;
+	app_status_h app_status = NULL;
+	int status;
 
 	handle->appid = appid;
 	handle->ai = _appinfo_find(target_uid, appid);
@@ -1306,7 +1307,11 @@ static int __prepare_starting_app(struct launch_s *handle, request_h req,
 		if (ret < 0)
 			return ret;
 
-		_input_lock();
+#ifdef TIZEN_FEATURE_BLOCK_INPUT
+		status = _app_status_get_status(app_status);
+		if (status != STATUS_VISIBLE)
+			_input_lock();
+#endif /* TIZEN_FEATURE_BLOCK_INPUT */
 	} else if (caller_appid && strcmp(comp_type, APP_TYPE_SERVICE) == 0) {
 		ret = __check_execute_permission(pkgid, caller_appid,
 				target_uid, kb);

@@ -350,7 +350,9 @@ static int __init(void)
 	_app_com_broker_init();
 	_launch_init();
 	_splash_screen_init();
+#ifdef TIZEN_FEATURE_BLOCK_INPUT
 	_input_init();
+#endif /* TIZEN_FEATURE_BLOCK_INPUT */
 
 	_wayland_add_initializer(__make_default_slots, NULL);
 	_wayland_init();
@@ -384,7 +386,9 @@ static void __finish(void)
 	_widget_fini();
 	_suspend_fini();
 	_wayland_finish();
+#ifdef TIZEN_FEATURE_BLOCK_INPUT
 	_input_fini();
+#endif /* TIZEN_FEATURE_BLOCK_INPUT */
 	_app_com_broker_fini();
 	_cynara_finish();
 	_app_status_finish();
