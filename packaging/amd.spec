@@ -49,8 +49,10 @@ BuildRequires:  pkgconfig(wayland-tbm-client)
 
 %if "%{?profile}" == "tv"
 %define tizen_feature_terminate_unmanageable_app 0
+%define tizen_feature_block_input 0
 %else
 %define tizen_feature_terminate_unmanageable_app 1
+%define tizen_feature_block_input 1
 %endif
 
 %description
@@ -69,6 +71,9 @@ CFLAGS="%{optflags} -D__emul__"; export CFLAGS
 %if 0%{?tizen_feature_terminate_unmanageable_app}
 _TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP=ON
 %endif
+%if 0%{?tizen_feature_block_input}
+_TIZEN_FEATURE_BLOCK_INPUT=ON
+%endif
 
 MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
 %cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} \
@@ -79,6 +84,7 @@ MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
 -Dwith_x11=TRUE\
 %endif
 	-D_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP:BOOL=${_TIZEN_FEATURE_TERMINATE_UNMANAGEABLE_APP} \
+	-D_TIZEN_FEATURE_BLOCK_INPUT:BOOL=${_TIZEN_FEATURE_BLOCK_INPUT} \
 	.
 
 %__make %{?_smp_mflags}
