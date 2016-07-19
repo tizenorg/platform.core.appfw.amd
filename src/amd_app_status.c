@@ -67,6 +67,7 @@ struct app_status_s {
 	int fg_count;
 	bool managed;
 	int org_caller_pid;
+	int last_caller_pid;
 	struct pkg_status_s *pkg_status;
 	GList *shared_info_list;
 };
@@ -451,6 +452,7 @@ static int __app_status_set_app_info(struct app_status_s *app_status,
 	app_status->leader_pid = _app_group_get_leader_pid(pid);
 	app_status->timestamp = time(NULL) / 10;
 	app_status->org_caller_pid = caller_pid;
+	app_status->last_caller_pid = caller_pid;
 
 	taskmanage = _appinfo_get_value(ai, AIT_TASKMANAGE);
 	if (taskmanage && strcmp(taskmanage, "true") == 0 &&
@@ -571,6 +573,16 @@ int _app_status_update_status(app_status_h app_status, int status, bool force)
 	return 0;
 }
 
+int _app_status_update_last_caller_pid(app_status_h app_status, int caller_pid)
+{
+	if (app_status == NULL)
+		return -1;
+
+	app_status->last_caller_pid = caller_pid;
+
+	return 0;
+}
+
 int _app_status_get_process_cnt(const char *appid)
 {
 	GSList *iter;
@@ -608,6 +620,14 @@ int _app_status_get_pid(app_status_h app_status)
 		return -1;
 
 	return app_status->pid;
+}
+
+int _app_status_get_last_caller_pid(app_status_h app_status)
+{
+	if (app_status == NULL)
+		return -1;
+
+	return app_status->last_caller_pid;
 }
 
 int _app_status_is_running(app_status_h app_status)

@@ -1660,6 +1660,22 @@ static int __dispatch_widget_update(request_h req)
 	return ret;
 }
 
+static int __dispatch_app_get_last_caller_pid(request_h req)
+{
+	int pid;
+	int ret;
+	app_status_h app_status;
+
+	memcpy(&pid, req->data, sizeof(int));
+	app_status = _app_status_find(pid);
+	ret = _app_status_get_last_caller_pid(app_status);
+	_D("app_get_last_caller_pid: %d : %d", pid, ret);
+
+	_send_result_to_client(_request_remove_fd(req), ret);
+
+	return ret;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1729,6 +1745,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 		__dispatch_app_prepare_candidate_process,
 	[APP_TERM_BY_PID_SYNC] = __dispatch_app_term_sync,
 	[APP_GET_STATUS_BY_APPID] = __dispatch_app_get_status_by_appid,
+	[APP_GET_LAST_CALLER_PID] = __dispatch_app_get_last_caller_pid,
 };
 
 static void __free_request(gpointer data)
