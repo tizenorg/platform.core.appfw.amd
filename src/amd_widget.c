@@ -93,6 +93,24 @@ static widget_t *__find_instance(const char *widget_id, const char *instance_id)
 	return NULL;
 }
 
+int _is_widget_exist(const char *widget_id, int pid, int uid)
+{
+	GList *widget_list = __widgets;
+	widget_t *widget;
+
+	while (widget_list) {
+		widget = (widget_t *)widget_list->data;
+		if (strcmp(widget->widget_id, widget_id) == 0) {
+			if (widget->pid == pid && widget->uid == uid)
+				return 0;
+		}
+
+		widget_list = widget_list->next;
+	}
+
+	return -1;
+}
+
 int _widget_add(const char *widget_id, const char *instance_id, int pid,
 		int uid)
 {

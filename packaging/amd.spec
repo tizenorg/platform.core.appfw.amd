@@ -41,6 +41,7 @@ BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(sensor)
 BuildRequires:  pkgconfig(ttrace)
 BuildRequires:  pkgconfig(app2sd)
+BuildRequires:  pkgconfig(capi-appfw-widget-application)
 %if %{with wayland}
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(tizen-extension-client)
