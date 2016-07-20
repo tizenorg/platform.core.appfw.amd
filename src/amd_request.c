@@ -38,6 +38,7 @@
 #include <aul_sock.h>
 #include <aul_svc.h>
 #include <aul_app_com.h>
+#include <widget_instance.h>
 
 #include "amd_config.h"
 #include "amd_util.h"
@@ -1658,6 +1659,40 @@ static int __dispatch_widget_update(request_h req)
 	return ret;
 }
 
+static int __dispatch_widget_restart(request_h req)
+{
+
+	int pid;
+	const char *appid;
+	bundle *kb;
+	app_status_h app_status;
+	bool is_widget = false;
+	char *viewer_id;
+	int status = WIDGET_INSTANCE_EVENT_APP_RESTART_REQUEST;
+
+	kb = req->kb;
+	if (kb == NULL)
+		return -1;
+
+	bundle_get_str(kb, AUL_K_WIDGET_VIEWER, &viewer_id);
+	pid = _request_get_pid(req);
+	app_status = _app_status_find(pid);
+	appid = _app_status_get_appid(app_status);
+
+	is_widget = _widget_exist(appid, pid, _request_get_target_uid(req));
+	if (is_widget) {
+		kb = bundle_create();
+		bundle_add(kb, WIDGET_K_ID, appid);
+		bundle_add_byte(kb, WIDGET_K_STATUS, &status, sizeof(int));
+		_app_com_send(viewer_id, getpgid(pid), kb);
+
+		_D("__dispatch_widget_restart from %s to %s ", appid, viewer_id);
+		bundle_free(kb);
+	}
+
+	return 0;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1715,6 +1750,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[WIDGET_DEL] = __dispatch_widget_add_del,
 	[WIDGET_LIST] = __dispatch_widget_list,
 	[WIDGET_UPDATE] = __dispatch_widget_update,
+	[WIDGET_RESTART] = __dispatch_widget_restart,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] =

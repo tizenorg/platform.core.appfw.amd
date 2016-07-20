@@ -20,6 +20,11 @@
 #include <stdlib.h>
 #include <aul.h>
 #include <aul_sock.h>
+#include <widget_instance.h>
+#include <bundle.h>
+#include <bundle_internal.h>
+
+#include "amd_app_com.h"
 #include "amd_request.h"
 #include "amd_config.h"
 #include "amd_util.h"
@@ -91,6 +96,37 @@ static widget_t *__find_instance(const char *widget_id, const char *instance_id)
 	}
 
 	return NULL;
+}
+
+bool _widget_exist(const char *widget_id, int pid, int uid)
+{
+	GList *widget_list = __widgets;
+	widget_t *widget;
+
+	while (widget_list) {
+		widget = (widget_t *)widget_list->data;
+		if (strcmp(widget->widget_id, widget_id) == 0) {
+			if (widget->pid == pid && widget->uid == uid)
+				return true;
+		}
+
+		widget_list = widget_list->next;
+	}
+	return false;
+}
+
+int _widget_send_dead_signal(char *widget_id, int pid)
+{
+	int status = WIDGET_LIFE_CYCLE_EVENT_APP_DEAD;
+	bundle *kb;
+
+	kb = bundle_create();
+	bundle_add(kb, WIDGET_K_ID, widget_id);
+	bundle_add_byte(kb, WIDGET_K_STATUS, &status, sizeof(int));
+	_app_com_send("widget.status", getpgid(pid), kb);
+	bundle_free(kb);
+
+	return 0;
 }
 
 int _widget_add(const char *widget_id, const char *instance_id, int pid,
