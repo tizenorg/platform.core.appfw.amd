@@ -43,16 +43,59 @@
 #include "amd_share.h"
 #include "aul_svc_priv_key.h"
 
+#define LEGACY_APP_ROOT_PATH "/opt/usr/apps"
+#define LEGACY_PATH_OFFSET	14
+
 struct shared_info_main_s {
 	char *appid;
 	uid_t uid;
 	shared_info_t *shared_info;
 };
 
+static char **__array_dup(const char **strs, int len)
+{
+	int i;
+	char **array;
+
+	if (len <= 0 || strs == NULL)
+		return NULL;
+
+	array = malloc(sizeof(char *) * len);
+	if (array == NULL)
+		return NULL;
+
+	for (i = 0; i < len; i++)
+		array[i] = strdup(strs[i]);
+
+	return array;
+}
+
+static void __array_free(char **array, int len)
+{
+	int i;
+
+	if (len <= 0 || array == NULL)
+		return;
+
+	for (i = 0; i < len; i++)
+		free(array[i]);
+
+	free(array);
+}
+
 static int __can_share(const char *path, const char *pkgid, uid_t uid)
 {
 	struct stat path_stat;
 	char buf[PATH_MAX];
+	char new_path[PATH_MAX];
+
+	if (strncmp(LEGACY_APP_ROOT_PATH, path, strlen(LEGACY_APP_ROOT_PATH)) == 0) {
+		tzplatform_set_user(uid);
+		snprintf(new_path, sizeof(new_path), "%s/%s",
+			tzplatform_getenv(TZ_USER_APP), &path[LEGACY_PATH_OFFSET]);
+		tzplatform_reset_user();
+		path = new_path;
+	}
 
 	if (access(path, F_OK) != 0)
 		return -1;
@@ -72,6 +115,23 @@ static int __can_share(const char *path, const char *pkgid, uid_t uid)
 		return -1;
 
 	return 0;
+}
+
+static char *__convert_path(const char *path, uid_t uid, bool *converted)
+{
+	char new_path[PATH_MAX];
+
+	*converted = false;
+	if (strncmp(LEGACY_APP_ROOT_PATH, path, strlen(LEGACY_APP_ROOT_PATH)) == 0) {
+		tzplatform_set_user(uid);
+		snprintf(new_path, sizeof(new_path), "%s/%s",
+			tzplatform_getenv(TZ_USER_APP), &path[LEGACY_PATH_OFFSET]);
+		tzplatform_reset_user();
+		path = new_path;
+		*converted = true;
+	}
+
+	return strdup(path);
 }
 
 static int __get_owner_pid(int caller_pid, bundle *kb)
@@ -147,6 +207,8 @@ static GList *__add_valid_uri(GList *paths, int caller_pid, const char *appid,
 	const char *pkgid;
 	const struct appinfo *ai;
 	int ret;
+	bool converted = false;
+	char buf[PATH_MAX] = { 0, };
 
 	ret = bundle_get_str(kb, AUL_SVC_K_URI, &path);
 	if (ret != BUNDLE_ERROR_NONE)
@@ -171,7 +233,15 @@ static GList *__add_valid_uri(GList *paths, int caller_pid, const char *appid,
 		_E("__can_share() returned an error");
 		return paths;
 	}
-	paths = g_list_append(paths, strdup(path));
+
+	path = __convert_path(path, uid, &converted);
+	paths = g_list_append(paths, path);
+
+	if (converted) {
+		snprintf(buf, sizeof(buf), "file://%s",path);
+		bundle_del(kb, AUL_SVC_K_URI);
+		bundle_add(kb, AUL_SVC_K_URI, buf);
+	}
 
 	return paths;
 }
@@ -183,9 +253,13 @@ static GList *__add_valid_key_for_data_selected(GList *paths, int caller_pid,
 	int i;
 	int len = 0;
 	const char **path_array = NULL;
+	char **new_array = NULL;
 	int type = bundle_get_type(kb, AUL_SVC_DATA_SELECTED);
 	const char *pkgid = NULL;
 	const struct appinfo *ai = NULL;
+	char *path;
+	bool converted = false;
+	bool found = false;
 
 	if (type != BUNDLE_TYPE_STR_ARRAY)
 		return paths;
@@ -203,10 +277,25 @@ static GList *__add_valid_key_for_data_selected(GList *paths, int caller_pid,
 		return paths;
 	}
 
+	new_array = __array_dup(path_array, len);
 	for (i = 0; i < len; i++) {
-		if (__can_share(path_array[i], pkgid, uid) == 0)
-			paths = g_list_append(paths, strdup(path_array[i]));
+		if (__can_share(path_array[i], pkgid, uid) == 0) {
+			path = __convert_path(path_array[i], uid, &converted);
+			paths = g_list_append(paths, path);
+
+			if (converted) {
+				free(new_array[i]);
+				new_array[i] = strdup(path);
+				found = true;
+			}
+		}
 	}
+
+	if (found) {
+		bundle_del(kb, AUL_SVC_DATA_SELECTED);
+		bundle_add_str_array(kb, AUL_SVC_DATA_SELECTED, (const char **)new_array, len);
+	}
+	__array_free(new_array, len);
 
 	return paths;
 }
@@ -218,10 +307,13 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 	int type = bundle_get_type(kb, AUL_SVC_DATA_PATH);
 	char *path = NULL;
 	const char **path_array = NULL;
+	char **new_array = NULL;
 	int len;
 	int i;
 	const char *pkgid = NULL;
 	const struct appinfo *ai = NULL;
+	bool converted = false;
+	bool found = false;
 
 	switch (type) {
 	case BUNDLE_TYPE_STR:
@@ -242,8 +334,12 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 			_E("__can_share() returned an error");
 			break;
 		}
-
-		paths = g_list_append(paths, strdup(path));
+		path = __convert_path(path, uid, &converted);
+		paths = g_list_append(paths, path);
+		if (converted) {
+			bundle_del(kb, AUL_SVC_DATA_PATH);
+			bundle_add(kb, AUL_SVC_DATA_PATH, path);
+		}
 		break;
 	case BUNDLE_TYPE_STR_ARRAY:
 		path_array = bundle_get_str_array(kb, AUL_SVC_DATA_PATH, &len);
@@ -259,13 +355,24 @@ static GList *__add_valid_key_for_data_path(GList *paths, int caller_pid,
 			break;
 		}
 
+		new_array = __array_dup(path_array, len);
 		for (i = 0; i < len; i++) {
 			if (__can_share(path_array[i], pkgid, uid) == 0) {
-				paths = g_list_append(paths,
-						strdup(path_array[i]));
+				path = __convert_path(path_array[i], uid, &converted);
+				paths = g_list_append(paths, path);
+				if (converted) {
+					free(new_array[i]);
+					new_array[i] = strdup(path);
+					found = true;
+				}
 			}
 		}
 
+		if (found) {
+			bundle_del(kb, AUL_SVC_DATA_PATH);
+			bundle_add_str_array(kb, AUL_SVC_DATA_PATH, (const char **)new_array, len);
+		}
+		__array_free(new_array, len);
 		break;
 	}
 
