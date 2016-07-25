@@ -272,3 +272,14 @@ int _widget_cleanup(int pid, int uid)
 
 	return 0;
 }
+
+int _widget_get_pid(const char *widget_id, const char *instance_id)
+{
+	widget_t *widget;
+
+	widget = __find_instance(widget_id, instance_id);
+	if (!widget)
+		return -1;
+
+	return widget->pid;
+}

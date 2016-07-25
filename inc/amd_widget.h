@@ -26,6 +26,7 @@ int _widget_del(const char *widget_id, const char *instance_id);
 int _widget_list(const char *widget_id, request_h req);
 int _widget_update(const char *widget_id, request_h req);
 int _widget_cleanup(int pid, int uid);
+int _widget_get_pid(const char *widget_id, const char *instance_id);
 
 #endif /* __AMD_WIDGET_H__ */
 
