@@ -29,6 +29,7 @@ int _widget_cleanup(int pid, int uid);
 bool _widget_exist(int pid, int uid);
 char *_widget_get_id(int pid, int uid);
 int _widget_send_dead_signal(int pid, int uid);
+int _widget_get_pid(const char *widget_id, const char *instance_id);
 
 #endif /* __AMD_WIDGET_H__ */
 

@@ -1624,6 +1624,11 @@ static int __validate_widget_caller(request_h req)
 	app_status_h caller_status;
 	const char *caller_pkgid;
 
+	if (req->uid < REGULAR_UID_MIN) {
+		_D("bypass caller package check");
+		return 0;
+	}
+
 	bundle_get_str(kb, AUL_K_APPID, &appid);
 	if (!appid) {
 		_E("no appid provided");
@@ -1722,6 +1727,84 @@ static int __dispatch_app_get_last_caller_pid(request_h req)
 	return ret;
 }
 
+static int __dispatch_widget_get_content(request_h req)
+{
+	int handles[2] = {0,};
+	struct iovec vec[3];
+	int msglen = 0;
+	char buffer[1024];
+	int ret;
+	bundle *kb = req->kb;
+	struct timeval tv;
+	int pid;
+	char *widget_id = NULL;
+	char *instance_id = NULL;
+
+	if (__validate_widget_caller(req) < 0) {
+		_request_send_result(req, -EILLEGALACCESS);
+		return -1;
+	}
+
+	bundle_get_str(kb, AUL_K_WIDGET_ID, &widget_id);
+	bundle_get_str(kb, AUL_K_WIDGET_INSTANCE_ID, &instance_id);
+
+	pid = _widget_get_pid(widget_id, instance_id);
+	if (pid < 0) {
+		_E("can not find widget");
+		_request_send_result(req, -ENOENT);
+		return -1;
+	}
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, handles) != 0) {
+		_E("error create socket pair");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	if (handles[0] == -1) {
+		_E("error socket open");
+		_request_send_result(req, -1);
+		return -1;
+	}
+
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	ret = setsockopt(handles[1], SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	if (ret < 0) {
+		_E("cannot set SO_RCVTIMEO for oscket %d", handles[0]);
+		_request_send_result(req, -1);
+		goto out;
+	}
+
+	vec[0].iov_base = buffer;
+	vec[0].iov_len = strlen(buffer) + 1;
+
+	ret = aul_sock_send_bundle(pid, _request_get_target_uid(req), req->cmd,
+		req->kb, AUL_SOCK_ASYNC);
+
+	msglen = __send_message(ret, vec, 1, &(handles[0]), 1);
+	if (msglen < 0) {
+		_E("Error[%d]: while sending message to widget\n", -msglen);
+		_request_send_result(req, -1);
+		ret = -1;
+		goto out;
+	}
+
+	msglen = __send_message(req->clifd, vec, 1, &(handles[1]), 1);
+	if (msglen < 0) {
+		_E("Error[%d]: while sending message to caller\n", -msglen);
+		_request_send_result(req, -1);
+		ret = -1;
+	}
+
+out:
+	close(handles[0]);
+	close(handles[1]);
+
+	return ret;
+}
+
 static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[APP_GET_DC_SOCKET_PAIR] = __dispatch_get_dc_socket_pair,
 	[APP_GET_MP_SOCKET_PAIR] = __dispatch_get_mp_socket_pair,
@@ -1779,6 +1862,7 @@ static app_cmd_dispatch_func dispatch_table[APP_CMD_MAX] = {
 	[WIDGET_DEL] = __dispatch_widget_add_del,
 	[WIDGET_LIST] = __dispatch_widget_list,
 	[WIDGET_UPDATE] = __dispatch_widget_update,
+	[WIDGET_GET_CONTENT] = __dispatch_widget_get_content,
 	[APP_REGISTER_PID] = __dispatch_app_register_pid,
 	[APP_ALL_RUNNING_INFO] = __dispatch_app_all_running_info,
 	[APP_SET_APP_CONTROL_DEFAULT_APP] =
