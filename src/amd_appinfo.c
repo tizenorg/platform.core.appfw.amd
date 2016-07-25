@@ -903,8 +903,8 @@ static struct user_appinfo *__add_user_appinfo(uid_t uid)
 	g_hash_table_insert(user_tbl, GINT_TO_POINTER(uid), info);
 
 	r = pkgmgrinfo_appinfo_get_usr_installed_list_full(
-			__appinfo_insert_handler,
-			PMINFO_APPINFO_GET_SPLASH_SCREEN, uid, info);
+			__appinfo_insert_handler, uid,
+			PMINFO_APPINFO_GET_SPLASH_SCREEN, info);
 	if (r != PMINFO_R_OK) {
 		__remove_user_appinfo(uid);
 		return NULL;
