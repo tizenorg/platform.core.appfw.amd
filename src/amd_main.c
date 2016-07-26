@@ -200,6 +200,7 @@ static int __app_dead_handler(int pid, void *data)
 {
 	bool restart = false;
 	char *appid = NULL;
+	bool is_widget = false;
 	const char *tmp_appid;
 	app_status_h app_status;
 	uid_t uid;
@@ -219,12 +220,16 @@ static int __app_dead_handler(int pid, void *data)
 
 	uid = _app_status_get_uid(app_status);
 	restart = __can_restart_app(tmp_appid, uid);
-	if (restart)
+	is_widget = _widget_exist(tmp_appid, pid, uid);
+
+	if (restart || is_widget)
 		appid = strdup(tmp_appid);
 
 	_cleanup_dead_info(app_status);
 	_request_flush_pending_request(pid);
 
+	if (is_widget)
+		_widget_send_dead_signal(appid, pid);
 	if (restart)
 		_launch_start_app_local(uid, appid);
 	if (appid)
