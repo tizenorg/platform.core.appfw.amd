@@ -1298,8 +1298,8 @@ static void __reload_appinfo(gpointer key, gpointer value, gpointer user_data)
 	g_hash_table_remove_all(info->tbl);
 
 	r = pkgmgrinfo_appinfo_get_usr_installed_list_full(
-			__appinfo_insert_handler,
-			PMINFO_APPINFO_GET_SPLASH_SCREEN, info->uid, info);
+			__appinfo_insert_handler, info->uid,
+			PMINFO_APPINFO_GET_SPLASH_SCREEN, info);
 	if (r != PMINFO_R_OK) {
 		__remove_user_appinfo(info->uid);
 		return;
