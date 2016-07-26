@@ -20,6 +20,10 @@
 #include <stdlib.h>
 #include <aul.h>
 #include <aul_sock.h>
+#include <bundle.h>
+#include <bundle_internal.h>
+
+#include "amd_app_com.h"
 #include "amd_request.h"
 #include "amd_config.h"
 #include "amd_util.h"
@@ -91,6 +95,55 @@ static widget_t *__find_instance(const char *widget_id, const char *instance_id)
 	}
 
 	return NULL;
+}
+
+bool _widget_exist(int pid, int uid)
+{
+	GList *widget_list = __widgets;
+	widget_t *widget;
+
+	while (widget_list) {
+		widget = (widget_t *)widget_list->data;
+		if (widget->pid == pid && widget->uid == uid)
+			return true;
+
+		widget_list = widget_list->next;
+	}
+	return false;
+}
+
+int _widget_send_dead_signal(int pid, int uid)
+{
+	bundle *kb;
+	widget_t *widget = NULL;
+	GList *widget_list = __widgets;
+	int status = AUL_WIDGET_LIFE_CYCLE_EVENT_APP_DEAD;
+	char sender_pid_str[MAX_PID_STR_BUFSZ];
+
+	while (widget_list) {
+		widget = (widget_t *)widget_list->data;
+		if (widget->pid == pid && widget->uid == uid)
+			break;
+		widget_list = widget_list->next;
+	}
+	if (!widget) {
+		_E("cannot find widget pid : %d, uid %d", pid, uid);
+		return -1;
+	}
+	snprintf(sender_pid_str, MAX_PID_STR_BUFSZ, "%d", pid);
+
+	kb = bundle_create();
+	if (!kb) {
+		_E("cannot create bundle out of memory");
+		return -1;
+	}
+	bundle_add(kb, AUL_K_WIDGET_ID, widget->widget_id);
+	bundle_add_byte(kb, AUL_K_WIDGET_STATUS, &status, sizeof(int));
+	bundle_add(kb, AUL_K_COM_SENDER_PID, sender_pid_str);
+	_app_com_send("widget.status", getpgid(pid), kb);
+	bundle_free(kb);
+
+	return 0;
 }
 
 int _widget_add(const char *widget_id, const char *instance_id, int pid,

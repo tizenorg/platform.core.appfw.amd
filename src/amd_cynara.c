@@ -16,6 +16,7 @@
 
 #define _GNU_SOURCE
 #include <malloc.h>
+#include <stdlib.h>
 
 #include <cynara-client.h>
 #include <cynara-creds-socket.h>
@@ -31,6 +32,8 @@
 
 #include "amd_config.h"
 #include "amd_util.h"
+#include "amd_app_status.h"
+#include "amd_widget.h"
 
 #define PRIVILEGE_WIDGET_VIEWER \
 	"http://tizen.org/privilege/widget.viewer"
@@ -210,6 +213,30 @@ static int __widget_viewer_checker(struct caller_info *info, request_h req,
 	return -1;
 }
 
+static int __app_term_by_pid_async_checker(struct caller_info *info, request_h req,	void *data)
+{
+	int pid;
+	char *term_pid;
+	bool is_widget = false;
+	bundle *kb;
+
+	kb = _request_get_bundle(req);
+	if (kb == NULL)
+		return -1;
+
+	bundle_get_str(kb, AUL_K_APPID, &term_pid);
+	if (term_pid == NULL)
+		return -1;
+
+	pid = atoi(term_pid);
+	is_widget = _widget_exist(pid, _request_get_target_uid(req));
+
+	if (is_widget)
+		return __check_privilege(info, PRIVILEGE_WIDGET_VIEWER);
+	else
+		return __simple_checker(info, req, data);
+}
+
 static int __appcontrol_checker(struct caller_info *info, request_h req,
 		void *data)
 {
@@ -299,7 +326,7 @@ static struct checker_info checker_table[] = {
 	},
 	{
 		.cmd = APP_TERM_BY_PID_ASYNC,
-		.checker = __simple_checker,
+		.checker = __app_term_by_pid_async_checker,
 		.data = PRIVILEGE_APPMANAGER_KILL
 	},
 	{
