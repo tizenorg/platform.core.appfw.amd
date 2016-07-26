@@ -622,6 +622,14 @@ int _app_status_get_pid(app_status_h app_status)
 	return app_status->pid;
 }
 
+int _app_status_get_org_caller_pid(app_status_h app_status)
+{
+	if (app_status == NULL)
+		return -1;
+
+	return app_status->org_caller_pid;
+}
+
 int _app_status_get_last_caller_pid(app_status_h app_status)
 {
 	if (app_status == NULL)
