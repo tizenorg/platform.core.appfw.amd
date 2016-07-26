@@ -63,4 +63,5 @@ int _app_status_get_appid_bypid(int fd, int pid);
 int _app_status_get_pkgid_bypid(int fd, int pid);
 int _app_status_init(void);
 int _app_status_finish(void);
+int _app_status_get_org_caller_pid(app_status_h app_status);
 

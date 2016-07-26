@@ -1219,11 +1219,16 @@ static int __dispatch_app_com_send(request_h req)
 	bundle *kb;
 	int ret;
 	const char *endpoint;
+	int sender_pid = _request_get_pid(req);
+	char sender_pid_str[MAX_PID_STR_BUFSZ];
 
 	kb = req->kb;
 	if (kb == NULL)
 		return -1;
 
+	snprintf(sender_pid_str, MAX_PID_STR_BUFSZ, "%d", sender_pid);
+	bundle_del(kb, AUL_K_COM_SENDER_PID);
+	bundle_add(kb, AUL_K_COM_SENDER_PID, sender_pid_str);
 	endpoint = bundle_get_val(kb, AUL_K_COM_ENDPOINT);
 	if (endpoint == NULL) {
 		_request_send_result(req, AUL_APP_COM_R_ERROR_FATAL_ERROR);
